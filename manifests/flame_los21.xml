@@ -3,7 +3,6 @@
   <!-- Google Pixel 4 (flame) & Pixel 4 XL (coral) Device Trees -->
   <project name="LineageOS/android_device_google_flame" path="device/google/flame" remote="github" revision="lineage-21" />
   <project name="LineageOS/android_device_google_coral" path="device/google/coral" remote="github" revision="lineage-21" />
-  <project name="LineageOS/android_device_google_gs-common" path="device/google/gs-common" remote="github" revision="lineage-21" />
 
   <!-- Kernel Source for Pixel 4 family (msm-4.14) -->
   <project name="LineageOS/android_kernel_google_msm-4.14" path="kernel/google/msm-4.14" remote="github" revision="lineage-21" />
