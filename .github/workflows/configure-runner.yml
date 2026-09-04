@@ -55,4 +55,8 @@ jobs:
             echo "Runner token found"
         fi
         cd actions-runner
-         ./config.sh --unattended --url "https://github.com/${{ github.repository }}" --token "${{ inputs.RUNNER_TOKEN }}""
+        ./config.sh --unattended --url "https://github.com/${{ github.repository }}" --token "${{ inputs.RUNNER_TOKEN }}"
+        tmux kill-session -t ghactions || true
+        tmux new-session -d -s ghactions
+        tmux send-keys -t ghactions './actions-runner/run.sh' Enter
+        echo "Runner Configured and Started!""
