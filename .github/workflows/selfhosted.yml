@@ -38,11 +38,11 @@ on:
       LOCAL_MANIFEST:
         description: "Personal local manifest [repository or raw]:"
         required: true
-        default: 'https://github.com/sounddrill31/local_manifests_oxygen'
+        default: 'https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/manifests/flame_los21.xml'
       LOCAL_MANIFEST_BRANCH:
         description: "Personal local manifest's branch:"
         required: false
-        default: 'lineage-21-qpr3'
+        default: 'lineage-21'
       DEVICE_NAME:
         description: "Device's codename:"
         required: true

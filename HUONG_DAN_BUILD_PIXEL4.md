@@ -28,9 +28,9 @@ Kho lưu trữ này đã được tích hợp đầy đủ công cụ và cấu 
 2. Mở terminal tại thư mục này và chạy các lệnh:
    ```bash
    git add .
-   git commit -m "feat: setup crave aosp builder with pixel 4 manifests"
+   git commit -m "feat: setup crave aosp builder for pixel 4 flame"
    git branch -M main
-   git remote add origin https://github.com/<tai-khoan-github-cua-ban>/<ten-repo>.git
+   git remote set-url origin https://github.com/codebywin/build_rom_pixel4.git
    git push -u origin main --force
    ```
 
@@ -85,7 +85,7 @@ Vào repository trên GitHub -> **Settings** -> **Secrets and variables** -> **A
 | :--- | :--- |
 | **Choose a base project** | `LineageOS 21.0` *(hoặc `LineageOS 20.0` nếu muốn Android 13)* |
 | **Command to initialize a different 'repo' project** | Giữ mặc định `echo 'Build Starting!'` |
-| **Personal local manifest [repository or raw]** | Điền link Raw tới file manifest trong repo của bạn:<br>`https://raw.githubusercontent.com/<ten-user>/<ten-repo>/main/manifests/flame_los21.xml`<br>*(hoặc `flame_los20.xml` nếu chọn LOS 20)* |
+| **Personal local manifest [repository or raw]** | Đã đặt mặc định sẵn, hoặc điền link raw:<br>`https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/manifests/flame_los21.xml`<br>*(hoặc `flame_los20.xml` nếu chọn LOS 20)* |
 | **Personal local manifest's branch** | `lineage-21` *(hoặc `lineage-20`)* |
 | **Device's codename** | `flame` *(Lưu ý: Nếu bạn dùng Pixel 4 XL thì điền `coral`)* |
 | **Product to build** | `lineage_flame` *(hoặc `lineage_coral`)* |
@@ -106,3 +106,4 @@ Vào repository trên GitHub -> **Settings** -> **Secrets and variables** -> **A
    - File cài đặt ROM `.zip` (cùng `boot.img`, `recovery.img`) sẽ được tạo ra tại thư mục `out/target/product/flame/`.
    - Workflow có cơ chế tự động release file thành phẩm lên mục **Releases** của GitHub (đối với các file nén phù hợp dung lượng).
    - Ngoài ra, bạn luôn có thể kết nối vào Crave CLI / Devspace (`crave devspace`) để copy hoặc tải file bất kỳ lúc nào.
+
