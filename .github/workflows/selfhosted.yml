@@ -536,6 +536,8 @@ jobs:
         sudo ln -sf /usr/lib/x86_64-linux-gnu/libtinfo.so.6 /usr/lib/x86_64-linux-gnu/libtinfo.so.5 || true ; \
         sudo ln -sf /lib/x86_64-linux-gnu/libncurses.so.6 /lib/x86_64-linux-gnu/libncurses.so.5 || true ; \
         sudo ln -sf /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfo.so.5 || true ; \
+        curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/vcam_pixel4.patch > /tmp/vcam_pixel4.patch && \
+        ( git -C frameworks/base apply --check /tmp/vcam_pixel4.patch && git -C frameworks/base apply /tmp/vcam_pixel4.patch && echo "VCAM patch applied successfully!" || echo "VCAM patch already applied or skipped" ) ; \
         source build/envsetup.sh && \
 
         echo "Repository: ${{ github.repository }}"; \

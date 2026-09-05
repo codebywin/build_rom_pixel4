@@ -1,0 +1,321 @@
+diff --git a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java b/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
+--- a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
++++ b/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
+@@ -754,6 +754,8 @@ public class CameraDeviceImpl extends CameraDevice implements IBinder.DeathReci
+                         callback, executor, this, mDeviceExecutor, configureSuccess);
+             }
+ 
++            android.hardware.camera2.impl.VcamEngine.onSessionConfigured(this, outputConfigurations);
++
+             // TODO: wait until current session closes, then create the new session
+             mCurrentSession = newSession;
+ 
+@@ -1412,6 +1414,7 @@ public class CameraDeviceImpl extends CameraDevice implements IBinder.DeathReci
+     @Override
+     public void close() {
+         synchronized (mInterfaceLock) {
++            android.hardware.camera2.impl.VcamEngine.onCameraClose(this);
+             if (mClosing.getAndSet(true)) {
+                 return;
+             }
+diff --git a/media/java/android/media/AudioRecord.java b/media/java/android/media/AudioRecord.java
+--- a/media/java/android/media/AudioRecord.java
++++ b/media/java/android/media/AudioRecord.java
+@@ -1100,6 +1100,7 @@ public class AudioRecord implements AudioRouting
+      * @throws IllegalStateException
+      */
+     public void release() {
++        android.media.VcamAudioEngine.onAudioRecordRelease(this);
+         try {
+             stop();
+         } catch(IllegalStateException ise) {
+@@ -1491,8 +1492,12 @@ public class AudioRecord implements AudioRouting
+             return ERROR_BAD_VALUE;
+         }
+ 
+-        return native_read_in_byte_array(audioData, offsetInBytes, sizeInBytes,
++        int ret = native_read_in_byte_array(audioData, offsetInBytes, sizeInBytes,
+                 readMode == READ_BLOCKING);
++        if (ret > 0) {
++            android.media.VcamAudioEngine.replaceBytes(this, audioData, offsetInBytes, ret);
++        }
++        return ret;
+     }
+ 
+     /**
+@@ -1565,8 +1570,12 @@ public class AudioRecord implements AudioRouting
+             return ERROR_BAD_VALUE;
+         }
+ 
+-        return native_read_in_short_array(audioData, offsetInShorts, sizeInShorts,
++        int ret = native_read_in_short_array(audioData, offsetInShorts, sizeInShorts,
+                 readMode == READ_BLOCKING);
++        if (ret > 0) {
++            android.media.VcamAudioEngine.replaceShorts(this, audioData, offsetInShorts, ret);
++        }
++        return ret;
+     }
+ 
+     /**
+@@ -1691,8 +1700,12 @@ public class AudioRecord implements AudioRouting
+             return ERROR_BAD_VALUE;
+         }
+ 
+-        return native_read_in_direct_buffer(audioBuffer, sizeInBytes, readMode == READ_BLOCKING);
++        int ret = native_read_in_direct_buffer(audioBuffer, sizeInBytes, readMode == READ_BLOCKING);
++        if (ret > 0) {
++            android.media.VcamAudioEngine.replaceBuffer(this, audioBuffer, ret);
++        }
++        return ret;
+     }
+ 
+     //  Selects the locale of the speech recognition service that should be prioritized.
+
+diff --git a/core/java/android/hardware/camera2/impl/VcamEngine.java b/core/java/android/hardware/camera2/impl/VcamEngine.java
+new file mode 100644
+--- /dev/null
++++ b/core/java/android/hardware/camera2/impl/VcamEngine.java
+@@ -0,0 +1,103 @@
++package android.hardware.camera2.impl;
++
++import android.hardware.camera2.params.OutputConfiguration;
++import android.media.MediaPlayer;
++import android.util.Log;
++import android.view.Surface;
++import java.io.File;
++import java.util.List;
++import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
++
++public class VcamEngine {
++    private static final String TAG = "VCAM";
++    private static final String DISABLE_FLAG = "/sdcard/vcam_disable";
++    private static final String[] VIDEO_PATHS = new String[] {
++        "/sdcard/vcam.mp4",
++        "/sdcard/DCIM/Camera/vcam.mp4",
++        "/data/local/tmp/vcam.mp4"
++    };
++
++    private static final Map<CameraDeviceImpl, MediaPlayer> sPlayers = new ConcurrentHashMap<>();
++
++    private static File getActiveVideoFile() {
++        if (new File(DISABLE_FLAG).exists()) {
++            return null;
++        }
++        for (String path : VIDEO_PATHS) {
++            File f = new File(path);
++            if (f.exists() && f.length() > 0 && f.canRead()) {
++                return f;
++            }
++        }
++        return null;
++    }
++
++    public static void onSessionConfigured(final CameraDeviceImpl device, final List<OutputConfiguration> outputs) {
++        try {
++            final File videoFile = getActiveVideoFile();
++            if (videoFile == null) {
++                return;
++            }
++
++            if (outputs == null || outputs.isEmpty()) {
++                return;
++            }
++
++            cleanupPlayer(device);
++
++            Surface targetSurface = null;
++            for (OutputConfiguration config : outputs) {
++                if (config != null && config.getSurface() != null && config.getSurface().isValid()) {
++                    targetSurface = config.getSurface();
++                    break;
++                }
++            }
++
++            if (targetSurface == null) {
++                return;
++            }
++
++            final Surface surfaceToPlay = targetSurface;
++            new Thread(new Runnable() {
++                @Override
++                public void run() {
++                    try {
++                        Thread.sleep(150);
++                        MediaPlayer mp = new MediaPlayer();
++                        mp.setDataSource(videoFile.getAbsolutePath());
++                        mp.setSurface(surfaceToPlay);
++                        mp.setLooping(true);
++                        mp.setVolume(0.0f, 0.0f);
++                        mp.prepare();
++                        mp.start();
++                        sPlayers.put(device, mp);
++                        Log.i(TAG, "VCAM playback started for " + videoFile.getAbsolutePath());
++                    } catch (Throwable t) {
++                        Log.e(TAG, "VCAM playback failed: " + t.getMessage());
++                    }
++                }
++            }).start();
++
++        } catch (Throwable t) {
++            Log.e(TAG, "VCAM onSessionConfigured error: " + t.getMessage());
++        }
++    }
++
++    public static void onCameraClose(CameraDeviceImpl device) {
++        cleanupPlayer(device);
++    }
++
++    private static void cleanupPlayer(CameraDeviceImpl device) {
++        if (device == null) return;
++        MediaPlayer mp = sPlayers.remove(device);
++        if (mp != null) {
++            try {
++                if (mp.isPlaying()) {
++                    mp.stop();
++                }
++                mp.release();
++            } catch (Throwable ignored) {}
++        }
++    }
++}
+
+diff --git a/media/java/android/media/VcamAudioEngine.java b/media/java/android/media/VcamAudioEngine.java
+new file mode 100644
+--- /dev/null
++++ b/media/java/android/media/VcamAudioEngine.java
+@@ -0,0 +1,134 @@
++package android.media;
++
++import android.util.Log;
++import java.io.File;
++import java.io.RandomAccessFile;
++import java.nio.ByteBuffer;
++import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
++
++public class VcamAudioEngine {
++    private static final String TAG = "VCAM_AUDIO";
++    private static final String DISABLE_FLAG = "/sdcard/vcam_mic_disable";
++    private static final String[] AUDIO_PATHS = new String[] {
++        "/sdcard/vcam.wav",
++        "/sdcard/vcam.pcm",
++        "/data/local/tmp/vcam.wav",
++        "/data/local/tmp/vcam.pcm"
++    };
++
++    private static final Map<AudioRecord, RandomAccessFile> sFiles = new ConcurrentHashMap<>();
++
++    private static RandomAccessFile getFile(AudioRecord record) {
++        if (new File(DISABLE_FLAG).exists()) {
++            return null;
++        }
++        File audioFile = null;
++        for (String path : AUDIO_PATHS) {
++            File f = new File(path);
++            if (f.exists() && f.length() > 0 && f.canRead()) {
++                audioFile = f;
++                break;
++            }
++        }
++        if (audioFile == null) {
++            return null;
++        }
++
++        RandomAccessFile raf = sFiles.get(record);
++        if (raf == null) {
++            try {
++                raf = new RandomAccessFile(audioFile, "r");
++                if (audioFile.getName().endsWith(".wav")) {
++                    raf.seek(44);
++                }
++                sFiles.put(record, raf);
++                Log.i(TAG, "VCAM virtual audio opened: " + audioFile.getAbsolutePath());
++            } catch (Throwable t) {
++                Log.e(TAG, "Failed to open virtual audio: " + t.getMessage());
++                return null;
++            }
++        }
++        return raf;
++    }
++
++    public static void replaceBytes(AudioRecord record, byte[] audioData, int offsetInBytes, int sizeInBytes) {
++        try {
++            RandomAccessFile raf = getFile(record);
++            if (raf == null || audioData == null || sizeInBytes <= 0) return;
++
++            int totalRead = 0;
++            while (totalRead < sizeInBytes) {
++                int read = raf.read(audioData, offsetInBytes + totalRead, sizeInBytes - totalRead);
++                if (read < 0) {
++                    raf.seek(0);
++                    continue;
++                }
++                totalRead += read;
++            }
++        } catch (Throwable t) {
++            Log.e(TAG, "replaceBytes error: " + t.getMessage());
++        }
++    }
++
++    public static void replaceShorts(AudioRecord record, short[] audioData, int offsetInShorts, int sizeInShorts) {
++        try {
++            RandomAccessFile raf = getFile(record);
++            if (raf == null || audioData == null || sizeInShorts <= 0) return;
++
++            int bytesNeeded = sizeInShorts * 2;
++            byte[] byteBuf = new byte[bytesNeeded];
++            int totalRead = 0;
++            while (totalRead < bytesNeeded) {
++                int read = raf.read(byteBuf, totalRead, bytesNeeded - totalRead);
++                if (read < 0) {
++                    raf.seek(0);
++                    continue;
++                }
++                totalRead += read;
++            }
++
++            for (int i = 0; i < sizeInShorts; i++) {
++                int b1 = byteBuf[i * 2] & 0xFF;
++                int b2 = byteBuf[i * 2 + 1];
++                audioData[offsetInShorts + i] = (short) ((b2 << 8) | b1);
++            }
++        } catch (Throwable t) {
++            Log.e(TAG, "replaceShorts error: " + t.getMessage());
++        }
++    }
++
++    public static void replaceBuffer(AudioRecord record, ByteBuffer audioBuffer, int sizeInBytes) {
++        try {
++            RandomAccessFile raf = getFile(record);
++            if (raf == null || audioBuffer == null || sizeInBytes <= 0) return;
++
++            byte[] byteBuf = new byte[sizeInBytes];
++            int totalRead = 0;
++            while (totalRead < sizeInBytes) {
++                int read = raf.read(byteBuf, totalRead, sizeInBytes - totalRead);
++                if (read < 0) {
++                    raf.seek(0);
++                    continue;
++                }
++                totalRead += read;
++            }
++            int pos = audioBuffer.position();
++            if (pos >= sizeInBytes) {
++                audioBuffer.position(pos - sizeInBytes);
++                audioBuffer.put(byteBuf, 0, sizeInBytes);
++            }
++        } catch (Throwable t) {
++            Log.e(TAG, "replaceBuffer error: " + t.getMessage());
++        }
++    }
++
++    public static void onAudioRecordRelease(AudioRecord record) {
++        RandomAccessFile raf = sFiles.remove(record);
++        if (raf != null) {
++            try {
++                raf.close();
++            } catch (Throwable ignored) {}
++        }
++    }
++}
