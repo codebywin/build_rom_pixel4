@@ -89,20 +89,23 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamEngine.java b/core/java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamEngine.java
-@@ -0,0 +1,180 @@
+@@ -0,0 +1,289 @@
 +package android.hardware.camera2.impl;
 +
 +import android.graphics.SurfaceTexture;
 +import android.hardware.camera2.CameraDevice;
 +import android.hardware.camera2.CaptureRequest;
 +import android.hardware.camera2.params.OutputConfiguration;
-+import android.media.MediaPlayer;
++import android.media.MediaCodec;
++import android.media.MediaExtractor;
++import android.media.MediaFormat;
 +import android.util.ArraySet;
 +import android.util.Log;
 +import android.view.Surface;
 +import java.io.File;
 +import java.lang.reflect.Field;
 +import java.lang.reflect.Method;
++import java.nio.ByteBuffer;
 +import java.util.ArrayList;
 +import java.util.List;
 +import java.util.Map;
@@ -117,7 +120,131 @@ new file mode 100644
 +        "/data/local/tmp/vcam.mp4"
 +    };
 +
-+    private static final Map<CameraDevice, MediaPlayer> sPlayers = new ConcurrentHashMap<>();
++    private static class VideoPlayer implements Runnable {
++        final File file;
++        final Surface surface;
++        volatile boolean running = true;
++        Thread thread;
++
++        VideoPlayer(File file, Surface surface) {
++            this.file = file;
++            this.surface = surface;
++        }
++
++        void start() {
++            thread = new Thread(this, "VCAM-MediaCodec");
++            thread.start();
++        }
++
++        void stop() {
++            running = false;
++            if (thread != null) {
++                thread.interrupt();
++            }
++        }
++
++        @Override
++        public void run() {
++            Log.i(TAG, "MediaCodec video decoder started for: " + file.getAbsolutePath());
++            while (running && surface != null && surface.isValid()) {
++                MediaExtractor extractor = null;
++                MediaCodec decoder = null;
++                try {
++                    extractor = new MediaExtractor();
++                    extractor.setDataSource(file.getAbsolutePath());
++
++                    int videoTrackIndex = -1;
++                    MediaFormat format = null;
++                    int numTracks = extractor.getTrackCount();
++                    for (int i = 0; i < numTracks; i++) {
++                        MediaFormat mf = extractor.getTrackFormat(i);
++                        String mime = mf.getString(MediaFormat.KEY_MIME);
++                        if (mime != null && mime.startsWith("video/")) {
++                            videoTrackIndex = i;
++                            format = mf;
++                            break;
++                        }
++                    }
++
++                    if (videoTrackIndex < 0 || format == null) {
++                        Log.e(TAG, "No video track found in " + file.getAbsolutePath());
++                        break;
++                    }
++
++                    extractor.selectTrack(videoTrackIndex);
++                    String mime = format.getString(MediaFormat.KEY_MIME);
++                    decoder = MediaCodec.createDecoderByType(mime);
++                    decoder.configure(format, surface, null, 0);
++                    decoder.start();
++
++                    MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
++                    boolean isEOS = false;
++                    long startMs = System.currentTimeMillis();
++                    long firstPtsUs = -1;
++
++                    while (running && !isEOS && surface.isValid()) {
++                        int inIndex = decoder.dequeueInputBuffer(10000);
++                        if (inIndex >= 0) {
++                            ByteBuffer buffer = decoder.getInputBuffer(inIndex);
++                            int sampleSize = extractor.readSampleData(buffer, 0);
++                            if (sampleSize < 0) {
++                                decoder.queueInputBuffer(inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
++                                isEOS = true;
++                            } else {
++                                long ptsUs = extractor.getSampleTime();
++                                decoder.queueInputBuffer(inIndex, 0, sampleSize, ptsUs, 0);
++                                extractor.advance();
++                            }
++                        }
++
++                        int outIndex = decoder.dequeueOutputBuffer(info, 10000);
++                        if (outIndex >= 0) {
++                            if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
++                                isEOS = true;
++                            }
++                            if (firstPtsUs < 0) {
++                                firstPtsUs = info.presentationTimeUs;
++                                startMs = System.currentTimeMillis();
++                            }
++                            long elapsedUs = (System.currentTimeMillis() - startMs) * 1000;
++                            long frameOffsetUs = info.presentationTimeUs - firstPtsUs;
++                            if (frameOffsetUs > elapsedUs) {
++                                long sleepMs = (frameOffsetUs - elapsedUs) / 1000;
++                                if (sleepMs > 0 && sleepMs < 100) {
++                                    try {
++                                        Thread.sleep(sleepMs);
++                                    } catch (InterruptedException ie) {
++                                        break;
++                                    }
++                                }
++                            }
++                            decoder.releaseOutputBuffer(outIndex, true);
++                        }
++                    }
++                } catch (Throwable t) {
++                    if (running) {
++                        Log.e(TAG, "MediaCodec playback loop error: " + t.getMessage());
++                        try { Thread.sleep(100); } catch (Throwable ignored) {}
++                    }
++                } finally {
++                    if (decoder != null) {
++                        try {
++                            decoder.stop();
++                            decoder.release();
++                        } catch (Throwable ignored) {}
++                    }
++                    if (extractor != null) {
++                        try {
++                            extractor.release();
++                        } catch (Throwable ignored) {}
++                    }
++                }
++            }
++            Log.i(TAG, "MediaCodec video decoder finished.");
++        }
++    }
++
++    private static final Map<CameraDevice, VideoPlayer> sPlayers = new ConcurrentHashMap<>();
 +    private static final Map<CameraDevice, Surface> sRealSurfaces = new ConcurrentHashMap<>();
 +    private static final Map<CameraDevice, SurfaceTexture> sDummyTextures = new ConcurrentHashMap<>();
 +    private static final Map<Surface, Surface> sRealToDummy = new ConcurrentHashMap<>();
@@ -221,26 +348,9 @@ new file mode 100644
 +                return;
 +            }
 +
-+            final Surface surfaceToPlay = realSurface;
-+            new Thread(new Runnable() {
-+                @Override
-+                public void run() {
-+                    try {
-+                        Thread.sleep(150);
-+                        MediaPlayer mp = new MediaPlayer();
-+                        mp.setDataSource(videoFile.getAbsolutePath());
-+                        mp.setSurface(surfaceToPlay);
-+                        mp.setLooping(true);
-+                        mp.setVolume(0.0f, 0.0f);
-+                        mp.prepare();
-+                        mp.start();
-+                        sPlayers.put(device, mp);
-+                        Log.i(TAG, "VCAM playback successfully started for: " + videoFile.getAbsolutePath());
-+                    } catch (Throwable t) {
-+                        Log.e(TAG, "VCAM playback failed: ", t);
-+                    }
-+                }
-+            }).start();
++            VideoPlayer player = new VideoPlayer(videoFile, realSurface);
++            sPlayers.put(device, player);
++            player.start();
 +
 +        } catch (Throwable t) {
 +            Log.e(TAG, "VCAM onSessionConfigured error: " + t);
@@ -253,14 +363,9 @@ new file mode 100644
 +
 +    private static void cleanupPlayer(CameraDevice device) {
 +        if (device == null) return;
-+        MediaPlayer mp = sPlayers.remove(device);
-+        if (mp != null) {
-+            try {
-+                if (mp.isPlaying()) {
-+                    mp.stop();
-+                }
-+                mp.release();
-+            } catch (Throwable ignored) {}
++        VideoPlayer player = sPlayers.remove(device);
++        if (player != null) {
++            player.stop();
 +        }
 +        Surface real = sRealSurfaces.remove(device);
 +        if (real != null) {
@@ -278,7 +383,7 @@ diff --git a/media/java/android/media/VcamAudioEngine.java b/media/java/android/
 new file mode 100644
 --- /dev/null
 +++ b/media/java/android/media/VcamAudioEngine.java
-@@ -0,0 +1,388 @@
+@@ -0,0 +1,335 @@
 +package android.media;
 +
 +import android.util.Log;
@@ -318,10 +423,10 @@ new file mode 100644
 +                        String s = new String(b, 0, n).trim();
 +                        sBoostFactor = Float.parseFloat(s);
 +                    } else {
-+                        sBoostFactor = 4.0f;
++                        sBoostFactor = 3.0f;
 +                    }
 +                } catch (Throwable t) {
-+                    sBoostFactor = 4.0f;
++                    sBoostFactor = 3.0f;
 +                }
 +            } else {
 +                sBoostFactor = 1.0f;
@@ -330,19 +435,12 @@ new file mode 100644
 +        return sBoostFactor;
 +    }
 +
-+    private static void processPhysicalMicBuffer(AudioRecord record, ByteBuffer audioBuffer, int sizeInBytes) {
++    private static void processPhysicalMicBuffer(AudioRecord record, ByteBuffer audioBuffer, int sizeInBytes, float boost) {
 +        try {
-+            float boost = getBoostFactor();
-+            long now = System.currentTimeMillis();
-+            boolean needLog = (now - sLastRealMicLogTime > 2000);
-+
 +            int pos = audioBuffer.position();
 +            int limit = audioBuffer.limit();
 +            int samples = sizeInBytes / 2;
-+            int maxAmp = 0;
-+            long sumSquare = 0;
 +
-+            audioBuffer.position(pos);
 +            ByteOrder origOrder = audioBuffer.order();
 +            audioBuffer.order(ByteOrder.LITTLE_ENDIAN);
 +
@@ -350,95 +448,43 @@ new file mode 100644
 +                int sampleIdx = pos + i * 2;
 +                if (sampleIdx + 1 >= audioBuffer.capacity()) break;
 +                short s = audioBuffer.getShort(sampleIdx);
-+                int abs = Math.abs((int) s);
-+                if (abs > maxAmp) maxAmp = abs;
-+                sumSquare += (long) s * s;
-+
-+                if (boost > 1.01f) {
-+                    int boosted = (int) (s * boost);
-+                    if (boosted > 32767) boosted = 32767;
-+                    else if (boosted < -32768) boosted = -32768;
-+                    audioBuffer.putShort(sampleIdx, (short) boosted);
-+                }
++                int boosted = (int) (s * boost);
++                if (boosted > 32767) boosted = 32767;
++                else if (boosted < -32768) boosted = -32768;
++                audioBuffer.putShort(sampleIdx, (short) boosted);
 +            }
 +
 +            audioBuffer.position(pos);
 +            audioBuffer.limit(limit);
 +            audioBuffer.order(origOrder);
-+
-+            if (needLog) {
-+                sLastRealMicLogTime = now;
-+                int rms = (int) Math.sqrt(sumSquare / Math.max(1, samples));
-+                Log.i(TAG, "REAL_MIC: maxAmp=" + maxAmp + ", rms=" + rms + ", bytes=" + sizeInBytes + ", boost=" + boost);
-+            }
-+        } catch (Throwable t) {
-+            // Ignore
-+        }
++        } catch (Throwable t) {}
 +    }
 +
-+    private static void processPhysicalMicShorts(AudioRecord record, short[] audioData, int offset, int count) {
++    private static void processPhysicalMicShorts(AudioRecord record, short[] audioData, int offset, int count, float boost) {
 +        try {
-+            float boost = getBoostFactor();
-+            long now = System.currentTimeMillis();
-+            boolean needLog = (now - sLastRealMicLogTime > 2000);
-+
-+            int maxAmp = 0;
-+            long sumSquare = 0;
-+
 +            for (int i = 0; i < count; i++) {
 +                int idx = offset + i;
 +                short s = audioData[idx];
-+                int abs = Math.abs((int) s);
-+                if (abs > maxAmp) maxAmp = abs;
-+                sumSquare += (long) s * s;
-+
-+                if (boost > 1.01f) {
-+                    int boosted = (int) (s * boost);
-+                    if (boosted > 32767) boosted = 32767;
-+                    else if (boosted < -32768) boosted = -32768;
-+                    audioData[idx] = (short) boosted;
-+                }
-+            }
-+
-+            if (needLog) {
-+                sLastRealMicLogTime = now;
-+                int rms = (int) Math.sqrt(sumSquare / Math.max(1, count));
-+                Log.i(TAG, "REAL_MIC [shorts]: maxAmp=" + maxAmp + ", rms=" + rms + ", count=" + count + ", boost=" + boost);
++                int boosted = (int) (s * boost);
++                if (boosted > 32767) boosted = 32767;
++                else if (boosted < -32768) boosted = -32768;
++                audioData[idx] = (short) boosted;
 +            }
 +        } catch (Throwable t) {}
 +    }
 +
-+    private static void processPhysicalMicBytes(AudioRecord record, byte[] audioData, int offset, int count) {
++    private static void processPhysicalMicBytes(AudioRecord record, byte[] audioData, int offset, int count, float boost) {
 +        try {
-+            float boost = getBoostFactor();
-+            long now = System.currentTimeMillis();
-+            boolean needLog = (now - sLastRealMicLogTime > 2000);
-+
 +            int samples = count / 2;
-+            int maxAmp = 0;
-+            long sumSquare = 0;
-+
 +            for (int i = 0; i < samples; i++) {
 +                int idx = offset + i * 2;
 +                if (idx + 1 >= audioData.length) break;
 +                short s = (short) ((audioData[idx] & 0xFF) | (audioData[idx + 1] << 8));
-+                int abs = Math.abs((int) s);
-+                if (abs > maxAmp) maxAmp = abs;
-+                sumSquare += (long) s * s;
-+
-+                if (boost > 1.01f) {
-+                    int boosted = (int) (s * boost);
-+                    if (boosted > 32767) boosted = 32767;
-+                    else if (boosted < -32768) boosted = -32768;
-+                    audioData[idx] = (byte) (boosted & 0xFF);
-+                    audioData[idx + 1] = (byte) ((boosted >> 8) & 0xFF);
-+                }
-+            }
-+
-+            if (needLog) {
-+                sLastRealMicLogTime = now;
-+                int rms = (int) Math.sqrt(sumSquare / Math.max(1, samples));
-+                Log.i(TAG, "REAL_MIC [bytes]: maxAmp=" + maxAmp + ", rms=" + rms + ", count=" + count + ", boost=" + boost);
++                int boosted = (int) (s * boost);
++                if (boosted > 32767) boosted = 32767;
++                else if (boosted < -32768) boosted = -32768;
++                audioData[idx] = (byte) (boosted & 0xFF);
++                audioData[idx + 1] = (byte) ((boosted >> 8) & 0xFF);
 +            }
 +        } catch (Throwable t) {}
 +    }
@@ -492,7 +538,6 @@ new file mode 100644
 +            if (targetChannels == srcChan) {
 +                return readRaw(targetBytes);
 +            } else if (srcChan == 1 && targetChannels == 2) {
-+                // Mono source -> Stereo target (duplicate 16-bit mono to L/R)
 +                int frames = targetBytes / 4;
 +                int monoBytes = frames * 2;
 +                byte[] mono = readRaw(monoBytes);
@@ -509,7 +554,6 @@ new file mode 100644
 +                }
 +                return stereo;
 +            } else if (srcChan == 2 && targetChannels == 1) {
-+                // Stereo source -> Mono target (take left channel)
 +                int frames = targetBytes / 2;
 +                int stereoBytes = frames * 4;
 +                byte[] stereo = readRaw(stereoBytes);
@@ -561,7 +605,6 @@ new file mode 100644
 +                        sampleRate = (header[24] & 0xFF) | ((header[25] & 0xFF) << 8) 
 +                                   | ((header[26] & 0xFF) << 16) | ((header[27] & 0xFF) << 24);
 +                        
-+                        // Search for 'data' chunk
 +                        dataOffset = 44;
 +                        for (int i = 12; i < readLen - 4; i++) {
 +                            if (header[i] == 'd' && header[i+1] == 'a' && header[i+2] == 't' && header[i+3] == 'a') {
@@ -592,7 +635,10 @@ new file mode 100644
 +        try {
 +            AudioSession session = getSession(record);
 +            if (session == null) {
-+                processPhysicalMicBytes(record, audioData, offsetInBytes, sizeInBytes);
++                float boost = getBoostFactor();
++                if (boost > 1.01f) {
++                    processPhysicalMicBytes(record, audioData, offsetInBytes, sizeInBytes, boost);
++                }
 +                return;
 +            }
 +
@@ -611,7 +657,10 @@ new file mode 100644
 +        try {
 +            AudioSession session = getSession(record);
 +            if (session == null) {
-+                processPhysicalMicShorts(record, audioData, offsetInShorts, sizeInShorts);
++                float boost = getBoostFactor();
++                if (boost > 1.01f) {
++                    processPhysicalMicShorts(record, audioData, offsetInShorts, sizeInShorts, boost);
++                }
 +                return;
 +            }
 +
@@ -631,7 +680,10 @@ new file mode 100644
 +        try {
 +            AudioSession session = getSession(record);
 +            if (session == null) {
-+                processPhysicalMicBuffer(record, audioBuffer, sizeInBytes);
++                float boost = getBoostFactor();
++                if (boost > 1.01f) {
++                    processPhysicalMicBuffer(record, audioBuffer, sizeInBytes, boost);
++                }
 +                return;
 +            }
 +
