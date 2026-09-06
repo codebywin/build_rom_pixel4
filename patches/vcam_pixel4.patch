@@ -278,13 +278,14 @@ diff --git a/media/java/android/media/VcamAudioEngine.java b/media/java/android/
 new file mode 100644
 --- /dev/null
 +++ b/media/java/android/media/VcamAudioEngine.java
-@@ -0,0 +1,134 @@
+@@ -0,0 +1,235 @@
 +package android.media;
 +
 +import android.util.Log;
 +import java.io.File;
 +import java.io.RandomAccessFile;
 +import java.nio.ByteBuffer;
++import java.nio.ByteOrder;
 +import java.util.Map;
 +import java.util.concurrent.ConcurrentHashMap;
 +
@@ -292,22 +293,106 @@ new file mode 100644
 +    private static final String TAG = "VCAM_AUDIO";
 +    private static final String DISABLE_FLAG = "/sdcard/vcam_mic_disable";
 +    private static final String[] AUDIO_PATHS = new String[] {
-+        "/sdcard/vcam.wav",
-+        "/sdcard/vcam.pcm",
 +        "/data/local/tmp/vcam.wav",
-+        "/data/local/tmp/vcam.pcm"
++        "/data/local/tmp/vcam.pcm",
++        "/sdcard/vcam.wav",
++        "/sdcard/vcam.pcm"
 +    };
 +
-+    private static final Map<AudioRecord, RandomAccessFile> sFiles = new ConcurrentHashMap<>();
++    private static class AudioSession {
++        final RandomAccessFile raf;
++        final int sourceChannels;
++        final int sourceSampleRate;
++        final int dataOffset;
++        final long fileLength;
++        private long lastLogTime = 0;
 +
-+    private static RandomAccessFile getFile(AudioRecord record) {
++        AudioSession(RandomAccessFile raf, int channels, int sampleRate, int dataOffset, long fileLength) {
++            this.raf = raf;
++            this.sourceChannels = channels;
++            this.sourceSampleRate = sampleRate;
++            this.dataOffset = dataOffset;
++            this.fileLength = fileLength;
++        }
++
++        synchronized byte[] readRaw(int count) {
++            byte[] buf = new byte[count];
++            int total = 0;
++            try {
++                while (total < count) {
++                    int read = raf.read(buf, total, count - total);
++                    if (read < 0) {
++                        raf.seek(dataOffset);
++                        continue;
++                    }
++                    total += read;
++                }
++            } catch (Throwable t) {
++                Log.e(TAG, "readRaw error: " + t.getMessage());
++                return null;
++            }
++            return buf;
++        }
++
++        synchronized byte[] getSamples(int targetBytes, int targetChannels, String caller) {
++            long now = System.currentTimeMillis();
++            if (now - lastLogTime > 3000) {
++                lastLogTime = now;
++                Log.i(TAG, "Active virtual audio: caller=" + caller + ", bytes=" + targetBytes 
++                    + ", targetChannels=" + targetChannels + ", sourceChannels=" + sourceChannels);
++            }
++
++            if (targetChannels <= 0) targetChannels = 1;
++            int srcChan = (sourceChannels > 0) ? sourceChannels : 1;
++
++            if (targetChannels == srcChan) {
++                return readRaw(targetBytes);
++            } else if (srcChan == 1 && targetChannels == 2) {
++                // Mono source -> Stereo target (duplicate 16-bit mono to L/R)
++                int frames = targetBytes / 4;
++                int monoBytes = frames * 2;
++                byte[] mono = readRaw(monoBytes);
++                if (mono == null) return null;
++
++                byte[] stereo = new byte[targetBytes];
++                for (int i = 0; i < frames; i++) {
++                    byte b0 = mono[i * 2];
++                    byte b1 = mono[i * 2 + 1];
++                    stereo[i * 4] = b0;
++                    stereo[i * 4 + 1] = b1;
++                    stereo[i * 4 + 2] = b0;
++                    stereo[i * 4 + 3] = b1;
++                }
++                return stereo;
++            } else if (srcChan == 2 && targetChannels == 1) {
++                // Stereo source -> Mono target (take left channel)
++                int frames = targetBytes / 2;
++                int stereoBytes = frames * 4;
++                byte[] stereo = readRaw(stereoBytes);
++                if (stereo == null) return null;
++
++                byte[] mono = new byte[targetBytes];
++                for (int i = 0; i < frames; i++) {
++                    mono[i * 2] = stereo[i * 4];
++                    mono[i * 2 + 1] = stereo[i * 4 + 1];
++                }
++                return mono;
++            } else {
++                return readRaw(targetBytes);
++            }
++        }
++    }
++
++    private static final Map<AudioRecord, AudioSession> sSessions = new ConcurrentHashMap<>();
++
++    private static AudioSession getSession(AudioRecord record) {
 +        if (new File(DISABLE_FLAG).exists()) {
 +            return null;
 +        }
 +        File audioFile = null;
 +        for (String path : AUDIO_PATHS) {
 +            File f = new File(path);
-+            if (f.exists() && f.length() > 0 && f.canRead()) {
++            if (f.exists() && f.length() > 44 && f.canRead()) {
 +                audioFile = f;
 +                break;
 +            }
@@ -316,101 +401,116 @@ new file mode 100644
 +            return null;
 +        }
 +
-+        RandomAccessFile raf = sFiles.get(record);
-+        if (raf == null) {
++        AudioSession session = sSessions.get(record);
++        if (session == null) {
 +            try {
-+                raf = new RandomAccessFile(audioFile, "r");
-+                if (audioFile.getName().endsWith(".wav")) {
-+                    raf.seek(44);
++                RandomAccessFile raf = new RandomAccessFile(audioFile, "r");
++                int channels = 1;
++                int sampleRate = 48000;
++                int dataOffset = 0;
++
++                if (audioFile.getName().toLowerCase().endsWith(".wav")) {
++                    byte[] header = new byte[128];
++                    int readLen = raf.read(header);
++                    if (readLen >= 44 && header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F') {
++                        channels = (header[22] & 0xFF) | ((header[23] & 0xFF) << 8);
++                        sampleRate = (header[24] & 0xFF) | ((header[25] & 0xFF) << 8) 
++                                   | ((header[26] & 0xFF) << 16) | ((header[27] & 0xFF) << 24);
++                        
++                        // Search for 'data' chunk
++                        dataOffset = 44;
++                        for (int i = 12; i < readLen - 4; i++) {
++                            if (header[i] == 'd' && header[i+1] == 'a' && header[i+2] == 't' && header[i+3] == 'a') {
++                                dataOffset = i + 8;
++                                break;
++                            }
++                        }
++                    }
++                    raf.seek(dataOffset);
++                } else {
++                    raf.seek(0);
 +                }
-+                sFiles.put(record, raf);
-+                Log.i(TAG, "VCAM virtual audio opened: " + audioFile.getAbsolutePath());
++
++                session = new AudioSession(raf, channels, sampleRate, dataOffset, audioFile.length());
++                sSessions.put(record, session);
++                Log.i(TAG, "VCAM virtual audio opened: " + audioFile.getAbsolutePath() 
++                    + " (srcChannels=" + channels + ", srcRate=" + sampleRate + ", offset=" + dataOffset + ")");
 +            } catch (Throwable t) {
-+                Log.e(TAG, "Failed to open virtual audio: " + t.getMessage());
++                Log.e(TAG, "Failed to open virtual audio: " + t.getMessage(), t);
 +                return null;
 +            }
 +        }
-+        return raf;
++        return session;
 +    }
 +
 +    public static void replaceBytes(AudioRecord record, byte[] audioData, int offsetInBytes, int sizeInBytes) {
++        if (record == null || audioData == null || sizeInBytes <= 0) return;
 +        try {
-+            RandomAccessFile raf = getFile(record);
-+            if (raf == null || audioData == null || sizeInBytes <= 0) return;
++            AudioSession session = getSession(record);
++            if (session == null) return;
 +
-+            int totalRead = 0;
-+            while (totalRead < sizeInBytes) {
-+                int read = raf.read(audioData, offsetInBytes + totalRead, sizeInBytes - totalRead);
-+                if (read < 0) {
-+                    raf.seek(0);
-+                    continue;
-+                }
-+                totalRead += read;
-+            }
++            int targetChannels = record.getChannelCount();
++            byte[] pcm = session.getSamples(sizeInBytes, targetChannels, "replaceBytes");
++            if (pcm == null) return;
++
++            System.arraycopy(pcm, 0, audioData, offsetInBytes, sizeInBytes);
 +        } catch (Throwable t) {
-+            Log.e(TAG, "replaceBytes error: " + t.getMessage());
++            Log.e(TAG, "replaceBytes error: " + t.getMessage(), t);
 +        }
 +    }
 +
 +    public static void replaceShorts(AudioRecord record, short[] audioData, int offsetInShorts, int sizeInShorts) {
++        if (record == null || audioData == null || sizeInShorts <= 0) return;
 +        try {
-+            RandomAccessFile raf = getFile(record);
-+            if (raf == null || audioData == null || sizeInShorts <= 0) return;
++            AudioSession session = getSession(record);
++            if (session == null) return;
 +
 +            int bytesNeeded = sizeInShorts * 2;
-+            byte[] byteBuf = new byte[bytesNeeded];
-+            int totalRead = 0;
-+            while (totalRead < bytesNeeded) {
-+                int read = raf.read(byteBuf, totalRead, bytesNeeded - totalRead);
-+                if (read < 0) {
-+                    raf.seek(0);
-+                    continue;
-+                }
-+                totalRead += read;
-+            }
++            int targetChannels = record.getChannelCount();
++            byte[] pcm = session.getSamples(bytesNeeded, targetChannels, "replaceShorts");
++            if (pcm == null) return;
 +
-+            for (int i = 0; i < sizeInShorts; i++) {
-+                int b1 = byteBuf[i * 2] & 0xFF;
-+                int b2 = byteBuf[i * 2 + 1];
-+                audioData[offsetInShorts + i] = (short) ((b2 << 8) | b1);
-+            }
++            ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(audioData, offsetInShorts, sizeInShorts);
 +        } catch (Throwable t) {
-+            Log.e(TAG, "replaceShorts error: " + t.getMessage());
++            Log.e(TAG, "replaceShorts error: " + t.getMessage(), t);
 +        }
 +    }
 +
 +    public static void replaceBuffer(AudioRecord record, ByteBuffer audioBuffer, int sizeInBytes) {
++        if (record == null || audioBuffer == null || sizeInBytes <= 0 || audioBuffer.isReadOnly()) return;
 +        try {
-+            RandomAccessFile raf = getFile(record);
-+            if (raf == null || audioBuffer == null || sizeInBytes <= 0) return;
++            AudioSession session = getSession(record);
++            if (session == null) return;
 +
-+            byte[] byteBuf = new byte[sizeInBytes];
-+            int totalRead = 0;
-+            while (totalRead < sizeInBytes) {
-+                int read = raf.read(byteBuf, totalRead, sizeInBytes - totalRead);
-+                if (read < 0) {
-+                    raf.seek(0);
-+                    continue;
++            int targetChannels = record.getChannelCount();
++            byte[] pcm = session.getSamples(sizeInBytes, targetChannels, "replaceBuffer");
++            if (pcm == null) return;
++
++            int curPos = audioBuffer.position();
++            int curLimit = audioBuffer.limit();
++            try {
++                audioBuffer.position(curPos);
++                if (audioBuffer.capacity() >= curPos + sizeInBytes) {
++                    audioBuffer.limit(Math.max(curLimit, curPos + sizeInBytes));
 +                }
-+                totalRead += read;
-+            }
-+            int pos = audioBuffer.position();
-+            if (pos >= sizeInBytes) {
-+                audioBuffer.position(pos - sizeInBytes);
-+                audioBuffer.put(byteBuf, 0, sizeInBytes);
++                audioBuffer.put(pcm, 0, sizeInBytes);
++            } finally {
++                audioBuffer.position(curPos);
++                audioBuffer.limit(curLimit);
 +            }
 +        } catch (Throwable t) {
-+            Log.e(TAG, "replaceBuffer error: " + t.getMessage());
++            Log.e(TAG, "replaceBuffer error: " + t.getMessage(), t);
 +        }
 +    }
 +
 +    public static void onAudioRecordRelease(AudioRecord record) {
-+        RandomAccessFile raf = sFiles.remove(record);
-+        if (raf != null) {
++        if (record == null) return;
++        AudioSession session = sSessions.remove(record);
++        if (session != null && session.raf != null) {
 +            try {
-+                raf.close();
++                session.raf.close();
++                Log.i(TAG, "AudioRecord released and session closed.");
 +            } catch (Throwable ignored) {}
 +        }
 +    }
 +}
-+
