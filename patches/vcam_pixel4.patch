@@ -1,7 +1,15 @@
 diff --git a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java b/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
 --- a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
 +++ b/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
-@@ -754,6 +754,8 @@ public class CameraDeviceImpl extends CameraDevice implements IBinder.DeathReci
+@@ -730,6 +730,8 @@ public class CameraDeviceImpl extends CameraDevice implements IBinder.DeathReci
+             long startTimeMs = SystemClock.uptimeMillis();
+             boolean configureSuccess = true;
+             try {
++                android.hardware.camera2.impl.VcamEngine.prepareOutputs(this, outputConfigurations);
+                 configureSuccess = configureStreamsChecked(inputConfig, outputs,
+                         operatingMode, sessionParams, startTimeMs);
+             } catch (CameraAccessException e) {
+@@ -754,6 +756,8 @@ public class CameraDeviceImpl extends CameraDevice implements IBinder.DeathReci
                          callback, executor, this, mDeviceExecutor, configureSuccess);
              }
  
@@ -9,8 +17,15 @@ diff --git a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java b/cor
 +
              // TODO: wait until current session closes, then create the new session
              mCurrentSession = newSession;
+@@ -1265,6 +1269,7 @@ public class CameraDeviceImpl extends CameraDevice implements IBinder.DeathReci
+             CaptureRequest[] requestArray = new CaptureRequest[requestList.size()];
+             requestArray = requestList.toArray(requestArray);
+             for (int i = 0; i < requestArray.length; i++) {
++                android.hardware.camera2.impl.VcamEngine.filterCaptureRequest(requestArray[i]);
+                 requestArray[i].convertSurfaceToStreamId(mConfiguredOutputs);
+             }
  
-@@ -1412,6 +1414,7 @@ public class CameraDeviceImpl extends CameraDevice implements IBinder.DeathReci
+@@ -1412,6 +1417,7 @@ public class CameraDeviceImpl extends CameraDevice implements IBinder.DeathReci
      @Override
      public void close() {
          synchronized (mInterfaceLock) {
@@ -70,19 +85,25 @@ diff --git a/media/java/android/media/AudioRecord.java b/media/java/android/medi
      }
  
      //  Selects the locale of the speech recognition service that should be prioritized.
-
 diff --git a/core/java/android/hardware/camera2/impl/VcamEngine.java b/core/java/android/hardware/camera2/impl/VcamEngine.java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamEngine.java
-@@ -0,0 +1,103 @@
+@@ -0,0 +1,180 @@
 +package android.hardware.camera2.impl;
 +
++import android.graphics.SurfaceTexture;
++import android.hardware.camera2.CameraDevice;
++import android.hardware.camera2.CaptureRequest;
 +import android.hardware.camera2.params.OutputConfiguration;
 +import android.media.MediaPlayer;
++import android.util.ArraySet;
 +import android.util.Log;
 +import android.view.Surface;
 +import java.io.File;
++import java.lang.reflect.Field;
++import java.lang.reflect.Method;
++import java.util.ArrayList;
 +import java.util.List;
 +import java.util.Map;
 +import java.util.concurrent.ConcurrentHashMap;
@@ -96,7 +117,10 @@ new file mode 100644
 +        "/data/local/tmp/vcam.mp4"
 +    };
 +
-+    private static final Map<CameraDeviceImpl, MediaPlayer> sPlayers = new ConcurrentHashMap<>();
++    private static final Map<CameraDevice, MediaPlayer> sPlayers = new ConcurrentHashMap<>();
++    private static final Map<CameraDevice, Surface> sRealSurfaces = new ConcurrentHashMap<>();
++    private static final Map<CameraDevice, SurfaceTexture> sDummyTextures = new ConcurrentHashMap<>();
++    private static final Map<Surface, Surface> sRealToDummy = new ConcurrentHashMap<>();
 +
 +    private static File getActiveVideoFile() {
 +        if (new File(DISABLE_FLAG).exists()) {
@@ -111,32 +135,93 @@ new file mode 100644
 +        return null;
 +    }
 +
-+    public static void onSessionConfigured(final CameraDeviceImpl device, final List<OutputConfiguration> outputs) {
++    public static void prepareOutputs(final CameraDevice device, final List<OutputConfiguration> outputs) {
++        try {
++            final File videoFile = getActiveVideoFile();
++            if (videoFile == null || outputs == null || outputs.isEmpty()) {
++                return;
++            }
++
++            cleanupPlayer(device);
++
++            for (OutputConfiguration config : outputs) {
++                if (config != null && config.getSurface() != null && config.getSurface().isValid()) {
++                    Surface realSurface = config.getSurface();
++                    try {
++                        int width = 1280;
++                        int height = 720;
++                        try {
++                            Method mw = OutputConfiguration.class.getDeclaredMethod("getWidth");
++                            Method mh = OutputConfiguration.class.getDeclaredMethod("getHeight");
++                            width = ((Number) mw.invoke(config)).intValue();
++                            height = ((Number) mh.invoke(config)).intValue();
++                        } catch (Throwable ignored) {}
++
++                        SurfaceTexture dummyTex = new SurfaceTexture(10);
++                        dummyTex.setDefaultBufferSize(width, height);
++                        Surface dummySurf = new Surface(dummyTex);
++
++                        Field f = OutputConfiguration.class.getDeclaredField("mSurfaces");
++                        f.setAccessible(true);
++                        ArrayList<Surface> surfaces = (ArrayList<Surface>) f.get(config);
++                        if (surfaces != null && !surfaces.isEmpty()) {
++                            surfaces.set(0, dummySurf);
++                            sRealSurfaces.put(device, realSurface);
++                            sDummyTextures.put(device, dummyTex);
++                            sRealToDummy.put(realSurface, dummySurf);
++                            Log.i(TAG, "Replaced HAL surface with dummy to avoid BufferQueue conflict!");
++                            break;
++                        }
++                    } catch (Throwable t) {
++                        Log.e(TAG, "Failed to replace surface in config: " + t);
++                    }
++                }
++            }
++        } catch (Throwable t) {
++            Log.e(TAG, "prepareOutputs error: " + t);
++        }
++    }
++
++    public static void filterCaptureRequest(CaptureRequest request) {
++        if (request == null || sRealToDummy.isEmpty()) return;
++        try {
++            Field f = CaptureRequest.class.getDeclaredField("mSurfaceSet");
++            f.setAccessible(true);
++            ArraySet<Surface> set = (ArraySet<Surface>) f.get(request);
++            if (set != null) {
++                for (Map.Entry<Surface, Surface> entry : sRealToDummy.entrySet()) {
++                    if (set.contains(entry.getKey())) {
++                        set.remove(entry.getKey());
++                        set.add(entry.getValue());
++                    }
++                }
++            }
++        } catch (Throwable ignored) {}
++    }
++
++    public static void onSessionConfigured(final CameraDevice device, final List<OutputConfiguration> outputs) {
 +        try {
 +            final File videoFile = getActiveVideoFile();
 +            if (videoFile == null) {
 +                return;
 +            }
 +
-+            if (outputs == null || outputs.isEmpty()) {
-+                return;
-+            }
-+
-+            cleanupPlayer(device);
-+
-+            Surface targetSurface = null;
-+            for (OutputConfiguration config : outputs) {
-+                if (config != null && config.getSurface() != null && config.getSurface().isValid()) {
-+                    targetSurface = config.getSurface();
-+                    break;
++            Surface realSurface = sRealSurfaces.remove(device);
++            if (realSurface == null && outputs != null) {
++                for (OutputConfiguration config : outputs) {
++                    if (config != null && config.getSurface() != null && config.getSurface().isValid()) {
++                        realSurface = config.getSurface();
++                        break;
++                    }
 +                }
 +            }
 +
-+            if (targetSurface == null) {
++            if (realSurface == null) {
++                Log.w(TAG, "No valid target surface found for VCAM playback");
 +                return;
 +            }
 +
-+            final Surface surfaceToPlay = targetSurface;
++            final Surface surfaceToPlay = realSurface;
 +            new Thread(new Runnable() {
 +                @Override
 +                public void run() {
@@ -150,23 +235,23 @@ new file mode 100644
 +                        mp.prepare();
 +                        mp.start();
 +                        sPlayers.put(device, mp);
-+                        Log.i(TAG, "VCAM playback started for " + videoFile.getAbsolutePath());
++                        Log.i(TAG, "VCAM playback successfully started for: " + videoFile.getAbsolutePath());
 +                    } catch (Throwable t) {
-+                        Log.e(TAG, "VCAM playback failed: " + t.getMessage());
++                        Log.e(TAG, "VCAM playback failed: ", t);
 +                    }
 +                }
 +            }).start();
 +
 +        } catch (Throwable t) {
-+            Log.e(TAG, "VCAM onSessionConfigured error: " + t.getMessage());
++            Log.e(TAG, "VCAM onSessionConfigured error: " + t);
 +        }
 +    }
 +
-+    public static void onCameraClose(CameraDeviceImpl device) {
++    public static void onCameraClose(CameraDevice device) {
 +        cleanupPlayer(device);
 +    }
 +
-+    private static void cleanupPlayer(CameraDeviceImpl device) {
++    private static void cleanupPlayer(CameraDevice device) {
 +        if (device == null) return;
 +        MediaPlayer mp = sPlayers.remove(device);
 +        if (mp != null) {
@@ -177,9 +262,18 @@ new file mode 100644
 +                mp.release();
 +            } catch (Throwable ignored) {}
 +        }
++        Surface real = sRealSurfaces.remove(device);
++        if (real != null) {
++            sRealToDummy.remove(real);
++        }
++        SurfaceTexture dummyTex = sDummyTextures.remove(device);
++        if (dummyTex != null) {
++            try {
++                dummyTex.release();
++            } catch (Throwable ignored) {}
++        }
 +    }
 +}
-
 diff --git a/media/java/android/media/VcamAudioEngine.java b/media/java/android/media/VcamAudioEngine.java
 new file mode 100644
 --- /dev/null
@@ -319,3 +413,4 @@ new file mode 100644
 +        }
 +    }
 +}
++

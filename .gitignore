@@ -3,3 +3,7 @@ crave.conf
 *.key
 *.id_rsa
 .env
+
+*.jar
+patch_work/
+step_build_smali.py
