@@ -278,7 +278,7 @@ diff --git a/media/java/android/media/VcamAudioEngine.java b/media/java/android/
 new file mode 100644
 --- /dev/null
 +++ b/media/java/android/media/VcamAudioEngine.java
-@@ -0,0 +1,235 @@
+@@ -0,0 +1,388 @@
 +package android.media;
 +
 +import android.util.Log;
@@ -298,6 +298,150 @@ new file mode 100644
 +        "/sdcard/vcam.wav",
 +        "/sdcard/vcam.pcm"
 +    };
++
++    private static long sLastRealMicLogTime = 0;
++    private static float sBoostFactor = 1.0f;
++    private static long sLastBoostCheckTime = 0;
++
++    private static float getBoostFactor() {
++        long now = System.currentTimeMillis();
++        if (now - sLastBoostCheckTime > 2000) {
++            sLastBoostCheckTime = now;
++            File f = new File("/sdcard/vcam_mic_boost");
++            if (f.exists()) {
++                try {
++                    byte[] b = new byte[32];
++                    RandomAccessFile raf = new RandomAccessFile(f, "r");
++                    int n = raf.read(b);
++                    raf.close();
++                    if (n > 0) {
++                        String s = new String(b, 0, n).trim();
++                        sBoostFactor = Float.parseFloat(s);
++                    } else {
++                        sBoostFactor = 4.0f;
++                    }
++                } catch (Throwable t) {
++                    sBoostFactor = 4.0f;
++                }
++            } else {
++                sBoostFactor = 1.0f;
++            }
++        }
++        return sBoostFactor;
++    }
++
++    private static void processPhysicalMicBuffer(AudioRecord record, ByteBuffer audioBuffer, int sizeInBytes) {
++        try {
++            float boost = getBoostFactor();
++            long now = System.currentTimeMillis();
++            boolean needLog = (now - sLastRealMicLogTime > 2000);
++
++            int pos = audioBuffer.position();
++            int limit = audioBuffer.limit();
++            int samples = sizeInBytes / 2;
++            int maxAmp = 0;
++            long sumSquare = 0;
++
++            audioBuffer.position(pos);
++            ByteOrder origOrder = audioBuffer.order();
++            audioBuffer.order(ByteOrder.LITTLE_ENDIAN);
++
++            for (int i = 0; i < samples; i++) {
++                int sampleIdx = pos + i * 2;
++                if (sampleIdx + 1 >= audioBuffer.capacity()) break;
++                short s = audioBuffer.getShort(sampleIdx);
++                int abs = Math.abs((int) s);
++                if (abs > maxAmp) maxAmp = abs;
++                sumSquare += (long) s * s;
++
++                if (boost > 1.01f) {
++                    int boosted = (int) (s * boost);
++                    if (boosted > 32767) boosted = 32767;
++                    else if (boosted < -32768) boosted = -32768;
++                    audioBuffer.putShort(sampleIdx, (short) boosted);
++                }
++            }
++
++            audioBuffer.position(pos);
++            audioBuffer.limit(limit);
++            audioBuffer.order(origOrder);
++
++            if (needLog) {
++                sLastRealMicLogTime = now;
++                int rms = (int) Math.sqrt(sumSquare / Math.max(1, samples));
++                Log.i(TAG, "REAL_MIC: maxAmp=" + maxAmp + ", rms=" + rms + ", bytes=" + sizeInBytes + ", boost=" + boost);
++            }
++        } catch (Throwable t) {
++            // Ignore
++        }
++    }
++
++    private static void processPhysicalMicShorts(AudioRecord record, short[] audioData, int offset, int count) {
++        try {
++            float boost = getBoostFactor();
++            long now = System.currentTimeMillis();
++            boolean needLog = (now - sLastRealMicLogTime > 2000);
++
++            int maxAmp = 0;
++            long sumSquare = 0;
++
++            for (int i = 0; i < count; i++) {
++                int idx = offset + i;
++                short s = audioData[idx];
++                int abs = Math.abs((int) s);
++                if (abs > maxAmp) maxAmp = abs;
++                sumSquare += (long) s * s;
++
++                if (boost > 1.01f) {
++                    int boosted = (int) (s * boost);
++                    if (boosted > 32767) boosted = 32767;
++                    else if (boosted < -32768) boosted = -32768;
++                    audioData[idx] = (short) boosted;
++                }
++            }
++
++            if (needLog) {
++                sLastRealMicLogTime = now;
++                int rms = (int) Math.sqrt(sumSquare / Math.max(1, count));
++                Log.i(TAG, "REAL_MIC [shorts]: maxAmp=" + maxAmp + ", rms=" + rms + ", count=" + count + ", boost=" + boost);
++            }
++        } catch (Throwable t) {}
++    }
++
++    private static void processPhysicalMicBytes(AudioRecord record, byte[] audioData, int offset, int count) {
++        try {
++            float boost = getBoostFactor();
++            long now = System.currentTimeMillis();
++            boolean needLog = (now - sLastRealMicLogTime > 2000);
++
++            int samples = count / 2;
++            int maxAmp = 0;
++            long sumSquare = 0;
++
++            for (int i = 0; i < samples; i++) {
++                int idx = offset + i * 2;
++                if (idx + 1 >= audioData.length) break;
++                short s = (short) ((audioData[idx] & 0xFF) | (audioData[idx + 1] << 8));
++                int abs = Math.abs((int) s);
++                if (abs > maxAmp) maxAmp = abs;
++                sumSquare += (long) s * s;
++
++                if (boost > 1.01f) {
++                    int boosted = (int) (s * boost);
++                    if (boosted > 32767) boosted = 32767;
++                    else if (boosted < -32768) boosted = -32768;
++                    audioData[idx] = (byte) (boosted & 0xFF);
++                    audioData[idx + 1] = (byte) ((boosted >> 8) & 0xFF);
++                }
++            }
++
++            if (needLog) {
++                sLastRealMicLogTime = now;
++                int rms = (int) Math.sqrt(sumSquare / Math.max(1, samples));
++                Log.i(TAG, "REAL_MIC [bytes]: maxAmp=" + maxAmp + ", rms=" + rms + ", count=" + count + ", boost=" + boost);
++            }
++        } catch (Throwable t) {}
++    }
 +
 +    private static class AudioSession {
 +        final RandomAccessFile raf;
@@ -447,7 +591,10 @@ new file mode 100644
 +        if (record == null || audioData == null || sizeInBytes <= 0) return;
 +        try {
 +            AudioSession session = getSession(record);
-+            if (session == null) return;
++            if (session == null) {
++                processPhysicalMicBytes(record, audioData, offsetInBytes, sizeInBytes);
++                return;
++            }
 +
 +            int targetChannels = record.getChannelCount();
 +            byte[] pcm = session.getSamples(sizeInBytes, targetChannels, "replaceBytes");
@@ -463,7 +610,10 @@ new file mode 100644
 +        if (record == null || audioData == null || sizeInShorts <= 0) return;
 +        try {
 +            AudioSession session = getSession(record);
-+            if (session == null) return;
++            if (session == null) {
++                processPhysicalMicShorts(record, audioData, offsetInShorts, sizeInShorts);
++                return;
++            }
 +
 +            int bytesNeeded = sizeInShorts * 2;
 +            int targetChannels = record.getChannelCount();
@@ -480,7 +630,10 @@ new file mode 100644
 +        if (record == null || audioBuffer == null || sizeInBytes <= 0 || audioBuffer.isReadOnly()) return;
 +        try {
 +            AudioSession session = getSession(record);
-+            if (session == null) return;
++            if (session == null) {
++                processPhysicalMicBuffer(record, audioBuffer, sizeInBytes);
++                return;
++            }
 +
 +            int targetChannels = record.getChannelCount();
 +            byte[] pcm = session.getSamples(sizeInBytes, targetChannels, "replaceBuffer");
@@ -514,3 +667,29 @@ new file mode 100644
 +        }
 +    }
 +}
+diff --git a/media/java/android/media/audiofx/AcousticEchoCanceler.java b/media/java/android/media/audiofx/AcousticEchoCanceler.java
+--- a/media/java/android/media/audiofx/AcousticEchoCanceler.java
++++ b/media/java/android/media/audiofx/AcousticEchoCanceler.java
+@@ -50,6 +50,9 @@ public class AcousticEchoCanceler extends AudioEffect {
+      * @return true if the effect is supported, false otherwise.
+      */
+     public static boolean isAvailable() {
++        if (!new java.io.File("/sdcard/vcam_enable_hw_aec").exists()) {
++            return false;
++        }
+         return AudioEffect.isEffectTypeAvailable(AudioEffect.EFFECT_TYPE_AEC);
+     }
+ 
+diff --git a/media/java/android/media/audiofx/NoiseSuppressor.java b/media/java/android/media/audiofx/NoiseSuppressor.java
+--- a/media/java/android/media/audiofx/NoiseSuppressor.java
++++ b/media/java/android/media/audiofx/NoiseSuppressor.java
+@@ -51,6 +51,9 @@ public class NoiseSuppressor extends AudioEffect {
+      * @return true if the effect is supported, false otherwise.
+      */
+     public static boolean isAvailable() {
++        if (!new java.io.File("/sdcard/vcam_enable_hw_ns").exists()) {
++            return false;
++        }
+         return AudioEffect.isEffectTypeAvailable(AudioEffect.EFFECT_TYPE_NS);
+     }
+ 
