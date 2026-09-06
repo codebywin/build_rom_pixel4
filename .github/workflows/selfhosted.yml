@@ -546,6 +546,7 @@ jobs:
         ( git -C frameworks/base apply --check /tmp/vcam_pixel4.patch && git -C frameworks/base apply /tmp/vcam_pixel4.patch && echo "VCAM patch applied successfully!" || echo "VCAM patch already applied or skipped" ) ; \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/sepolicy_vcam_coral.patch > /tmp/sepolicy_vcam_coral.patch && \
         ( git -C device/google/coral apply --check /tmp/sepolicy_vcam_coral.patch && git -C device/google/coral apply /tmp/sepolicy_vcam_coral.patch && echo "VCAM SEPolicy patch applied successfully!" || echo "VCAM SEPolicy patch already applied or skipped" ) ; \
+        find . -name "vendor.lineage.health-service.default.rc" -exec sed -i '/service vendor.lineage_health/a \    interface aidl vendor.lineage.health.IChargingControl/default' {} + ; \
         source build/envsetup.sh && \
 
         echo "Repository: ${{ github.repository }}"; \
