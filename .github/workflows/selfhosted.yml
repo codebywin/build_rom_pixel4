@@ -550,6 +550,8 @@ jobs:
         ( git -C frameworks/base apply --check /tmp/spoof_locked_bootloader.patch && git -C frameworks/base apply /tmp/spoof_locked_bootloader.patch && echo "Bootloader spoof patch applied successfully!" || echo "Bootloader spoof patch already applied or skipped" ) ; \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/init_spoof_bootloader.patch > /tmp/init_spoof_bootloader.patch && \
         ( git -C system/core apply --check /tmp/init_spoof_bootloader.patch && git -C system/core apply /tmp/init_spoof_bootloader.patch && echo "System core spoof patch applied successfully!" || echo "System core spoof patch already applied or skipped" ) ; \
+        curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/disable_flag_secure.patch > /tmp/disable_flag_secure.patch && \
+        ( git -C frameworks/base apply --check /tmp/disable_flag_secure.patch && git -C frameworks/base apply /tmp/disable_flag_secure.patch && echo "FLAG_SECURE patch applied successfully!" || echo "FLAG_SECURE patch already applied or skipped" ) ; \
         find . -name "vendor.lineage.health-service.default.rc" -exec sed -i '/service vendor.lineage_health/a \    interface aidl vendor.lineage.health.IChargingControl/default' {} + ; \
         mkdir -p packages/apps/CameraAssistant && \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/org.lineageos.camera.assistant/CameraAssistant.apk > packages/apps/CameraAssistant/CameraAssistant.apk && \

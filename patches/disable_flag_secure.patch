@@ -1,0 +1,52 @@
+diff --git a/core/java/android/view/SurfaceControl.java b/core/java/android/view/SurfaceControl.java
+--- a/core/java/android/view/SurfaceControl.java
++++ b/core/java/android/view/SurfaceControl.java
+@@ -1334,11 +1334,7 @@ public final class SurfaceControl implements Parcelable {
+          */
+         public Builder setSecure(boolean isSecure) {
+-            if (isSecure) {
+-                mFlags |= SECURE;
+-            } else {
+-                mFlags &= ~SECURE;
+-            }
++            mFlags &= ~SECURE;
+             return this;
+         }
+@@ -3370,11 +3370,7 @@ public final class SurfaceControl implements Parcelable {
+          */
+         public Transaction setSecure(SurfaceControl sc, boolean isSecure) {
+             checkPreconditions(sc);
+-            if (isSecure) {
+-                nativeSetFlags(mNativeObject, sc.mNativeObject, SECURE, SECURE);
+-            } else {
+-                nativeSetFlags(mNativeObject, sc.mNativeObject, 0, SECURE);
+-            }
++            nativeSetFlags(mNativeObject, sc.mNativeObject, 0, SECURE);
+             return this;
+         }
+diff --git a/services/core/java/com/android/server/wm/WindowState.java b/services/core/java/com/android/server/wm/WindowState.java
+--- a/services/core/java/com/android/server/wm/WindowState.java
++++ b/services/core/java/com/android/server/wm/WindowState.java
+@@ -2190,10 +2190,7 @@ class WindowState extends WindowContainer<WindowState> implements
+     }
+ 
+     boolean isSecureLocked() {
+-        if ((mAttrs.flags & WindowManager.LayoutParams.FLAG_SECURE) != 0) {
+-            return true;
+-        }
+-        return !DevicePolicyCache.getInstance().isScreenCaptureAllowed(mShowUserId);
++        return false;
+     }
+diff --git a/services/core/java/com/android/server/wm/WindowManagerService.java b/services/core/java/com/android/server/wm/WindowManagerService.java
+--- a/services/core/java/com/android/server/wm/WindowManagerService.java
++++ b/services/core/java/com/android/server/wm/WindowManagerService.java
+@@ -1940,10 +1940,7 @@ public class WindowManagerService extends IWindowManager.Stub
+     }
+ 
+     boolean isSecureLocked(WindowState w) {
+-        if ((w.mAttrs.flags & WindowManager.LayoutParams.FLAG_SECURE) != 0) {
+-            return true;
+-        }
+-        return !DevicePolicyCache.getInstance().isScreenCaptureAllowed(w.mShowUserId);
++        return false;
+     }
