@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#121212"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- HEADER -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="VCAM Assistant"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:textColor="#00E5FF" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Pixel 4 ROM"
+                android:textSize="12sp"
+                android:textColor="#80DEEA"
+                android:background="@drawable/bg_floating_card"
+                android:paddingLeft="10dp"
+                android:paddingRight="10dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp" />
+        </LinearLayout>
+
+        <!-- 1. BẬT / TẮT MASTER & CỬA SỔ NỔI -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_floating_card"
+            android:padding="16dp"
+            android:layout_marginBottom="14dp">
+
+            <Switch
+                android:id="@+id/switch_vcam"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Kích hoạt Camera Ảo (VCAM)"
+                android:textStyle="bold"
+                android:textSize="16sp"
+                android:textColor="#FFFFFF"
+                android:checked="true" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Tự động can thiệp luồng camera và micro vào mọi ứng dụng"
+                android:textSize="12sp"
+                android:textColor="#B0BEC5"
+                android:layout_marginTop="2dp"
+                android:layout_marginBottom="14dp" />
+
+            <Button
+                android:id="@+id/btn_open_floating"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="✨ MỞ CỬA SỔ NỔI (FLOAT HUD)"
+                android:backgroundTint="#00E5FF"
+                android:textColor="#000000"
+                android:textStyle="bold"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="* Cửa sổ nổi hỗ trợ Zoom, D-Pad, Tạm dừng trực tiếp ngay trên app KYC / Livestream."
+                android:textSize="11sp"
+                android:textColor="#80DEEA"
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
+
+        <!-- 2. QUẢN LÝ VIDEO NGUỒN -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_floating_card"
+            android:padding="16dp"
+            android:layout_marginBottom="14dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🎬 Tệp Video Nguồn (.mp4)"
+                android:textStyle="bold"
+                android:textSize="15sp"
+                android:textColor="#FFFFFF" />
+
+            <TextView
+                android:id="@+id/txt_video_info"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Đang dùng: /data/local/tmp/vcam.mp4"
+                android:textSize="12sp"
+                android:textColor="#B0BEC5"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="10dp" />
+
+            <Button
+                android:id="@+id/btn_pick_video"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:text="Chọn Video Mới Từ Máy"
+                android:backgroundTint="#37474F"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <!-- 3. QUẢN LÝ ÂM THANH & CHẾ ĐỘ MIC -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_floating_card"
+            android:padding="16dp"
+            android:layout_marginBottom="14dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🎙️ Quản Lý Âm Thanh (Audio Hook)"
+                android:textStyle="bold"
+                android:textSize="15sp"
+                android:textColor="#FFFFFF" />
+
+            <TextView
+                android:id="@+id/txt_audio_info"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Đang dùng: /data/local/tmp/vcam.wav"
+                android:textSize="12sp"
+                android:textColor="#B0BEC5"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="10dp" />
+
+            <Button
+                android:id="@+id/btn_pick_audio"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:text="Chọn Nhạc Mới (.wav / .mp3)"
+                android:backgroundTint="#37474F"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:layout_marginBottom="12dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Chế Độ Micro:"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:textColor="#ECEFF1"
+                android:layout_marginBottom="6dp" />
+
+            <RadioGroup
+                android:id="@+id/rg_audio_mode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <RadioButton
+                    android:id="@+id/rb_audio_virtual"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Chỉ phát nhạc ảo (100% tiếng sạch, ngắt tiếng ngoài)"
+                    android:textColor="#ECEFF1"
+                    android:textSize="13sp"
+                    android:checked="true" />
+
+                <RadioButton
+                    android:id="@+id/rb_audio_mix"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Trộn âm thanh (Vừa phát nhạc vừa nói mic thật)"
+                    android:textColor="#ECEFF1"
+                    android:textSize="13sp" />
+
+                <RadioButton
+                    android:id="@+id/rb_audio_real"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Chỉ dùng mic thật (Tắt can thiệp âm thanh)"
+                    android:textColor="#ECEFF1"
+                    android:textSize="13sp" />
+            </RadioGroup>
+        </LinearLayout>
+
+        <!-- 4. LƯU CÀI ĐẶT -->
+        <Button
+            android:id="@+id/btn_apply"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="LƯU CÀI ĐẶT"
+            android:backgroundTint="#00897B"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:textSize="15sp"
+            android:layout_marginBottom="24dp" />
+
+    </LinearLayout>
+</ScrollView>

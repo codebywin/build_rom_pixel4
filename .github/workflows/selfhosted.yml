@@ -546,7 +546,15 @@ jobs:
         ( git -C frameworks/base apply --check /tmp/vcam_pixel4.patch && git -C frameworks/base apply /tmp/vcam_pixel4.patch && echo "VCAM patch applied successfully!" || echo "VCAM patch already applied or skipped" ) ; \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/sepolicy_vcam_coral.patch > /tmp/sepolicy_vcam_coral.patch && \
         ( git -C device/google/coral apply --check /tmp/sepolicy_vcam_coral.patch && git -C device/google/coral apply /tmp/sepolicy_vcam_coral.patch && echo "VCAM SEPolicy patch applied successfully!" || echo "VCAM SEPolicy patch already applied or skipped" ) ; \
+        curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/spoof_locked_bootloader.patch > /tmp/spoof_locked_bootloader.patch && \
+        ( git -C frameworks/base apply --check /tmp/spoof_locked_bootloader.patch && git -C frameworks/base apply /tmp/spoof_locked_bootloader.patch && echo "Bootloader spoof patch applied successfully!" || echo "Bootloader spoof patch already applied or skipped" ) ; \
+        curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/init_spoof_bootloader.patch > /tmp/init_spoof_bootloader.patch && \
+        ( git -C system/core apply --check /tmp/init_spoof_bootloader.patch && git -C system/core apply /tmp/init_spoof_bootloader.patch && echo "System core spoof patch applied successfully!" || echo "System core spoof patch already applied or skipped" ) ; \
         find . -name "vendor.lineage.health-service.default.rc" -exec sed -i '/service vendor.lineage_health/a \    interface aidl vendor.lineage.health.IChargingControl/default' {} + ; \
+        mkdir -p packages/apps/CameraAssistant && \
+        curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/org.lineageos.camera.assistant/CameraAssistant.apk > packages/apps/CameraAssistant/CameraAssistant.apk && \
+        printf 'android_app_import {\n    name: "CameraAssistant",\n    apk: "CameraAssistant.apk",\n    certificate: "platform",\n    dex_preopt: {\n        enabled: false,\n    },\n}\n' > packages/apps/CameraAssistant/Android.bp && \
+        if [ -f device/google/coral/device.mk ]; then echo "PRODUCT_PACKAGES += CameraAssistant" >> device/google/coral/device.mk ; fi ; \
         source build/envsetup.sh && \
 
         echo "Repository: ${{ github.repository }}"; \

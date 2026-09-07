@@ -89,7 +89,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamEngine.java b/core/java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamEngine.java
-@@ -0,0 +1,289 @@
+@@ -0,0 +1,348 @@
 +package android.hardware.camera2.impl;
 +
 +import android.graphics.SurfaceTexture;
@@ -122,13 +122,17 @@ new file mode 100644
 +
 +    private static class VideoPlayer implements Runnable {
 +        final File file;
-+        final Surface surface;
++        final Surface realSurface;
++        final int targetWidth;
++        final int targetHeight;
 +        volatile boolean running = true;
 +        Thread thread;
 +
-+        VideoPlayer(File file, Surface surface) {
++        VideoPlayer(File file, Surface surface, int width, int height) {
 +            this.file = file;
-+            this.surface = surface;
++            this.realSurface = surface;
++            this.targetWidth = width;
++            this.targetHeight = height;
 +        }
 +
 +        void start() {
@@ -145,10 +149,11 @@ new file mode 100644
 +
 +        @Override
 +        public void run() {
-+            Log.i(TAG, "MediaCodec video decoder started for: " + file.getAbsolutePath());
-+            while (running && surface != null && surface.isValid()) {
++            Log.i(TAG, "MediaCodec video decoder thread started for: " + file.getAbsolutePath());
++            while (running) {
 +                MediaExtractor extractor = null;
 +                MediaCodec decoder = null;
++                VcamRenderer renderer = null;
 +                try {
 +                    extractor = new MediaExtractor();
 +                    extractor.setDataSource(file.getAbsolutePath());
@@ -168,48 +173,85 @@ new file mode 100644
 +
 +                    if (videoTrackIndex < 0 || format == null) {
 +                        Log.e(TAG, "No video track found in " + file.getAbsolutePath());
-+                        break;
++                        return;
 +                    }
 +
 +                    extractor.selectTrack(videoTrackIndex);
 +                    String mime = format.getString(MediaFormat.KEY_MIME);
 +                    decoder = MediaCodec.createDecoderByType(mime);
-+                    decoder.configure(format, surface, null, 0);
++
++                    Surface decodeSurface = realSurface;
++                    try {
++                        renderer = new VcamRenderer();
++                        if (renderer.init(realSurface, targetWidth, targetHeight)) {
++                            decodeSurface = renderer.getInputSurface();
++                            Log.i(TAG, "VcamRenderer EGL pipeline active (" + targetWidth + "x" + targetHeight + ")");
++                        } else {
++                            renderer.release();
++                            renderer = null;
++                        }
++                    } catch (Throwable t) {
++                        Log.w(TAG, "VcamRenderer init failed, fallback to direct surface: " + t);
++                        if (renderer != null) {
++                            renderer.release();
++                            renderer = null;
++                        }
++                    }
++
++                    decoder.configure(format, decodeSurface, null, 0);
 +                    decoder.start();
 +
-+                    MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
-+                    boolean isEOS = false;
-+                    long startMs = System.currentTimeMillis();
-+                    long firstPtsUs = -1;
++                    int fps = 30;
++                    if (format.containsKey(MediaFormat.KEY_FRAME_RATE)) {
++                        try {
++                            fps = format.getInteger(MediaFormat.KEY_FRAME_RATE);
++                            if (fps <= 0 || fps > 60) fps = 30;
++                        } catch (Throwable ignored) {}
++                    }
++                    long frameDelayMs = 1000 / fps;
 +
-+                    while (running && !isEOS && surface.isValid()) {
++                    MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
++                    long nextFrameTimeMs = System.currentTimeMillis();
++                    long basePtsUs = 0;
++                    long lastSampleTimeUs = 0;
++
++                    while (running && decodeSurface != null && decodeSurface.isValid()) {
++                        while (running && VcamConfig.isPaused()) {
++                            try {
++                                if (renderer != null) {
++                                    renderer.renderFrame();
++                                }
++                                Thread.sleep(80);
++                            } catch (InterruptedException ie) {
++                                break;
++                            }
++                        }
++
 +                        int inIndex = decoder.dequeueInputBuffer(10000);
 +                        if (inIndex >= 0) {
 +                            ByteBuffer buffer = decoder.getInputBuffer(inIndex);
 +                            int sampleSize = extractor.readSampleData(buffer, 0);
 +                            if (sampleSize < 0) {
-+                                decoder.queueInputBuffer(inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
-+                                isEOS = true;
-+                            } else {
-+                                long ptsUs = extractor.getSampleTime();
-+                                decoder.queueInputBuffer(inIndex, 0, sampleSize, ptsUs, 0);
++                                extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC);
++                                basePtsUs += lastSampleTimeUs + 33333;
++                                sampleSize = extractor.readSampleData(buffer, 0);
++                            }
++
++                            if (sampleSize >= 0) {
++                                long sampleTime = extractor.getSampleTime();
++                                if (sampleTime > 0) {
++                                    lastSampleTimeUs = sampleTime;
++                                }
++                                decoder.queueInputBuffer(inIndex, 0, sampleSize, basePtsUs + sampleTime, 0);
 +                                extractor.advance();
 +                            }
 +                        }
 +
 +                        int outIndex = decoder.dequeueOutputBuffer(info, 10000);
 +                        if (outIndex >= 0) {
-+                            if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-+                                isEOS = true;
-+                            }
-+                            if (firstPtsUs < 0) {
-+                                firstPtsUs = info.presentationTimeUs;
-+                                startMs = System.currentTimeMillis();
-+                            }
-+                            long elapsedUs = (System.currentTimeMillis() - startMs) * 1000;
-+                            long frameOffsetUs = info.presentationTimeUs - firstPtsUs;
-+                            if (frameOffsetUs > elapsedUs) {
-+                                long sleepMs = (frameOffsetUs - elapsedUs) / 1000;
++                            long now = System.currentTimeMillis();
++                            if (now < nextFrameTimeMs) {
++                                long sleepMs = nextFrameTimeMs - now;
 +                                if (sleepMs > 0 && sleepMs < 100) {
 +                                    try {
 +                                        Thread.sleep(sleepMs);
@@ -218,13 +260,20 @@ new file mode 100644
 +                                    }
 +                                }
 +                            }
-+                            decoder.releaseOutputBuffer(outIndex, true);
++                            nextFrameTimeMs = System.currentTimeMillis() + frameDelayMs;
++                            try {
++                                decoder.releaseOutputBuffer(outIndex, true);
++                                if (renderer != null) {
++                                    renderer.renderFrame();
++                                }
++                            } catch (Throwable e) {
++                                Log.w(TAG, "releaseOutputBuffer dropped frame: " + e.getMessage());
++                            }
 +                        }
 +                    }
 +                } catch (Throwable t) {
 +                    if (running) {
-+                        Log.e(TAG, "MediaCodec playback loop error: " + t.getMessage());
-+                        try { Thread.sleep(100); } catch (Throwable ignored) {}
++                        Log.e(TAG, "MediaCodec playback loop error: " + t.getMessage(), t);
 +                    }
 +                } finally {
 +                    if (decoder != null) {
@@ -238,9 +287,21 @@ new file mode 100644
 +                            extractor.release();
 +                        } catch (Throwable ignored) {}
 +                    }
++                    if (renderer != null) {
++                        try {
++                            renderer.release();
++                        } catch (Throwable ignored) {}
++                    }
++                    if (running) {
++                        try {
++                            Thread.sleep(50);
++                        } catch (InterruptedException ignored) {
++                            break;
++                        }
++                    }
 +                }
++                Log.i(TAG, "MediaCodec video decoder thread finished.");
 +            }
-+            Log.i(TAG, "MediaCodec video decoder finished.");
 +        }
 +    }
 +
@@ -248,18 +309,10 @@ new file mode 100644
 +    private static final Map<CameraDevice, Surface> sRealSurfaces = new ConcurrentHashMap<>();
 +    private static final Map<CameraDevice, SurfaceTexture> sDummyTextures = new ConcurrentHashMap<>();
 +    private static final Map<Surface, Surface> sRealToDummy = new ConcurrentHashMap<>();
++    private static final Map<CameraDevice, int[]> sSurfaceSizes = new ConcurrentHashMap<>();
 +
 +    private static File getActiveVideoFile() {
-+        if (new File(DISABLE_FLAG).exists()) {
-+            return null;
-+        }
-+        for (String path : VIDEO_PATHS) {
-+            File f = new File(path);
-+            if (f.exists() && f.length() > 0 && f.canRead()) {
-+                return f;
-+            }
-+        }
-+        return null;
++        return VcamConfig.getActiveVideoFile();
 +    }
 +
 +    public static void prepareOutputs(final CameraDevice device, final List<OutputConfiguration> outputs) {
@@ -296,6 +349,7 @@ new file mode 100644
 +                            sRealSurfaces.put(device, realSurface);
 +                            sDummyTextures.put(device, dummyTex);
 +                            sRealToDummy.put(realSurface, dummySurf);
++                            sSurfaceSizes.put(device, new int[] { width, height });
 +                            Log.i(TAG, "Replaced HAL surface with dummy to avoid BufferQueue conflict!");
 +                            break;
 +                        }
@@ -333,7 +387,7 @@ new file mode 100644
 +                return;
 +            }
 +
-+            Surface realSurface = sRealSurfaces.remove(device);
++            Surface realSurface = sRealSurfaces.get(device);
 +            if (realSurface == null && outputs != null) {
 +                for (OutputConfiguration config : outputs) {
 +                    if (config != null && config.getSurface() != null && config.getSurface().isValid()) {
@@ -348,7 +402,11 @@ new file mode 100644
 +                return;
 +            }
 +
-+            VideoPlayer player = new VideoPlayer(videoFile, realSurface);
++            int[] size = sSurfaceSizes.get(device);
++            int width = (size != null) ? size[0] : 1280;
++            int height = (size != null) ? size[1] : 720;
++
++            VideoPlayer player = new VideoPlayer(videoFile, realSurface, width, height);
 +            sPlayers.put(device, player);
 +            player.start();
 +
@@ -377,13 +435,521 @@ new file mode 100644
 +                dummyTex.release();
 +            } catch (Throwable ignored) {}
 +        }
++        sSurfaceSizes.remove(device);
++    }
++}
+diff --git a/core/java/android/hardware/camera2/impl/VcamConfig.java b/core/java/android/hardware/camera2/impl/VcamConfig.java
+new file mode 100644
+--- /dev/null
++++ b/core/java/android/hardware/camera2/impl/VcamConfig.java
+@@ -0,0 +1,126 @@
++package android.hardware.camera2.impl;
++
++import java.io.File;
++
++public class VcamConfig {
++    public static final String DISABLE_FLAG = "vcam_disable";
++    public static final String MIC_DISABLE_FLAG = "vcam_mic_disable";
++    public static final String MIC_MIX_FLAG = "vcam_mic_mix";
++    public static final String PAUSE_FLAG = "vcam_pause";
++    public static final String KYC_FLASH_FLAG = "vcam_kyc_flash";
++
++    public static final String ZOOM_FILE = "vcam_zoom";
++    public static final String PAN_X_FILE = "vcam_pan_x";
++    public static final String PAN_Y_FILE = "vcam_pan_y";
++    public static final String FLASH_COLOR_FILE = "vcam_flash_color";
++
++    public static final String[] SEARCH_DIRS = new String[] {
++        "/data/local/tmp/",
++        "/sdcard/"
++    };
++
++    public static final String[] VIDEO_PATHS = new String[] {
++        "/data/local/tmp/vcam.mp4",
++        "/sdcard/vcam.mp4",
++        "/sdcard/DCIM/Camera/vcam.mp4"
++    };
++
++    public static boolean isFlagActive(String flagName) {
++        for (String dir : SEARCH_DIRS) {
++            File f = new File(dir + flagName);
++            if (f.exists()) return true;
++        }
++        return false;
++    }
++
++    public static boolean isVcamEnabled() {
++        return !isFlagActive(DISABLE_FLAG);
++    }
++
++    public static boolean isPaused() {
++        return isFlagActive(PAUSE_FLAG);
++    }
++
++    public static boolean isKycFlashEnabled() {
++        return isFlagActive(KYC_FLASH_FLAG);
++    }
++
++    public static boolean isMicDisabled() {
++        return isFlagActive(MIC_DISABLE_FLAG);
++    }
++
++    public static boolean isMicMix() {
++        return isFlagActive(MIC_MIX_FLAG);
++    }
++
++    public static float getZoomScale() {
++        String val = readFileString(ZOOM_FILE);
++        if (!val.isEmpty()) {
++            try {
++                float z = Float.parseFloat(val);
++                // Khóa biên tối thiểu 1.0x để không bao giờ bị viền đen hoặc lộ camera thật
++                if (z < 1.0f) return 1.0f;
++                if (z > 4.0f) return 4.0f;
++                return z;
++            } catch (Throwable ignored) {}
++        }
++        return 1.0f;
++    }
++
++    public static float getPanX() {
++        String val = readFileString(PAN_X_FILE);
++        if (!val.isEmpty()) {
++            try {
++                return Float.parseFloat(val);
++            } catch (Throwable ignored) {}
++        }
++        return 0.0f;
++    }
++
++    public static float getPanY() {
++        String val = readFileString(PAN_Y_FILE);
++        if (!val.isEmpty()) {
++            try {
++                return Float.parseFloat(val);
++            } catch (Throwable ignored) {}
++        }
++        return 0.0f;
++    }
++
++    public static File getActiveVideoFile() {
++        if (!isVcamEnabled()) return null;
++        for (String path : VIDEO_PATHS) {
++            File f = new File(path);
++            if (f.exists() && f.length() > 0 && f.canRead()) {
++                return f;
++            }
++        }
++        return null;
++    }
++
++    public static String readFileString(String fileName) {
++        for (String dir : SEARCH_DIRS) {
++            File f = new File(dir + fileName);
++            if (f.exists() && f.length() > 0) {
++                java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
++                java.io.FileInputStream fis = null;
++                try {
++                    fis = new java.io.FileInputStream(f);
++                    byte[] buf = new byte[128];
++                    int r;
++                    while ((r = fis.read(buf)) != -1) {
++                        bos.write(buf, 0, r);
++                    }
++                    String str = bos.toString("UTF-8").trim();
++                    if (!str.isEmpty()) return str;
++                } catch (Throwable ignored) {
++                } finally {
++                    if (fis != null) {
++                        try { fis.close(); } catch (Throwable ignored) {}
++                    }
++                }
++            }
++        }
++        return "";
++    }
++}
+diff --git a/core/java/android/hardware/camera2/impl/VcamRenderer.java b/core/java/android/hardware/camera2/impl/VcamRenderer.java
+new file mode 100644
+--- /dev/null
++++ b/core/java/android/hardware/camera2/impl/VcamRenderer.java
+@@ -0,0 +1,317 @@
++package android.hardware.camera2.impl;
++
++import android.graphics.Color;
++import android.graphics.SurfaceTexture;
++import android.opengl.EGL14;
++import android.opengl.EGLConfig;
++import android.opengl.EGLContext;
++import android.opengl.EGLDisplay;
++import android.opengl.EGLSurface;
++import android.opengl.GLES11Ext;
++import android.opengl.GLES20;
++import android.opengl.Matrix;
++import android.util.Log;
++import android.view.Surface;
++
++import java.nio.ByteBuffer;
++import java.nio.ByteOrder;
++import java.nio.FloatBuffer;
++
++public class VcamRenderer {
++    private static final String TAG = "VCAM_RENDER";
++
++    private static final String VERTEX_SHADER =
++        "uniform mat4 uMVPMatrix;\n" +
++        "uniform mat4 uSTMatrix;\n" +
++        "attribute vec4 aPosition;\n" +
++        "attribute vec4 aTextureCoord;\n" +
++        "varying vec2 vTextureCoord;\n" +
++        "void main() {\n" +
++        "  gl_Position = uMVPMatrix * aPosition;\n" +
++        "  vTextureCoord = (uSTMatrix * aTextureCoord).xy;\n" +
++        "}\n";
++
++    private static final String FRAGMENT_SHADER =
++        "#extension GL_OES_EGL_image_external : require\n" +
++        "precision mediump float;\n" +
++        "varying vec2 vTextureCoord;\n" +
++        "uniform samplerExternalOES sTexture;\n" +
++        "uniform vec4 uFlashColor;\n" +
++        "void main() {\n" +
++        "  vec4 c = texture2D(sTexture, vTextureCoord);\n" +
++        "  if (uFlashColor.a > 0.0) {\n" +
++        "    gl_FragColor = mix(c, vec4(uFlashColor.rgb, 1.0), uFlashColor.a);\n" +
++        "  } else {\n" +
++        "    gl_FragColor = c;\n" +
++        "  }\n" +
++        "}\n";
++
++    private static final float[] VERTICES = {
++        -1.0f, -1.0f, 0.0f,
++         1.0f, -1.0f, 0.0f,
++        -1.0f,  1.0f, 0.0f,
++         1.0f,  1.0f, 0.0f
++    };
++
++    private static final float[] TEX_COORDS = {
++        0.0f, 0.0f,
++        1.0f, 0.0f,
++        0.0f, 1.0f,
++        1.0f, 1.0f
++    };
++
++    private final FloatBuffer mVertexBuffer;
++    private final FloatBuffer mTexCoordBuffer;
++
++    private EGLDisplay mEGLDisplay = EGL14.EGL_NO_DISPLAY;
++    private EGLContext mEGLContext = EGL14.EGL_NO_CONTEXT;
++    private EGLSurface mEGLSurface = EGL14.EGL_NO_SURFACE;
++
++    private int mProgram = 0;
++    private int mTextureId = 0;
++    private int muMVPMatrixHandle = 0;
++    private int muSTMatrixHandle = 0;
++    private int muFlashColorHandle = 0;
++    private int maPositionHandle = 0;
++    private int maTextureHandle = 0;
++
++    private final float[] mMVPMatrix = new float[16];
++    private final float[] mSTMatrix = new float[16];
++
++    private SurfaceTexture mSurfaceTexture;
++    private Surface mInputSurface;
++    private boolean mInitialized = false;
++
++    public VcamRenderer() {
++        mVertexBuffer = ByteBuffer.allocateDirect(VERTICES.length * 4)
++                .order(ByteOrder.nativeOrder()).asFloatBuffer();
++        mVertexBuffer.put(VERTICES).position(0);
++
++        mTexCoordBuffer = ByteBuffer.allocateDirect(TEX_COORDS.length * 4)
++                .order(ByteOrder.nativeOrder()).asFloatBuffer();
++        mTexCoordBuffer.put(TEX_COORDS).position(0);
++
++        Matrix.setIdentityM(mMVPMatrix, 0);
++    }
++
++    public boolean init(Surface targetSurface, int width, int height) {
++        if (targetSurface == null || !targetSurface.isValid()) {
++            return false;
++        }
++
++        try {
++            mEGLDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY);
++            if (mEGLDisplay == EGL14.EGL_NO_DISPLAY) {
++                Log.e(TAG, "unable to get EGL14 display");
++                return false;
++            }
++            int[] version = new int[2];
++            if (!EGL14.eglInitialize(mEGLDisplay, version, 0, version, 1)) {
++                Log.e(TAG, "unable to initialize EGL14");
++                return false;
++            }
++
++            int[] attribList = {
++                EGL14.EGL_RED_SIZE, 8,
++                EGL14.EGL_GREEN_SIZE, 8,
++                EGL14.EGL_BLUE_SIZE, 8,
++                EGL14.EGL_ALPHA_SIZE, 8,
++                EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
++                0x3142, 1, // EGL_RECORDABLE_ANDROID
++                EGL14.EGL_NONE
++            };
++            EGLConfig[] configs = new EGLConfig[1];
++            int[] numConfigs = new int[1];
++            EGL14.eglChooseConfig(mEGLDisplay, attribList, 0, configs, 0, configs.length, numConfigs, 0);
++            if (numConfigs[0] <= 0) {
++                Log.e(TAG, "unable to find valid RGB8888 EGLConfig");
++                return false;
++            }
++
++            int[] contextAttribs = {
++                EGL14.EGL_CONTEXT_CLIENT_VERSION, 2,
++                EGL14.EGL_NONE
++            };
++            mEGLContext = EGL14.eglCreateContext(mEGLDisplay, configs[0], EGL14.EGL_NO_CONTEXT, contextAttribs, 0);
++            if (mEGLContext == EGL14.EGL_NO_CONTEXT) {
++                Log.e(TAG, "failed to create EGL context");
++                return false;
++            }
++
++            int[] surfaceAttribs = { EGL14.EGL_NONE };
++            mEGLSurface = EGL14.eglCreateWindowSurface(mEGLDisplay, configs[0], targetSurface, surfaceAttribs, 0);
++            if (mEGLSurface == EGL14.EGL_NO_SURFACE) {
++                Log.e(TAG, "failed to create EGL window surface");
++                return false;
++            }
++
++            if (!EGL14.eglMakeCurrent(mEGLDisplay, mEGLSurface, mEGLSurface, mEGLContext)) {
++                Log.e(TAG, "failed to eglMakeCurrent");
++                return false;
++            }
++
++            // Tạo external OES texture
++            int[] textures = new int[1];
++            GLES20.glGenTextures(1, textures, 0);
++            mTextureId = textures[0];
++            GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, mTextureId);
++            GLES20.glTexParameterf(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
++            GLES20.glTexParameterf(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
++            GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
++            GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
++
++            mProgram = createProgram(VERTEX_SHADER, FRAGMENT_SHADER);
++            if (mProgram == 0) {
++                Log.e(TAG, "failed creating GL program");
++                return false;
++            }
++
++            maPositionHandle = GLES20.glGetAttribLocation(mProgram, "aPosition");
++            maTextureHandle = GLES20.glGetAttribLocation(mProgram, "aTextureCoord");
++            muMVPMatrixHandle = GLES20.glGetUniformLocation(mProgram, "uMVPMatrix");
++            muSTMatrixHandle = GLES20.glGetUniformLocation(mProgram, "uSTMatrix");
++            muFlashColorHandle = GLES20.glGetUniformLocation(mProgram, "uFlashColor");
++
++            mSurfaceTexture = new SurfaceTexture(mTextureId);
++            mSurfaceTexture.setDefaultBufferSize(width > 0 ? width : 1280, height > 0 ? height : 720);
++            mInputSurface = new Surface(mSurfaceTexture);
++            mInitialized = true;
++            Log.i(TAG, "VcamRenderer EGL GLES20 initialized successfully (" + width + "x" + height + ")");
++            return true;
++        } catch (Throwable t) {
++            Log.e(TAG, "init failed: " + t);
++            release();
++            return false;
++        }
++    }
++
++    public Surface getInputSurface() {
++        return mInputSurface;
++    }
++
++    public boolean isInitialized() {
++        return mInitialized;
++    }
++
++    public void renderFrame() {
++        if (!mInitialized || mSurfaceTexture == null) return;
++        try {
++            mSurfaceTexture.updateTexImage();
++            mSurfaceTexture.getTransformMatrix(mSTMatrix);
++
++            float zoom = VcamConfig.getZoomScale(); // Giới hạn [1.0x -> 4.0x]
++            float panX = VcamConfig.getPanX();
++            float panY = VcamConfig.getPanY();
++
++            // Khóa biên an toàn tuyệt đối: Không bao giờ lộ camera thật hoặc viền đen!
++            // Khi zoom = 1.0x, maxPan = 0 (khóa chặt ở khung viền gốc).
++            // Khi zoom > 1.0x, cho phép di chuyển trong phần đã phóng to.
++            float maxPan = (zoom - 1.0f) / (2.0f * zoom);
++            if (panX > maxPan) panX = maxPan;
++            if (panX < -maxPan) panX = -maxPan;
++            if (panY > maxPan) panY = maxPan;
++            if (panY < -maxPan) panY = -maxPan;
++
++            // Biến đổi ma trận Texture STMatrix để thực hiện Zoom và Pan
++            Matrix.translateM(mSTMatrix, 0, 0.5f - panX, 0.5f - panY, 0.0f);
++            Matrix.scaleM(mSTMatrix, 0, 1.0f / zoom, 1.0f / zoom, 1.0f);
++            Matrix.translateM(mSTMatrix, 0, -0.5f, -0.5f, 0.0f);
++
++            GLES20.glUseProgram(mProgram);
++
++            GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
++            GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, mTextureId);
++
++            mVertexBuffer.position(0);
++            GLES20.glVertexAttribPointer(maPositionHandle, 3, GLES20.GL_FLOAT, false, 12, mVertexBuffer);
++            GLES20.glEnableVertexAttribArray(maPositionHandle);
++
++            mTexCoordBuffer.position(0);
++            GLES20.glVertexAttribPointer(maTextureHandle, 2, GLES20.GL_FLOAT, false, 8, mTexCoordBuffer);
++            GLES20.glEnableVertexAttribArray(maTextureHandle);
++
++            GLES20.glUniformMatrix4fv(muMVPMatrixHandle, 1, false, mMVPMatrix, 0);
++            GLES20.glUniformMatrix4fv(muSTMatrixHandle, 1, false, mSTMatrix, 0);
++
++            // Đồng bộ ánh sáng phản xạ Flash KYC
++            int flashColor = VcamColorSync.getFlashColor();
++            float flashIntensity = VcamColorSync.getFlashIntensity();
++            if (flashColor != Color.TRANSPARENT && flashIntensity > 0.0f) {
++                float r = Color.red(flashColor) / 255.0f;
++                float g = Color.green(flashColor) / 255.0f;
++                float b = Color.blue(flashColor) / 255.0f;
++                GLES20.glUniform4f(muFlashColorHandle, r, g, b, flashIntensity);
++            } else {
++                GLES20.glUniform4f(muFlashColorHandle, 0.0f, 0.0f, 0.0f, 0.0f);
++            }
++
++            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
++            EGL14.eglSwapBuffers(mEGLDisplay, mEGLSurface);
++        } catch (Throwable t) {
++            Log.e(TAG, "renderFrame error: " + t);
++        }
++    }
++
++    public void release() {
++        mInitialized = false;
++        if (mSurfaceTexture != null) {
++            try { mSurfaceTexture.release(); } catch (Throwable ignored) {}
++            mSurfaceTexture = null;
++        }
++        if (mInputSurface != null) {
++            try { mInputSurface.release(); } catch (Throwable ignored) {}
++            mInputSurface = null;
++        }
++        if (mEGLDisplay != EGL14.EGL_NO_DISPLAY) {
++            EGL14.eglMakeCurrent(mEGLDisplay, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT);
++            if (mEGLSurface != EGL14.EGL_NO_SURFACE) {
++                EGL14.eglDestroySurface(mEGLDisplay, mEGLSurface);
++                mEGLSurface = EGL14.EGL_NO_SURFACE;
++            }
++            if (mEGLContext != EGL14.EGL_NO_CONTEXT) {
++                EGL14.eglDestroyContext(mEGLDisplay, mEGLContext);
++                mEGLContext = EGL14.EGL_NO_CONTEXT;
++            }
++            EGL14.eglTerminate(mEGLDisplay);
++            mEGLDisplay = EGL14.EGL_NO_DISPLAY;
++        }
++    }
++
++    private static int loadShader(int shaderType, String source) {
++        int shader = GLES20.glCreateShader(shaderType);
++        if (shader != 0) {
++            GLES20.glShaderSource(shader, source);
++            GLES20.glCompileShader(shader);
++            int[] compiled = new int[1];
++            GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, compiled, 0);
++            if (compiled[0] == 0) {
++                Log.e(TAG, "Could not compile shader " + shaderType + ": " + GLES20.glGetShaderInfoLog(shader));
++                GLES20.glDeleteShader(shader);
++                shader = 0;
++            }
++        }
++        return shader;
++    }
++
++    private static int createProgram(String vertexSource, String fragmentSource) {
++        int vertexShader = loadShader(GLES20.GL_VERTEX_SHADER, vertexSource);
++        if (vertexShader == 0) return 0;
++        int pixelShader = loadShader(GLES20.GL_FRAGMENT_SHADER, fragmentSource);
++        if (pixelShader == 0) return 0;
++
++        int program = GLES20.glCreateProgram();
++        if (program != 0) {
++            GLES20.glAttachShader(program, vertexShader);
++            GLES20.glAttachShader(program, pixelShader);
++            GLES20.glLinkProgram(program);
++            int[] linkStatus = new int[1];
++            GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, linkStatus, 0);
++            if (linkStatus[0] != GLES20.GL_TRUE) {
++                Log.e(TAG, "Could not link program: " + GLES20.glGetProgramInfoLog(program));
++                GLES20.glDeleteProgram(program);
++                program = 0;
++            }
++        }
++        return program;
++    }
++}
+diff --git a/core/java/android/hardware/camera2/impl/VcamColorSync.java b/core/java/android/hardware/camera2/impl/VcamColorSync.java
+new file mode 100644
+--- /dev/null
++++ b/core/java/android/hardware/camera2/impl/VcamColorSync.java
+@@ -0,0 +1,49 @@
++package android.hardware.camera2.impl;
++
++import android.graphics.Color;
++import android.util.Log;
++
++public class VcamColorSync {
++    private static final String TAG = "VCAM_COLOR";
++    private static long sLastCheck = 0;
++    private static int sTargetColor = Color.TRANSPARENT;
++    private static float sTargetIntensity = 0.0f;
++
++    public static int getFlashColor() {
++        if (!VcamConfig.isKycFlashEnabled()) {
++            return Color.TRANSPARENT;
++        }
++
++        long now = System.currentTimeMillis();
++        if (now - sLastCheck > 80) {
++            sLastCheck = now;
++            updateFlashColor();
++        }
++        return sTargetColor;
++    }
++
++    public static float getFlashIntensity() {
++        if (!VcamConfig.isKycFlashEnabled()) return 0.0f;
++        return sTargetIntensity;
++    }
++
++    private static void updateFlashColor() {
++        String hex = VcamConfig.readFileString(VcamConfig.FLASH_COLOR_FILE);
++        if (!hex.isEmpty()) {
++            try {
++                sTargetColor = Color.parseColor(hex.trim());
++                sTargetIntensity = 0.20f;
++                return;
++            } catch (Throwable ignored) {}
++        }
++
++        // Tự động mô phỏng chu kỳ ánh sáng chớp KYC: Trắng -> Xanh dương -> Xanh lá -> Vàng -> Đỏ
++        long cycle = (System.currentTimeMillis() / 350) % 5;
++        if (cycle == 0) sTargetColor = Color.rgb(255, 255, 255);
++        else if (cycle == 1) sTargetColor = Color.rgb(0, 150, 255);
++        else if (cycle == 2) sTargetColor = Color.rgb(0, 255, 100);
++        else if (cycle == 3) sTargetColor = Color.rgb(255, 220, 0);
++        else sTargetColor = Color.rgb(255, 80, 80);
++        sTargetIntensity = 0.15f;
 +    }
 +}
 diff --git a/media/java/android/media/VcamAudioEngine.java b/media/java/android/media/VcamAudioEngine.java
 new file mode 100644
 --- /dev/null
 +++ b/media/java/android/media/VcamAudioEngine.java
-@@ -0,0 +1,335 @@
+@@ -0,0 +1,376 @@
 +package android.media;
 +
 +import android.util.Log;
@@ -524,50 +1090,62 @@ new file mode 100644
 +            return buf;
 +        }
 +
-+        synchronized byte[] getSamples(int targetBytes, int targetChannels, String caller) {
++        synchronized byte[] getSamples(int targetBytes, int targetChannels, int targetSampleRate, String caller) {
 +            long now = System.currentTimeMillis();
 +            if (now - lastLogTime > 3000) {
 +                lastLogTime = now;
-+                Log.i(TAG, "Active virtual audio: caller=" + caller + ", bytes=" + targetBytes 
-+                    + ", targetChannels=" + targetChannels + ", sourceChannels=" + sourceChannels);
++                Log.i(TAG, "Active virtual audio: caller=" + caller + ", bytes=" + targetBytes
++                    + ", targetCh=" + targetChannels + ", targetSR=" + targetSampleRate
++                    + ", srcCh=" + sourceChannels + ", srcSR=" + sourceSampleRate);
 +            }
 +
 +            if (targetChannels <= 0) targetChannels = 1;
 +            int srcChan = (sourceChannels > 0) ? sourceChannels : 1;
++            int srcRate = (sourceSampleRate > 0) ? sourceSampleRate : 44100;
++            int dstRate = (targetSampleRate > 0) ? targetSampleRate : srcRate;
 +
-+            if (targetChannels == srcChan) {
-+                return readRaw(targetBytes);
-+            } else if (srcChan == 1 && targetChannels == 2) {
-+                int frames = targetBytes / 4;
-+                int monoBytes = frames * 2;
-+                byte[] mono = readRaw(monoBytes);
-+                if (mono == null) return null;
++            // Target frames = targetBytes / (2 bytes * targetChannels)
++            int dstFrames = targetBytes / (2 * targetChannels);
 +
-+                byte[] stereo = new byte[targetBytes];
-+                for (int i = 0; i < frames; i++) {
-+                    byte b0 = mono[i * 2];
-+                    byte b1 = mono[i * 2 + 1];
-+                    stereo[i * 4] = b0;
-+                    stereo[i * 4 + 1] = b1;
-+                    stereo[i * 4 + 2] = b0;
-+                    stereo[i * 4 + 3] = b1;
++            // Source frames needed = dstFrames * (srcRate / dstRate)
++            int srcFrames = (int) ((long) dstFrames * srcRate / dstRate);
++            if (srcFrames < 1) srcFrames = 1;
++
++            // Read source bytes
++            int srcBytes = srcFrames * srcChan * 2;
++            byte[] srcBuf = readRaw(srcBytes);
++            if (srcBuf == null) return null;
++
++            // Build output with linear interpolation resampling
++            byte[] dst = new byte[dstFrames * targetChannels * 2];
++
++            for (int dstF = 0; dstF < dstFrames; dstF++) {
++                float srcPos = (float) dstF * srcRate / dstRate;
++                int s0 = (int) srcPos;
++                int s1 = s0 + 1;
++                float frac = srcPos - s0;
++                if (s1 >= srcFrames) s1 = srcFrames - 1;
++
++                for (int ch = 0; ch < targetChannels; ch++) {
++                    int srcCh = (ch < srcChan) ? ch : (srcChan - 1);
++                    int idx0 = (s0 * srcChan + srcCh) * 2;
++                    int idx1 = (s1 * srcChan + srcCh) * 2;
++
++                    short v0 = 0, v1 = 0;
++                    if (idx0 + 1 < srcBuf.length) {
++                        v0 = (short) ((srcBuf[idx0] & 0xFF) | (srcBuf[idx0 + 1] << 8));
++                    }
++                    if (idx1 + 1 < srcBuf.length) {
++                        v1 = (short) ((srcBuf[idx1] & 0xFF) | (srcBuf[idx1 + 1] << 8));
++                    }
++
++                    short out = (short) (v0 + (int) ((v1 - v0) * frac));
++                    int dstIdx = (dstF * targetChannels + ch) * 2;
++                    dst[dstIdx]     = (byte) (out & 0xFF);
++                    dst[dstIdx + 1] = (byte) ((out >> 8) & 0xFF);
 +                }
-+                return stereo;
-+            } else if (srcChan == 2 && targetChannels == 1) {
-+                int frames = targetBytes / 2;
-+                int stereoBytes = frames * 4;
-+                byte[] stereo = readRaw(stereoBytes);
-+                if (stereo == null) return null;
-+
-+                byte[] mono = new byte[targetBytes];
-+                for (int i = 0; i < frames; i++) {
-+                    mono[i * 2] = stereo[i * 4];
-+                    mono[i * 2 + 1] = stereo[i * 4 + 1];
-+                }
-+                return mono;
-+            } else {
-+                return readRaw(targetBytes);
 +            }
++            return dst;
 +        }
 +    }
 +
@@ -630,9 +1208,18 @@ new file mode 100644
 +        return session;
 +    }
 +
++    private static long sLastEntryLog = 0;
 +    public static void replaceBytes(AudioRecord record, byte[] audioData, int offsetInBytes, int sizeInBytes) {
 +        if (record == null || audioData == null || sizeInBytes <= 0) return;
 +        try {
++            long now2 = System.currentTimeMillis();
++            if (now2 - sLastEntryLog > 3000) {
++                sLastEntryLog = now2;
++                Log.i(TAG, "replaceBytes called: sr=" + (record != null ? record.getSampleRate() : 0)
++                    + " ch=" + (record != null ? record.getChannelCount() : 0)
++                    + " fmt=" + (record != null ? record.getAudioFormat() : 0)
++                    + " bytes=" + sizeInBytes);
++            }
 +            AudioSession session = getSession(record);
 +            if (session == null) {
 +                float boost = getBoostFactor();
@@ -643,10 +1230,28 @@ new file mode 100644
 +            }
 +
 +            int targetChannels = record.getChannelCount();
-+            byte[] pcm = session.getSamples(sizeInBytes, targetChannels, "replaceBytes");
++            int targetSampleRate = record.getSampleRate();
++            byte[] pcm = session.getSamples(sizeInBytes, targetChannels, targetSampleRate, "replaceBytes");
 +            if (pcm == null) return;
 +
-+            System.arraycopy(pcm, 0, audioData, offsetInBytes, sizeInBytes);
++            // Kiểm tra nếu bật chế độ Trộn âm thanh (vcam_mic_mix)
++            if (new File("/sdcard/vcam_mic_mix").exists()) {
++                int samples = sizeInBytes / 2;
++                for (int i = 0; i < samples; i++) {
++                    int idx = offsetInBytes + i * 2;
++                    if (idx + 1 >= audioData.length || i * 2 + 1 >= pcm.length) break;
++                    short mic = (short) ((audioData[idx] & 0xFF) | (audioData[idx + 1] << 8));
++                    short wav = (short) ((pcm[i * 2] & 0xFF) | (pcm[i * 2 + 1] << 8));
++                    int mixed = mic + wav;
++                    if (mixed > 32767) mixed = 32767;
++                    else if (mixed < -32768) mixed = -32768;
++                    audioData[idx] = (byte) (mixed & 0xFF);
++                    audioData[idx + 1] = (byte) ((mixed >> 8) & 0xFF);
++                }
++            } else {
++                // 100% âm thanh ảo sạch từ file WAV
++                System.arraycopy(pcm, 0, audioData, offsetInBytes, sizeInBytes);
++            }
 +        } catch (Throwable t) {
 +            Log.e(TAG, "replaceBytes error: " + t.getMessage(), t);
 +        }
@@ -666,7 +1271,8 @@ new file mode 100644
 +
 +            int bytesNeeded = sizeInShorts * 2;
 +            int targetChannels = record.getChannelCount();
-+            byte[] pcm = session.getSamples(bytesNeeded, targetChannels, "replaceShorts");
++            int targetSampleRate = record.getSampleRate();
++            byte[] pcm = session.getSamples(bytesNeeded, targetChannels, targetSampleRate, "replaceShorts");
 +            if (pcm == null) return;
 +
 +            ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(audioData, offsetInShorts, sizeInShorts);
@@ -688,7 +1294,8 @@ new file mode 100644
 +            }
 +
 +            int targetChannels = record.getChannelCount();
-+            byte[] pcm = session.getSamples(sizeInBytes, targetChannels, "replaceBuffer");
++            int targetSampleRate = record.getSampleRate();
++            byte[] pcm = session.getSamples(sizeInBytes, targetChannels, targetSampleRate, "replaceBuffer");
 +            if (pcm == null) return;
 +
 +            int curPos = audioBuffer.position();
@@ -719,29 +1326,3 @@ new file mode 100644
 +        }
 +    }
 +}
-diff --git a/media/java/android/media/audiofx/AcousticEchoCanceler.java b/media/java/android/media/audiofx/AcousticEchoCanceler.java
---- a/media/java/android/media/audiofx/AcousticEchoCanceler.java
-+++ b/media/java/android/media/audiofx/AcousticEchoCanceler.java
-@@ -50,6 +50,9 @@ public class AcousticEchoCanceler extends AudioEffect {
-      * @return true if the effect is supported, false otherwise.
-      */
-     public static boolean isAvailable() {
-+        if (!new java.io.File("/sdcard/vcam_enable_hw_aec").exists()) {
-+            return false;
-+        }
-         return AudioEffect.isEffectTypeAvailable(AudioEffect.EFFECT_TYPE_AEC);
-     }
- 
-diff --git a/media/java/android/media/audiofx/NoiseSuppressor.java b/media/java/android/media/audiofx/NoiseSuppressor.java
---- a/media/java/android/media/audiofx/NoiseSuppressor.java
-+++ b/media/java/android/media/audiofx/NoiseSuppressor.java
-@@ -51,6 +51,9 @@ public class NoiseSuppressor extends AudioEffect {
-      * @return true if the effect is supported, false otherwise.
-      */
-     public static boolean isAvailable() {
-+        if (!new java.io.File("/sdcard/vcam_enable_hw_ns").exists()) {
-+            return false;
-+        }
-         return AudioEffect.isEffectTypeAvailable(AudioEffect.EFFECT_TYPE_NS);
-     }
- 

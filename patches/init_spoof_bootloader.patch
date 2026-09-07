@@ -1,0 +1,31 @@
+diff --git a/init/property_service.cpp b/init/property_service.cpp
+--- a/init/property_service.cpp
++++ b/init/property_service.cpp
+@@ -1180,6 +1180,15 @@ static void ExportKernelBootProps() {
+     auto fn = [](const std::string& key, const std::string& value) {
+         if (key.starts_with(androidboot_prefix)) {
+             std::string prop_name = "ro.boot." + key.substr(strlen(androidboot_prefix));
++            std::string prop_val = value;
++            if (prop_name == "ro.boot.flash.locked") {
++                prop_val = "1";
++            } else if (prop_name == "ro.boot.verifiedbootstate") {
++                prop_val = "green";
++            } else if (prop_name == "ro.boot.vbmeta.device_state") {
++                prop_val = "locked";
++            } else if (prop_name == "ro.boot.veritymode") {
++                prop_val = "enforcing";
++            }
+-            InitPropertySet(prop_name, value);
++            InitPropertySet(prop_name, prop_val);
+         }
+     };
+ 
+     ProcessBootconfig(fn);
+     ProcessKernelCmdline(fn);
++
++    // Ensure locked bootloader state is always exported
++    InitPropertySet("ro.boot.flash.locked", "1");
++    InitPropertySet("ro.boot.verifiedbootstate", "green");
++    InitPropertySet("ro.boot.vbmeta.device_state", "locked");
++    InitPropertySet("ro.boot.veritymode", "enforcing");
+ }
