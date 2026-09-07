@@ -552,6 +552,8 @@ jobs:
         ( git -C system/core apply --check /tmp/init_spoof_bootloader.patch && git -C system/core apply /tmp/init_spoof_bootloader.patch && echo "System core spoof patch applied successfully!" || echo "System core spoof patch already applied or skipped" ) ; \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/disable_flag_secure.patch > /tmp/disable_flag_secure.patch && \
         ( git -C frameworks/base apply --check /tmp/disable_flag_secure.patch && git -C frameworks/base apply /tmp/disable_flag_secure.patch && echo "FLAG_SECURE patch applied successfully!" || echo "FLAG_SECURE patch already applied or skipped" ) ; \
+        find build/make -name "sysprop.mk" -exec sed -i 's/BUILD_KEYS := test-keys/BUILD_KEYS := release-keys/g' {} + ; \
+        find build/make -name "Makefile" -exec sed -i 's/BUILD_KEYS := test-keys/BUILD_KEYS := release-keys/g' {} + ; \
         find . -name "vendor.lineage.health-service.default.rc" -exec sed -i '/service vendor.lineage_health/a \    interface aidl vendor.lineage.health.IChargingControl/default' {} + ; \
         mkdir -p packages/apps/CameraAssistant && \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/org.lineageos.camera.assistant/CameraAssistant.apk > packages/apps/CameraAssistant/CameraAssistant.apk && \
