@@ -51,10 +51,13 @@ class_files = []
 for root, _, files in os.walk("build/obj"):
     for f in files:
         if f.endswith(".class"):
-            class_files.append(os.path.join(root, f))
+            rel_path = os.path.relpath(os.path.join(root, f), "build/obj")
+            # Do NOT include Xposed API classes into module dex (compileOnly requirement)
+            if not rel_path.startswith("de" + os.sep + "robv") and not rel_path.startswith("de/robv"):
+                class_files.append(os.path.join(root, f))
 
 d8_mode_flag = "--release" if build_mode == "release" else "--debug"
-subprocess.check_call(["d8", d8_mode_flag, "--min-api", "33", "--output", "build/apk"] + class_files, shell=True)
+subprocess.check_call(["d8", d8_mode_flag, "--min-api", "28", "--output", "build/apk"] + class_files, shell=True)
 
 print("[5/5] Packaging classes.dex and signing APK...")
 with zipfile.ZipFile("build/apk/app-unsigned.apk", "a") as apk:
@@ -63,7 +66,7 @@ with zipfile.ZipFile("build/apk/app-unsigned.apk", "a") as apk:
         for root, _, files in os.walk("src/main/assets"):
             for f in files:
                 full_path = os.path.join(root, f)
-                rel_path = os.path.relpath(full_path, "src/main")
+                rel_path = os.path.relpath(full_path, "src/main").replace("\\", "/")
                 apk.write(full_path, rel_path)
 
 # ZipAlign APK
