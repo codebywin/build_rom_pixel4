@@ -8,7 +8,6 @@ import android.hardware.camera2.params.OutputConfiguration;
 import android.hardware.camera2.params.SessionConfiguration;
 import android.media.MediaPlayer;
 import android.os.Build;
-import android.os.Handler;
 import android.util.Log;
 import android.view.Surface;
 
@@ -17,7 +16,6 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 import java.io.File;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -27,8 +25,20 @@ public class XposedCamera2Hook {
     private static SurfaceTexture sVirtualTexture = null;
     private static Surface sVirtualSurface = null;
 
-    private static volatile Surface sRealPreviewSurface = null;
-    private static MediaPlayer sMediaPlayer = null;
+    // Reader surfaces (SurfaceView, ImageReader - Surface(name=null))
+    private static volatile Surface sReaderSurface = null;
+    private static volatile Surface sReaderSurface1 = null;
+    private static VideoToFrames sHwDecoder = null;
+    private static VideoToFrames sHwDecoder1 = null;
+
+    // ImageReader surfaces tracked to prevent decoder format conflicts
+    private static final java.util.Set<Surface> sImageReaderSurfaces = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+
+    // Preview surfaces (TextureView - SurfaceTexture)
+    private static volatile Surface sPreviewSurface = null;
+    private static volatile Surface sPreviewSurface1 = null;
+    private static MediaPlayer sPlayer = null;
+    private static MediaPlayer sPlayer1 = null;
 
     private static synchronized Surface getVirtualSurface() {
         if (sVirtualTexture == null) {
@@ -42,9 +52,24 @@ public class XposedCamera2Hook {
 
     public static void initHook(ClassLoader classLoader) {
         try {
-            // 1. Hook CaptureRequest.Builder.addTarget(Surface)
-            // Save real preview surface, but divert camera hardware output to dummy virtual surface
+            // Track all ImageReader surfaces
+            try {
+                Class<?> imageReaderClass = XposedHelpers.findClass("android.media.ImageReader", classLoader);
+                XposedBridge.hookAllMethods(imageReaderClass, "getSurface", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                        Surface s = (Surface) param.getResult();
+                        if (s != null) {
+                            sImageReaderSurfaces.add(s);
+                            Log.i(TAG, "Tracked ImageReader Surface: " + s);
+                        }
+                    }
+                });
+            } catch (Throwable ignored) {}
+
             Class<?> builderClass = XposedHelpers.findClass("android.hardware.camera2.CaptureRequest$Builder", classLoader);
+
+            // 1. Hook CaptureRequest.Builder.addTarget(Surface)
             XposedBridge.hookAllMethods(builderClass, "addTarget", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
@@ -55,37 +80,102 @@ public class XposedCamera2Hook {
                     Surface virtualSurface = getVirtualSurface();
                     if (target.equals(virtualSurface)) return;
 
-                    String desc = target.toString();
-                    if (desc.contains("SurfaceTexture") || !desc.contains("name=null")) {
-                        sRealPreviewSurface = target;
-                        Log.i(TAG, "Intercepted real preview Surface: " + target);
-                    }
+                    registerTargetSurface(target);
 
                     // Divert hardware stream to dummy surface so hardware doesn't lock real preview surface
                     param.args[0] = virtualSurface;
                 }
             });
 
-            // 2. Hook CaptureRequest.Builder.build() to trigger video playback on real preview surface
+            // 2. Hook CaptureRequest.Builder.removeTarget(Surface)
+            XposedBridge.hookAllMethods(builderClass, "removeTarget", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    if (param.args == null || param.args.length == 0 || !(param.args[0] instanceof Surface)) return;
+                    unregisterTargetSurface((Surface) param.args[0]);
+                }
+            });
+
+            // 3. Hook CaptureRequest.Builder.build()
             XposedBridge.hookAllMethods(builderClass, "build", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                     if (XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_DISABLE)) return;
-                    startVirtualVideoFeed();
+                    startVirtualVideoFeeds();
                 }
             });
 
-            // 3. Hook CameraDeviceImpl & CameraDevice createCaptureSession
+            // 4. Hook CameraDeviceImpl & CameraDevice createCaptureSession
             hookCameraDevice(classLoader, "android.hardware.camera2.impl.CameraDeviceImpl");
             hookCameraDevice(classLoader, "android.hardware.camera2.CameraDevice");
 
-            // 4. Hook CameraCaptureSessionImpl & CameraCaptureSession
+            // 5. Hook CameraCaptureSessionImpl & CameraCaptureSession
             hookCameraSession(classLoader, "android.hardware.camera2.impl.CameraCaptureSessionImpl");
             hookCameraSession(classLoader, "android.hardware.camera2.CameraCaptureSession");
 
             Log.i(TAG, "Camera 2 hooks installed successfully");
         } catch (Throwable t) {
             Log.e(TAG, "Failed to hook Camera 2", t);
+        }
+    }
+
+    private static synchronized void registerTargetSurface(Surface target) {
+        if (target == null || !target.isValid()) return;
+        if (target.equals(sVirtualSurface)) return;
+        if (sImageReaderSurfaces.contains(target)) {
+            Log.i(TAG, "Skipping ImageReader Surface to avoid decoder format conflict: " + target);
+            return;
+        }
+
+        String desc = target.toString();
+        if (desc.contains("Surface(name=null)")) {
+            // SurfaceView (preview)
+            if (sReaderSurface == null || !sReaderSurface.isValid() || sReaderSurface.equals(target)) {
+                sReaderSurface = target;
+                Log.i(TAG, "Registered sReaderSurface (SurfaceView): " + target);
+            } else if (sReaderSurface1 == null || !sReaderSurface1.isValid() || sReaderSurface1.equals(target)) {
+                sReaderSurface1 = target;
+                Log.i(TAG, "Registered sReaderSurface1 (SurfaceView #2): " + target);
+            }
+        } else {
+            // TextureView or other named Surface
+            if (sPreviewSurface == null || !sPreviewSurface.isValid() || sPreviewSurface.equals(target)) {
+                sPreviewSurface = target;
+                Log.i(TAG, "Registered sPreviewSurface (named): " + target);
+            } else if (sPreviewSurface1 == null || !sPreviewSurface1.isValid() || sPreviewSurface1.equals(target)) {
+                sPreviewSurface1 = target;
+                Log.i(TAG, "Registered sPreviewSurface1 (named): " + target);
+            }
+        }
+    }
+
+    private static synchronized void unregisterTargetSurface(Surface target) {
+        if (target == null) return;
+        if (target.equals(sReaderSurface)) {
+            Log.i(TAG, "Unregistered sReaderSurface: " + target);
+            sReaderSurface = null;
+            if (sHwDecoder != null) {
+                sHwDecoder.stopDecode();
+                sHwDecoder = null;
+            }
+        }
+        if (target.equals(sReaderSurface1)) {
+            Log.i(TAG, "Unregistered sReaderSurface1: " + target);
+            sReaderSurface1 = null;
+            if (sHwDecoder1 != null) {
+                sHwDecoder1.stopDecode();
+                sHwDecoder1 = null;
+            }
+        }
+        if (target.equals(sPreviewSurface)) {
+            Log.i(TAG, "Unregistered sPreviewSurface: " + target);
+            sPreviewSurface = null;
+            stopPlayer(0);
+        }
+        if (target.equals(sPreviewSurface1)) {
+            Log.i(TAG, "Unregistered sPreviewSurface1: " + target);
+            sPreviewSurface1 = null;
+            stopPlayer(1);
         }
     }
 
@@ -107,15 +197,9 @@ public class XposedCamera2Hook {
                         List<?> outputs = (List<?>) arg0;
                         for (Object o : outputs) {
                             if (o instanceof Surface) {
-                                Surface s = (Surface) o;
-                                String desc = s.toString();
-                                if (desc.contains("SurfaceTexture") || !desc.contains("name=null")) {
-                                    sRealPreviewSurface = s;
-                                    Log.i(TAG, "Captured preview Surface from outputs: " + s);
-                                }
+                                registerTargetSurface((Surface) o);
                             }
                         }
-                        // Divert real hardware outputs to dummy virtual surface
                         param.args[0] = Collections.singletonList(virtualSurface);
                         Log.i(TAG, "Diverted createCaptureSession(List) to virtual Surface");
                     } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && arg0 instanceof SessionConfiguration) {
@@ -125,15 +209,10 @@ public class XposedCamera2Hook {
                             for (OutputConfiguration out : outConfigs) {
                                 Surface s = out.getSurface();
                                 if (s != null) {
-                                    String desc = s.toString();
-                                    if (desc.contains("SurfaceTexture") || !desc.contains("name=null")) {
-                                        sRealPreviewSurface = s;
-                                        Log.i(TAG, "Captured preview Surface from SessionConfiguration: " + s);
-                                    }
+                                    registerTargetSurface(s);
                                 }
                             }
                         }
-                        // Create fake SessionConfiguration with virtual surface
                         OutputConfiguration fakeOutput = new OutputConfiguration(virtualSurface);
                         SessionConfiguration fakeConfig = new SessionConfiguration(
                                 origConfig.getSessionType(),
@@ -158,11 +237,7 @@ public class XposedCamera2Hook {
                             if (item instanceof OutputConfiguration) {
                                 Surface s = ((OutputConfiguration) item).getSurface();
                                 if (s != null) {
-                                    String desc = s.toString();
-                                    if (desc.contains("SurfaceTexture") || !desc.contains("name=null")) {
-                                        sRealPreviewSurface = s;
-                                        Log.i(TAG, "Captured preview Surface from OutputConfiguration: " + s);
-                                    }
+                                    registerTargetSurface(s);
                                 }
                             }
                         }
@@ -177,7 +252,7 @@ public class XposedCamera2Hook {
             XposedBridge.hookAllMethods(clazz, "close", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                    stopVirtualVideoFeed();
+                    stopAllFeeds();
                 }
             });
 
@@ -192,7 +267,7 @@ public class XposedCamera2Hook {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                     if (XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_DISABLE)) return;
-                    startVirtualVideoFeed();
+                    startVirtualVideoFeeds();
                 }
             };
 
@@ -203,78 +278,135 @@ public class XposedCamera2Hook {
             XposedBridge.hookAllMethods(clazz, "stopRepeating", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                    stopVirtualVideoFeed();
+                    stopAllFeeds();
                 }
             });
 
             XposedBridge.hookAllMethods(clazz, "close", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                    stopVirtualVideoFeed();
+                    stopAllFeeds();
                 }
             });
 
         } catch (Throwable ignored) {}
     }
 
-    private static synchronized void startVirtualVideoFeed() {
-        if (sRealPreviewSurface == null || !sRealPreviewSurface.isValid()) {
-            return;
-        }
-
+    private static synchronized void startVirtualVideoFeeds() {
         File videoFile = XposedSharedConfig.getVideoFile();
         if (videoFile == null || !videoFile.exists()) {
-            Log.w(TAG, "No virtual video file found");
             return;
         }
+        String videoPath = videoFile.getAbsolutePath();
 
-        if (sMediaPlayer != null) {
-            try {
-                if (sMediaPlayer.isPlaying()) {
-                    return; // Smooth continuous playback
-                }
-            } catch (Throwable ignored) {}
+        // 1. Feed sReaderSurface (SurfaceView / ImageReader) via Hardware VideoToFrames
+        if (sReaderSurface != null && sReaderSurface.isValid()) {
+            if (sHwDecoder == null || !sHwDecoder.isPlaying() || !sReaderSurface.equals(sHwDecoder.getSurface())) {
+                if (sHwDecoder != null) sHwDecoder.stopDecode();
+                sHwDecoder = new VideoToFrames();
+                sHwDecoder.setSurface(sReaderSurface);
+                sHwDecoder.decode(videoPath);
+                Log.i(TAG, "Started VideoToFrames on sReaderSurface: " + sReaderSurface);
+            }
         }
 
-        try {
-            stopVirtualVideoFeed();
+        // 2. Feed sReaderSurface1 (Secondary SurfaceView / ImageReader) via VideoToFrames
+        if (sReaderSurface1 != null && sReaderSurface1.isValid()) {
+            if (sHwDecoder1 == null || !sHwDecoder1.isPlaying() || !sReaderSurface1.equals(sHwDecoder1.getSurface())) {
+                if (sHwDecoder1 != null) sHwDecoder1.stopDecode();
+                sHwDecoder1 = new VideoToFrames();
+                sHwDecoder1.setSurface(sReaderSurface1);
+                sHwDecoder1.decode(videoPath);
+                Log.i(TAG, "Started VideoToFrames on sReaderSurface1: " + sReaderSurface1);
+            }
+        }
 
-            sMediaPlayer = new MediaPlayer();
-            sMediaPlayer.setDataSource(videoFile.getAbsolutePath());
-            sMediaPlayer.setSurface(sRealPreviewSurface);
-            sMediaPlayer.setLooping(true);
-            sMediaPlayer.setVolume(0f, 0f);
-
-            sMediaPlayer.setOnPreparedListener(mp -> {
+        // 3. Feed sPreviewSurface (TextureView) via MediaPlayer
+        if (sPreviewSurface != null && sPreviewSurface.isValid()) {
+            if (sPlayer == null) {
+                startPlayer(sPreviewSurface, 0, videoPath);
+            } else {
                 try {
-                    mp.start();
-                    Log.i(TAG, "Virtual video started successfully on real preview surface!");
-                } catch (Throwable t) {
-                    Log.e(TAG, "Error starting virtual video", t);
+                    if (!sPlayer.isPlaying()) {
+                        startPlayer(sPreviewSurface, 0, videoPath);
+                    }
+                } catch (Throwable ignored) {
+                    startPlayer(sPreviewSurface, 0, videoPath);
                 }
-            });
+            }
+        }
 
-            sMediaPlayer.setOnErrorListener((mp, what, extra) -> {
-                Log.e(TAG, "MediaPlayer error: " + what + ", " + extra);
-                return true;
-            });
-
-            sMediaPlayer.prepareAsync();
-            Log.i(TAG, "MediaPlayer prepareAsync on real preview Surface: " + sRealPreviewSurface);
-        } catch (Throwable t) {
-            Log.e(TAG, "Failed to start virtual video", t);
+        // 4. Feed sPreviewSurface1 (Secondary named Surface) via MediaPlayer
+        if (sPreviewSurface1 != null && sPreviewSurface1.isValid()) {
+            if (sPlayer1 == null) {
+                startPlayer(sPreviewSurface1, 1, videoPath);
+            } else {
+                try {
+                    if (!sPlayer1.isPlaying()) {
+                        startPlayer(sPreviewSurface1, 1, videoPath);
+                    }
+                } catch (Throwable ignored) {
+                    startPlayer(sPreviewSurface1, 1, videoPath);
+                }
+            }
         }
     }
 
-    private static synchronized void stopVirtualVideoFeed() {
-        if (sMediaPlayer != null) {
-            try {
-                if (sMediaPlayer.isPlaying()) {
-                    sMediaPlayer.stop();
+    private static synchronized void startPlayer(Surface surface, int index, String videoPath) {
+        try {
+            stopPlayer(index);
+
+            MediaPlayer mp = new MediaPlayer();
+            mp.setDataSource(videoPath);
+            mp.setSurface(surface);
+            mp.setLooping(true);
+            mp.setVolume(0f, 0f);
+
+            mp.setOnPreparedListener(p -> {
+                try {
+                    p.start();
+                    Log.i(TAG, "MediaPlayer[" + index + "] started on Surface: " + surface);
+                } catch (Throwable t) {
+                    Log.e(TAG, "Error starting MediaPlayer[" + index + "]", t);
                 }
-                sMediaPlayer.release();
-            } catch (Throwable ignored) {}
-            sMediaPlayer = null;
+            });
+
+            mp.setOnErrorListener((p, what, extra) -> {
+                Log.e(TAG, "MediaPlayer[" + index + "] error: " + what + ", " + extra);
+                return true;
+            });
+
+            mp.prepareAsync();
+            if (index == 0) sPlayer = mp;
+            else sPlayer1 = mp;
+
+        } catch (Throwable t) {
+            Log.e(TAG, "Failed to initialize MediaPlayer[" + index + "]", t);
         }
+    }
+
+    private static synchronized void stopPlayer(int index) {
+        MediaPlayer mp = (index == 0) ? sPlayer : sPlayer1;
+        if (mp != null) {
+            try {
+                if (mp.isPlaying()) mp.stop();
+                mp.release();
+            } catch (Throwable ignored) {}
+            if (index == 0) sPlayer = null;
+            else sPlayer1 = null;
+        }
+    }
+
+    private static synchronized void stopAllFeeds() {
+        if (sHwDecoder != null) {
+            sHwDecoder.stopDecode();
+            sHwDecoder = null;
+        }
+        if (sHwDecoder1 != null) {
+            sHwDecoder1.stopDecode();
+            sHwDecoder1 = null;
+        }
+        stopPlayer(0);
+        stopPlayer(1);
     }
 }

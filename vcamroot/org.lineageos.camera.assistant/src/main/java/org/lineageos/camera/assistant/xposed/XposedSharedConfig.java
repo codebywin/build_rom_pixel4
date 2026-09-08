@@ -51,12 +51,16 @@ public class XposedSharedConfig {
     }
 
     public static File getVideoFile() {
-        File f1 = new File("/data/local/tmp/" + TARGET_VIDEO);
-        if (f1.exists() && f1.length() > 0) return f1;
-        File f2 = new File("/sdcard/" + TARGET_VIDEO);
-        if (f2.exists() && f2.length() > 0) return f2;
-        File f3 = new File("/storage/emulated/0/" + TARGET_VIDEO);
-        if (f3.exists() && f3.length() > 0) return f3;
+        File[] candidates = new File[] {
+            new File("/data/local/tmp/" + TARGET_VIDEO),
+            new File("/sdcard/" + TARGET_VIDEO),
+            new File("/storage/emulated/0/" + TARGET_VIDEO),
+            new File("/sdcard/DCIM/Camera1/virtual.mp4"),
+            new File("/storage/emulated/0/DCIM/Camera1/virtual.mp4")
+        };
+        for (File f : candidates) {
+            if (f.exists() && f.length() > 0) return f;
+        }
         return null;
     }
 
