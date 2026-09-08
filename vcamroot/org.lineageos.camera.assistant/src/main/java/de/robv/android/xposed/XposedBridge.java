@@ -18,3 +18,4 @@ public class XposedBridge {
         return new XC_MethodHook.Unhook();
     }
 }
+

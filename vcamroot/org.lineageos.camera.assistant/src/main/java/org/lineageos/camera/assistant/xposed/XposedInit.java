@@ -41,3 +41,4 @@ public class XposedInit implements IXposedHookLoadPackage {
         XposedAudioHook.initHook(lpparam.classLoader);
     }
 }
+

@@ -1,5 +1,6 @@
 package org.lineageos.camera.assistant;
 
+import android.content.Context;
 import android.os.Build;
 import android.util.Base64;
 import android.util.Log;
@@ -22,10 +23,34 @@ import java.security.spec.X509EncodedKeySpec;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 
 public class LicenseManager {
     private static final String TAG = "VcamLicense";
     public static final String SERVER_URL = "https://api.0x0134w.workers.dev/api/v1/activate";
+    public static final String CHECK_URL = "https://api.0x0134w.workers.dev/api/v1/check";
+
+    private static volatile Context sContext = null;
+    private static volatile String sCachedToken = "";
+
+    public static void init(Context context) {
+        if (context != null) {
+            sContext = context.getApplicationContext();
+        }
+    }
+
+    private static Context getContext() {
+        if (sContext != null) return sContext;
+        try {
+            Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
+            Object app = activityThreadClass.getMethod("currentApplication").invoke(null);
+            if (app instanceof Context) {
+                sContext = ((Context) app).getApplicationContext();
+                return sContext;
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
 
     public static final String PUBLIC_KEY_PEM = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxFvmY4n7o8MuGkcRiZf8\n76WKcucHqUcCzdp2QR44yCiZDeJsXfWgqQI+GLa0Vjcj/GxfXZTBCnXBvMVhTVrp\nVzNqs3E/3De7yhQbGwDziqkc+wZ0NMf/oFr46ALDhOLi9WMJEOe5cOWGF96X/+H8\n5Z0rqmbVFKGQiPpwGTcs6j6tb9MRkCfDda7/f96ldBujCw1oINF6yeFJ2ESSueHp\n0KcTZw6HAfo0jfeuSyatN60MNhEYJnkiB/XRTwnHh4U2gS55wylUPytwk8Iiz1ev\nhPqaHgFeom/K55Mky+kqSVNEyFnQq3ZmD5Ro1zVgxLpCjwe0GZVTD47/Y5vGiMkN\nawIDAQAB\n-----END PUBLIC KEY-----";
 
@@ -49,6 +74,9 @@ public class LicenseManager {
             try {
                 s = Build.getSerial();
             } catch (Throwable ignored) {}
+        }
+        if (s == null || s.isEmpty() || "unknown".equalsIgnoreCase(s)) {
+            s = readSystemProp("sys.serialno");
         }
         return (s == null || s.isEmpty() || "unknown".equalsIgnoreCase(s)) ? "97291FFAZ0002N" : s.trim();
     }
@@ -92,21 +120,24 @@ public class LicenseManager {
             String licSerial = "";
             long expiresAt = 0;
             for (String p : parts) {
+                p = p.trim();
                 if (p.startsWith("SERIAL=")) {
-                    licSerial = p.substring(7);
+                    licSerial = p.substring(7).trim();
                 } else if (p.startsWith("EXPIRES=")) {
-                    expiresAt = Long.parseLong(p.substring(8));
+                    try {
+                        expiresAt = Long.parseLong(p.substring(8).trim());
+                    } catch (Throwable ignored) {}
                 }
+            }
+
+            String currentSerial = getDeviceSerial();
+            if (!currentSerial.equalsIgnoreCase(licSerial)) {
+                info.message = "License không khớp thiết bị này!";
+                return info;
             }
 
             info.serial = licSerial;
             info.expiresAt = expiresAt;
-
-            String currentSerial = getDeviceSerial();
-            if (!licSerial.equalsIgnoreCase(currentSerial)) {
-                info.message = "Mã máy không khớp (Key cho: " + licSerial + ")";
-                return info;
-            }
 
             long nowSec = System.currentTimeMillis() / 1000;
             if (expiresAt > 0 && nowSec > expiresAt) {
@@ -137,10 +168,80 @@ public class LicenseManager {
     }
 
     private static String readLicenseToken() {
+        if (sCachedToken != null && !sCachedToken.isEmpty()) {
+            return sCachedToken;
+        }
+
+        // 1. Check SharedPreferences
+        Context ctx = getContext();
+        if (ctx != null) {
+            try {
+                String token = ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
+                        .getString("license_token", "");
+                if (token != null && !token.trim().isEmpty()) {
+                    sCachedToken = token.trim();
+                    return sCachedToken;
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // 2. Check internal filesDir
+        if (ctx != null) {
+            try {
+                File intFile = new File(ctx.getFilesDir(), "vcam.lic");
+                if (intFile.exists() && intFile.length() > 0) {
+                    String s = readFile(intFile);
+                    if (!s.isEmpty()) {
+                        sCachedToken = s;
+                        return s;
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // 3. Check direct app data dirs
+        File directInt = new File("/data/data/org.lineageos.camera.assistant/files/vcam.lic");
+        if (directInt.exists() && directInt.length() > 0) {
+            String s = readFile(directInt);
+            if (!s.isEmpty()) {
+                sCachedToken = s;
+                return s;
+            }
+        }
+        File user0Int = new File("/data/user/0/org.lineageos.camera.assistant/files/vcam.lic");
+        if (user0Int.exists() && user0Int.length() > 0) {
+            String s = readFile(user0Int);
+            if (!s.isEmpty()) {
+                sCachedToken = s;
+                return s;
+            }
+        }
+
+        // 4. Check tmp & sdcard
         File f1 = new File(LIC_FILE_TMP);
-        if (f1.exists() && f1.length() > 0) return readFile(f1);
+        if (f1.exists() && f1.length() > 0) {
+            String s = readFile(f1);
+            if (!s.isEmpty()) {
+                sCachedToken = s;
+                return s;
+            }
+        }
         File f2 = new File(LIC_FILE_SD);
-        if (f2.exists() && f2.length() > 0) return readFile(f2);
+        if (f2.exists() && f2.length() > 0) {
+            String s = readFile(f2);
+            if (!s.isEmpty()) {
+                sCachedToken = s;
+                return s;
+            }
+        }
+        File f3 = new File("/storage/emulated/0/vcam.lic");
+        if (f3.exists() && f3.length() > 0) {
+            String s = readFile(f3);
+            if (!s.isEmpty()) {
+                sCachedToken = s;
+                return s;
+            }
+        }
         return "";
     }
 
@@ -157,38 +258,132 @@ public class LicenseManager {
     }
 
     public static void saveLicenseToken(String token) {
+        if (token == null || token.trim().isEmpty()) return;
+        token = token.trim();
+        sCachedToken = token;
+
+        // 1. SharedPreferences (private internal - 100% permission safe)
+        Context ctx = getContext();
+        if (ctx != null) {
+            try {
+                ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
+                        .edit()
+                        .putString("license_token", token)
+                        .commit();
+            } catch (Throwable ignored) {}
+        }
+
+        // 2. App internal filesDir
+        if (ctx != null) {
+            try {
+                File intFile = new File(ctx.getFilesDir(), "vcam.lic");
+                writeFile(intFile.getAbsolutePath(), token);
+                intFile.setReadable(true, false);
+            } catch (Throwable ignored) {}
+        }
+
+        // 3. Fallback direct app storage
+        try {
+            File directInt = new File("/data/data/org.lineageos.camera.assistant/files/vcam.lic");
+            File parent = directInt.getParentFile();
+            if (parent != null && !parent.exists()) parent.mkdirs();
+            writeFile(directInt.getAbsolutePath(), token);
+            directInt.setReadable(true, false);
+        } catch (Throwable ignored) {}
+
+        // 4. Standard external & tmp files
         writeFile(LIC_FILE_TMP, token);
         writeFile(LIC_FILE_SD, token);
+        writeFile("/storage/emulated/0/vcam.lic", token);
+
+        // 5. Synchronous Root write so files exist before activate callback returns
+        writeWithRootSync(token);
+    }
+
+    private static void writeWithRootSync(String data) {
+        try {
+            Process p = Runtime.getRuntime().exec("su");
+            OutputStream os = p.getOutputStream();
+            String cmd = "echo '" + data + "' > /data/local/tmp/vcam.lic\n" +
+                         "chmod 666 /data/local/tmp/vcam.lic\n" +
+                         "echo '" + data + "' > /sdcard/vcam.lic\n" +
+                         "chmod 666 /sdcard/vcam.lic\n" +
+                         "echo '" + data + "' > /storage/emulated/0/vcam.lic\n" +
+                         "chmod 666 /storage/emulated/0/vcam.lic\n" +
+                         "mkdir -p /data/data/org.lineageos.camera.assistant/files\n" +
+                         "echo '" + data + "' > /data/data/org.lineageos.camera.assistant/files/vcam.lic\n" +
+                         "chmod 666 /data/data/org.lineageos.camera.assistant/files/vcam.lic\n" +
+                         "exit\n";
+            os.write(cmd.getBytes("UTF-8"));
+            os.flush();
+            os.close();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                p.waitFor(3, TimeUnit.SECONDS);
+            } else {
+                p.waitFor();
+            }
+        } catch (Throwable ignored) {}
     }
 
     private static void writeFile(String path, String data) {
         try {
             File f = new File(path);
+            File parent = f.getParentFile();
+            if (parent != null && !parent.exists()) {
+                parent.mkdirs();
+            }
             FileOutputStream fos = new FileOutputStream(f);
             fos.write(data.getBytes("UTF-8"));
+            fos.flush();
             fos.close();
             f.setReadable(true, false);
             f.setWritable(true, false);
         } catch (Throwable ignored) {}
     }
 
-    public static final String CHECK_URL = "https://api.0x0134w.workers.dev/api/v1/check";
-
     public static boolean removeLicense() {
+        sCachedToken = "";
         boolean res = false;
-        String[] paths = new String[] { LIC_FILE_TMP, LIC_FILE_SD, "/storage/emulated/0/vcam.lic" };
+        Context ctx = getContext();
+        if (ctx != null) {
+            try {
+                ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
+                        .edit()
+                        .remove("license_token")
+                        .commit();
+                File intFile = new File(ctx.getFilesDir(), "vcam.lic");
+                writeFile(intFile.getAbsolutePath(), "");
+                if (intFile.delete()) res = true;
+            } catch (Throwable ignored) {}
+        }
+        String[] paths = new String[] {
+            "/data/data/org.lineageos.camera.assistant/files/vcam.lic",
+            "/data/user/0/org.lineageos.camera.assistant/files/vcam.lic",
+            LIC_FILE_TMP,
+            LIC_FILE_SD,
+            "/storage/emulated/0/vcam.lic"
+        };
         for (String p : paths) {
             try {
                 File f = new File(p);
                 if (f.exists()) {
-                    try (FileOutputStream fos = new FileOutputStream(f)) {
-                        fos.write(new byte[0]);
-                        fos.flush();
-                    } catch (Throwable ignored) {}
+                    writeFile(f.getAbsolutePath(), "");
                     if (f.delete()) res = true;
                 }
             } catch (Throwable ignored) {}
         }
+        try {
+            Process p = Runtime.getRuntime().exec("su");
+            OutputStream os = p.getOutputStream();
+            os.write("rm -f /data/local/tmp/vcam.lic /sdcard/vcam.lic /storage/emulated/0/vcam.lic /data/data/org.lineageos.camera.assistant/files/vcam.lic\nexit\n".getBytes("UTF-8"));
+            os.flush();
+            os.close();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                p.waitFor(3, TimeUnit.SECONDS);
+            } else {
+                p.waitFor();
+            }
+        } catch (Throwable ignored) {}
         return res;
     }
 

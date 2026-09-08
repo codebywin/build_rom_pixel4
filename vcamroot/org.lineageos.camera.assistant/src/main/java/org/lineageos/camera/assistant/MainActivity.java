@@ -85,6 +85,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         LocaleManager.applyLocale(this);
         super.onCreate(savedInstanceState);
+        LicenseManager.init(this);
         requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
         setContentView(R.layout.activity_main);
 
@@ -320,6 +321,16 @@ public class MainActivity extends Activity {
     private void setupVcamSwitchListener() {
         if (switchVcam == null) return;
         switchVcam.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isChecked) {
+                LicenseManager.LicenseInfo lic = LicenseManager.checkLicense();
+                if (!lic.isValid) {
+                    switchVcam.setOnCheckedChangeListener(null);
+                    switchVcam.setChecked(false);
+                    setupVcamSwitchListener();
+                    Toast.makeText(this, R.string.license_status_default, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+            }
             writeFlag(FLAG_DISABLE, !isChecked);
             FloatingControlService.syncVcamStateFromActivity(isChecked);
             if (isChecked) {

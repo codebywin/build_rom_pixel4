@@ -132,3 +132,4 @@ public class XposedCamera1Hook {
         }
     }
 }
+

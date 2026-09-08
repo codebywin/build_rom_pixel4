@@ -8,3 +8,4 @@ public class XC_LoadPackage {
         public boolean isFirstApplication;
     }
 }
+

@@ -49,3 +49,4 @@ public abstract class XC_MethodHook {
 
     protected void afterHookedMethod(MethodHookParam param) throws Throwable {}
 }
+
