@@ -1,4 +1,51 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Camera Assistant</string>
+    <string name="header_title">VCAM Assistant</string>
+    <string name="header_badge">Pixel 4 ROM</string>
+    <string name="btn_settings">⚙️ Cài đặt</string>
+    <string name="dialog_settings_title">Cài đặt ngôn ngữ / Language</string>
+    <string name="lang_vi">🇻🇳 Tiếng Việt</string>
+    <string name="lang_en">🇬🇧 English</string>
+    <string name="lang_zh">🇨🇳 中文 (简体)</string>
+
+    <string name="license_title">🛡️ Bản Quyền Phần Mềm</string>
+    <string name="license_active">🟢 Đã kích hoạt</string>
+    <string name="license_inactive">🔴 Chưa kích hoạt</string>
+    <string name="device_serial_label">Mã máy: </string>
+    <string name="btn_copy">Sao Chép</string>
+    <string name="btn_reset_key">Hủy Key</string>
+    <string name="license_status_default">Vui lòng nhập Active Key để kích hoạt VCAM</string>
+    <string name="edt_key_hint">Nhập Active Key (VD: XXXX-XXXX-XXXX)</string>
+    <string name="btn_activate_online">⚡ KÍCH HOẠT ONLINE</string>
+
+    <string name="vcam_master_switch">Kích hoạt Camera Ảo</string>
+    <string name="vcam_master_desc">Tự động can thiệp luồng camera và micro vào mọi ứng dụng</string>
+    <string name="btn_open_floating">✨ MỞ CỬA SỔ NỔI</string>
+    <string name="floating_desc">* Cửa sổ nổi hỗ trợ Zoom, D-Pad, Tạm dừng trực tiếp ngay trên app / Livestream.</string>
+
+    <string name="video_title">🎬 Tệp Video Nguồn (.mp4)</string>
+    <string name="btn_pick_video">Chọn Video Mới Từ Máy</string>
+
+    <string name="audio_title">🎙️ Quản Lý Âm Thanh (Audio Hook)</string>
+    <string name="btn_pick_audio">Chọn Nhạc Mới (.wav / .mp3)</string>
+    <string name="audio_mode_label">Chế Độ Micro:</string>
+    <string name="audio_mode_virtual">Chỉ phát nhạc ảo (100% tiếng sạch, ngắt tiếng ngoài)</string>
+    <string name="audio_mode_mix">Trộn âm thanh (Vừa phát nhạc vừa nói mic thật)</string>
+    <string name="audio_mode_real">Chỉ dùng mic thật (Tắt can thiệp âm thanh)</string>
+
+    <string name="btn_apply">LƯU CÀI ĐẶT</string>
+
+    <string name="toast_vcam_on">🟢 Đã BẬT Camera ảo!\n(Đổi camera trước/sau hoặc mở lại app để nhận video)</string>
+    <string name="toast_vcam_off">🔴 Đã TẮT Camera ảo (Dùng Camera thật)!\n(Đổi camera trước/sau hoặc mở lại app để nhận camera thật)</string>
+    <string name="toast_saved">Đã lưu cài đặt!</string>
+    <string name="toast_copied">Đã sao chép mã máy: </string>
+    <string name="toast_key_removed">Đã hủy bản quyền cũ trên máy!</string>
+    <string name="toast_floating_opened">Đã mở cửa sổ nổi!</string>
+    <string name="toast_overlay_perm">"Vui lòng bật quyền 'Cho phép hiển thị trên ứng dụng khác'!"</string>
+    <string name="toast_storage_perm">"Vui lòng bật quyền 'Cho phép quản lý tất cả tệp'!"</string>
+    <string name="toast_enter_key">Vui lòng nhập mã Active Key!</string>
+    <string name="toast_video_updated">Đã cập nhật video mới!</string>
+    <string name="toast_audio_updated">Đã cập nhật audio mới!</string>
+    <string name="toast_lang_changed">Đã đổi ngôn ngữ sang Tiếng Việt!</string>
 </resources>

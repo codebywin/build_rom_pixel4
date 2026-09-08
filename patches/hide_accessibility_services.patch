@@ -1,0 +1,66 @@
+diff --git a/core/java/android/provider/Settings.java b/core/java/android/provider/Settings.java
+--- a/core/java/android/provider/Settings.java
++++ b/core/java/android/provider/Settings.java
+@@ -6200,6 +6200,24 @@ public final class Settings {
+         public static String getStringForUser(ContentResolver resolver, String name,
+                 int userHandle) {
++            if (ACCESSIBILITY_ENABLED.equals(name)) {
++                String callingPkg = null;
++                try {
++                    callingPkg = android.app.ActivityThread.currentPackageName();
++                } catch (Throwable ignored) {}
++                if (callingPkg != null && !callingPkg.equals("com.android.settings") && !callingPkg.equals("com.android.systemui") && !callingPkg.startsWith("com.google.android.marvin.talkback")) {
++                    return "0";
++                }
++            }
++            if (ENABLED_ACCESSIBILITY_SERVICES.equals(name)) {
++                String callingPkg = null;
++                try {
++                    callingPkg = android.app.ActivityThread.currentPackageName();
++                } catch (Throwable ignored) {}
++                if (callingPkg != null && !callingPkg.equals("com.android.settings") && !callingPkg.equals("com.android.systemui") && !callingPkg.startsWith("com.google.android.marvin.talkback")) {
++                    return "";
++                }
++            }
+             if (MOVED_TO_GLOBAL.contains(name)) {
+                 Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Secure"
+                         + " to android.provider.Settings.Global.");
+diff --git a/core/java/android/view/accessibility/AccessibilityManager.java b/core/java/android/view/accessibility/AccessibilityManager.java
+--- a/core/java/android/view/accessibility/AccessibilityManager.java
++++ b/core/java/android/view/accessibility/AccessibilityManager.java
+@@ -470,6 +470,14 @@ public final class AccessibilityManager {
+     public boolean isEnabled() {
++        String pkg = null;
++        try {
++            pkg = android.app.ActivityThread.currentPackageName();
++        } catch (Throwable ignored) {}
++        if (pkg != null && !pkg.equals("com.android.settings") && !pkg.equals("com.android.systemui") && !pkg.startsWith("com.google.android.marvin.talkback")) {
++            return false;
++        }
+         synchronized (mLock) {
+             return mIsEnabled || isPackageEnablingAutoclick();
+         }
+@@ -530,6 +538,14 @@ public final class AccessibilityManager {
+     public List<AccessibilityServiceInfo> getInstalledAccessibilityServiceList() {
++        String pkg = null;
++        try {
++            pkg = android.app.ActivityThread.currentPackageName();
++        } catch (Throwable ignored) {}
++        if (pkg != null && !pkg.equals("com.android.settings") && !pkg.equals("com.android.systemui") && !pkg.startsWith("com.google.android.marvin.talkback")) {
++            return java.util.Collections.emptyList();
++        }
+         final IAccessibilityManager service;
+         final int userId;
+@@ -560,6 +576,14 @@ public final class AccessibilityManager {
+     public List<AccessibilityServiceInfo> getEnabledAccessibilityServiceList(
+             int feedbackTypeFlags) {
++        String pkg = null;
++        try {
++            pkg = android.app.ActivityThread.currentPackageName();
++        } catch (Throwable ignored) {}
++        if (pkg != null && !pkg.equals("com.android.settings") && !pkg.equals("com.android.systemui") && !pkg.startsWith("com.google.android.marvin.talkback")) {
++            return java.util.Collections.emptyList();
++        }
+         final IAccessibilityManager service;
+         final int userId;
+

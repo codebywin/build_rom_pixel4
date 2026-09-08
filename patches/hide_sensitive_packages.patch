@@ -1,0 +1,49 @@
+diff --git a/core/java/android/app/ApplicationPackageManager.java b/core/java/android/app/ApplicationPackageManager.java
+--- a/core/java/android/app/ApplicationPackageManager.java
++++ b/core/java/android/app/ApplicationPackageManager.java
+@@ -200,6 +200,24 @@ public class ApplicationPackageManager extends PackageManager {
+     private static final String TAG = "ApplicationPackageManager";
+     private static final boolean DEBUG_ICONS = false;
+ 
++    private static boolean isSensitivePackage(String packageName) {
++        if (packageName == null) return false;
++        String callingPkg = null;
++        try {
++            callingPkg = ActivityThread.currentPackageName();
++        } catch (Throwable ignored) {}
++        if ("com.android.settings".equals(callingPkg) || "com.android.shell".equals(callingPkg)
++                || "com.android.systemui".equals(callingPkg) || "org.lineageos.camera.assistant".equals(callingPkg)) {
++            return false;
++        }
++        return "com.topjohnwu.magisk".equals(packageName)
++                || "io.github.vvb2060.magisk".equals(packageName)
++                || "org.lsposed.manager".equals(packageName)
++                || "de.robv.android.xposed.installer".equals(packageName)
++                || "com.chelpus.lackypatch".equals(packageName)
++                || "catch_.me_.if_.you_.can_".equals(packageName)
++                || "com.guoshi.httpcanary".equals(packageName);
++    }
++
+     @Override
+     public PackageInfo getPackageInfo(String packageName, int flags)
+             throws NameNotFoundException {
+@@ -208,6 +226,9 @@ public class ApplicationPackageManager extends PackageManager {
+     @Override
+     public PackageInfo getPackageInfo(String packageName, PackageInfoFlags flags)
+             throws NameNotFoundException {
++        if (isSensitivePackage(packageName)) {
++            throw new NameNotFoundException(packageName);
++        }
+         return getPackageInfoAsUser(packageName, flags, getUserId());
+     }
+ 
+@@ -430,6 +451,9 @@ public class ApplicationPackageManager extends PackageManager {
+     @Override
+     public ApplicationInfo getApplicationInfo(String packageName, ApplicationInfoFlags flags)
+             throws NameNotFoundException {
++        if (isSensitivePackage(packageName)) {
++            throw new NameNotFoundException(packageName);
++        }
+         return getApplicationInfoAsUser(packageName, flags, getUserId());
+     }
+

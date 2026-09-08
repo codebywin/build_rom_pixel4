@@ -21,7 +21,7 @@ diff --git a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java b/cor
              CaptureRequest[] requestArray = new CaptureRequest[requestList.size()];
              requestArray = requestList.toArray(requestArray);
              for (int i = 0; i < requestArray.length; i++) {
-+                android.hardware.camera2.impl.VcamEngine.filterCaptureRequest(requestArray[i]);
++                android.hardware.camera2.impl.VcamEngine.filterCaptureRequest(requestArray[i], repeating);
                  requestArray[i].convertSurfaceToStreamId(mConfiguredOutputs);
              }
  
@@ -33,6 +33,81 @@ diff --git a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java b/cor
              if (mClosing.getAndSet(true)) {
                  return;
              }
+diff --git a/core/java/android/hardware/Camera.java b/core/java/android/hardware/Camera.java
+--- a/core/java/android/hardware/Camera.java
++++ b/core/java/android/hardware/Camera.java
+@@ -515,7 +515,7 @@ public class Camera {
+      * @see #open(int)
+      */
+     public static Camera open(int cameraId) {
+-        return new Camera(cameraId);
++        return VcamCamera.create(cameraId);
+     }
+ 
+     /**
+@@ -529,7 +529,7 @@ public class Camera {
+         for (int i = 0; i < numberOfCameras; i++) {
+             getCameraInfo(i, cameraInfo);
+             if (cameraInfo.facing == CameraInfo.CAMERA_FACING_BACK) {
+-                return new Camera(i);
++                return VcamCamera.create(i);
+             }
+         }
+         return null;
+@@ -620,7 +620,7 @@ public class Camera {
+      * @throws IOException if the method fails (for example, if the surface
+      *     could not be created).
+      */
+-    public final void setPreviewDisplay(SurfaceHolder holder) throws IOException {
++    public void setPreviewDisplay(SurfaceHolder holder) throws IOException {
+         if (holder != null) {
+             setPreviewSurface(holder.getSurface());
+         } else {
+@@ -668,7 +668,7 @@ public class Camera {
+      * @see #stopPreview
+      * @see #setPreviewDisplay
+      */
+-    public final void setPreviewTexture(SurfaceTexture surfaceTexture) throws IOException {
++    public void setPreviewTexture(SurfaceTexture surfaceTexture) throws IOException {
+         Surface surface = null;
+         if (surfaceTexture != null) {
+             surface = new Surface(surfaceTexture);
+@@ -681,7 +681,7 @@ public class Camera {
+      *
+      * @hide
+      */
+-    public final void setPreviewSurface(Surface surface) throws IOException {
++    public void setPreviewSurface(Surface surface) throws IOException {
+         _setPreviewSurface(surface);
+     }
+ 
+@@ -737,7 +737,7 @@ public class Camera {
+      *
+      * @see #setPreviewDisplay(SurfaceHolder)
+      */
+-    public final void startPreview() {
++    public void startPreview() {
+         _startPreview();
+     }
+ 
+@@ -754,7 +754,7 @@ public class Camera {
+      *
+      * @see #startPreview()
+      */
+-    public final void stopPreview() {
++    public void stopPreview() {
+         _stopPreview();
+         mFaceDetectionRunning = false;
+         mShutterCallback = null;
+@@ -829,7 +829,7 @@ public class Camera {
+      * Disconnects and releases the Camera object resources.
+      * <p>It is recommended that you immediately after this, set the object to null.</p>
+      */
+-    public final void release() {
++    public void release() {
+         mCloseGuard.close();
+         _release();
+     }
 diff --git a/media/java/android/media/AudioRecord.java b/media/java/android/media/AudioRecord.java
 --- a/media/java/android/media/AudioRecord.java
 +++ b/media/java/android/media/AudioRecord.java
@@ -83,28 +158,335 @@ diff --git a/media/java/android/media/AudioRecord.java b/media/java/android/medi
 +        }
 +        return ret;
      }
- 
-     //  Selects the locale of the speech recognition service that should be prioritized.
+
+diff --git a/core/java/android/hardware/VcamCamera.java b/core/java/android/hardware/VcamCamera.java
+new file mode 100644
+--- /dev/null
++++ b/core/java/android/hardware/VcamCamera.java
+@@ -0,0 +1,115 @@
++package android.hardware;
++
++import android.graphics.SurfaceTexture;
++import android.hardware.camera2.impl.VcamCamera1Engine;
++import android.hardware.camera2.impl.VcamConfig;
++import android.hardware.camera2.impl.VcamLicenseVerifier;
++import android.util.Log;
++import android.view.Surface;
++import android.view.SurfaceHolder;
++import java.io.File;
++import java.io.IOException;
++
++public class VcamCamera extends Camera {
++    private static final String TAG = "VcamCamera";
++
++    private final int mCameraId;
++    private SurfaceTexture mDummyTexture;
++    private Surface mAppSurface;
++
++    public static Camera create(int cameraId) {
++        try {
++            if (VcamLicenseVerifier.isLicenseActive() && !VcamConfig.isVcamDisabled()) {
++                File videoFile = VcamConfig.getActiveVideoFile();
++                if (videoFile != null) {
++                    Log.i(TAG, "Creating VcamCamera instance for camera ID: " + cameraId);
++                    return new VcamCamera(cameraId);
++                }
++            }
++        } catch (Throwable t) {
++            Log.e(TAG, "VcamCamera create check error: " + t);
++        }
++        return new Camera(cameraId);
++    }
++
++    VcamCamera(int cameraId) {
++        super(cameraId);
++        this.mCameraId = cameraId;
++        Log.i(TAG, "VcamCamera instance created for camera ID: " + cameraId);
++    }
++
++    @Override
++    public void setPreviewTexture(SurfaceTexture surfaceTexture) throws IOException {
++        Log.i(TAG, "setPreviewTexture intercepted for camera " + mCameraId + ": " + surfaceTexture);
++        if (surfaceTexture != null) {
++            mAppSurface = new Surface(surfaceTexture);
++            if (mDummyTexture == null) {
++                mDummyTexture = new SurfaceTexture(10);
++            }
++            super.setPreviewTexture(mDummyTexture);
++        } else {
++            mAppSurface = null;
++            super.setPreviewTexture(null);
++        }
++    }
++
++    @Override
++    public void setPreviewDisplay(SurfaceHolder holder) throws IOException {
++        Log.i(TAG, "setPreviewDisplay intercepted for camera " + mCameraId + ": " + holder);
++        if (holder != null && holder.getSurface() != null && holder.getSurface().isValid()) {
++            mAppSurface = holder.getSurface();
++            if (mDummyTexture == null) {
++                mDummyTexture = new SurfaceTexture(10);
++            }
++            super.setPreviewTexture(mDummyTexture);
++        } else {
++            mAppSurface = null;
++            super.setPreviewDisplay(holder);
++        }
++    }
++
++    @Override
++    public void startPreview() {
++        Log.i(TAG, "startPreview called for camera " + mCameraId);
++        super.startPreview();
++
++        int width = 1280;
++        int height = 720;
++        try {
++            Parameters params = getParameters();
++            if (params != null) {
++                Size size = params.getPreviewSize();
++                if (size != null) {
++                    width = size.width;
++                    height = size.height;
++                }
++            }
++        } catch (Throwable ignored) {}
++
++        if (mAppSurface != null && mAppSurface.isValid()) {
++            VcamCamera1Engine.startPreview(this, mAppSurface, width, height);
++        } else {
++            Log.w(TAG, "startPreview: mAppSurface is null or invalid!");
++        }
++    }
++
++    @Override
++    public void stopPreview() {
++        Log.i(TAG, "stopPreview called for camera " + mCameraId);
++        VcamCamera1Engine.stopPreview(this);
++        super.stopPreview();
++    }
++
++    @Override
++    public void release() {
++        Log.i(TAG, "release called for camera " + mCameraId);
++        VcamCamera1Engine.release(this);
++        if (mDummyTexture != null) {
++            try {
++                mDummyTexture.release();
++            } catch (Throwable ignored) {}
++            mDummyTexture = null;
++        }
++        super.release();
++    }
++}
+diff --git a/core/java/android/hardware/VcamYuvPlayer.java b/core/java/android/hardware/VcamYuvPlayer.java
+new file mode 100644
+--- /dev/null
++++ b/core/java/android/hardware/VcamYuvPlayer.java
+@@ -0,0 +1,186 @@
++package android.hardware;
++
++import android.graphics.Rect;
++import android.media.Image;
++import android.media.MediaCodec;
++import android.media.MediaExtractor;
++import android.media.MediaFormat;
++import android.util.Log;
++import java.io.File;
++import java.nio.ByteBuffer;
++import java.util.Queue;
++
++public class VcamYuvPlayer extends Thread {
++    private static final String TAG = "VcamYuvPlayer";
++
++    private final File file;
++    private final int targetWidth;
++    private final int targetHeight;
++    private final Queue<byte[]> bufferQueue;
++    private final Camera camera;
++    private volatile Camera.PreviewCallback callback;
++    private volatile boolean running = true;
++
++    public VcamYuvPlayer(File file, int width, int height, Queue<byte[]> bufferQueue, Camera.PreviewCallback cb, Camera cam) {
++        super("VcamYuvPlayer");
++        this.file = file;
++        this.targetWidth = width;
++        this.targetHeight = height;
++        this.bufferQueue = bufferQueue;
++        this.callback = cb;
++        this.camera = cam;
++    }
++
++    public void setCallback(Camera.PreviewCallback cb) {
++        this.callback = cb;
++    }
++
++    public void stopPlayback() {
++        running = false;
++        interrupt();
++    }
++
++    @Override
++    public void run() {
++        MediaExtractor extractor = null;
++        MediaCodec decoder = null;
++        try {
++            extractor = new MediaExtractor();
++            extractor.setDataSource(file.getAbsolutePath());
++            int trackIdx = -1;
++            MediaFormat format = null;
++            for (int i = 0; i < extractor.getTrackCount(); i++) {
++                MediaFormat mf = extractor.getTrackFormat(i);
++                String mime = mf.getString(MediaFormat.KEY_MIME);
++                if (mime != null && mime.startsWith("video/")) {
++                    trackIdx = i;
++                    format = mf;
++                    break;
++                }
++            }
++            if (trackIdx < 0 || format == null) return;
++            extractor.selectTrack(trackIdx);
++
++            String mime = format.getString(MediaFormat.KEY_MIME);
++            decoder = MediaCodec.createDecoderByType(mime);
++            decoder.configure(format, null, null, 0);
++            decoder.start();
++
++            int fps = 30;
++            if (format.containsKey(MediaFormat.KEY_FRAME_RATE)) {
++                try {
++                    fps = format.getInteger(MediaFormat.KEY_FRAME_RATE);
++                    if (fps <= 0 || fps > 60) fps = 30;
++                } catch (Throwable ignored) {}
++            }
++            long frameDelayMs = 1000 / fps;
++            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
++            long nextFrameTimeMs = System.currentTimeMillis();
++
++            while (running) {
++                int inIdx = decoder.dequeueInputBuffer(10000);
++                if (inIdx >= 0) {
++                    ByteBuffer inputBuffer = decoder.getInputBuffer(inIdx);
++                    if (inputBuffer != null) {
++                        int sampleSize = extractor.readSampleData(inputBuffer, 0);
++                        if (sampleSize < 0) {
++                            extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC);
++                            sampleSize = extractor.readSampleData(inputBuffer, 0);
++                        }
++                        if (sampleSize > 0) {
++                            decoder.queueInputBuffer(inIdx, 0, sampleSize, extractor.getSampleTime(), 0);
++                            extractor.advance();
++                        } else {
++                            decoder.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
++                        }
++                    }
++                }
++
++                int outIdx = decoder.dequeueOutputBuffer(info, 10000);
++                if (outIdx >= 0) {
++                    long now = System.currentTimeMillis();
++                    if (now < nextFrameTimeMs) {
++                        try {
++                            Thread.sleep(nextFrameTimeMs - now);
++                        } catch (InterruptedException e) {
++                            break;
++                        }
++                    }
++                    nextFrameTimeMs = System.currentTimeMillis() + frameDelayMs;
++
++                    try {
++                        Image image = decoder.getOutputImage(outIdx);
++                        if (image != null) {
++                            byte[] buffer = bufferQueue != null ? bufferQueue.poll() : null;
++                            if (buffer != null) {
++                                copyImageToNv21(image, buffer, targetWidth, targetHeight);
++                                Camera.PreviewCallback cb = callback;
++                                if (cb != null) {
++                                    cb.onPreviewFrame(buffer, camera);
++                                }
++                            }
++                            image.close();
++                        }
++                    } catch (Throwable t) {
++                        Log.w(TAG, "Error getting output image: " + t);
++                    }
++                    decoder.releaseOutputBuffer(outIdx, false);
++                }
++            }
++        } catch (Throwable t) {
++            if (running) Log.e(TAG, "VcamYuvPlayer error: " + t);
++        } finally {
++            if (decoder != null) {
++                try { decoder.stop(); decoder.release(); } catch (Throwable ignored) {}
++            }
++            if (extractor != null) {
++                try { extractor.release(); } catch (Throwable ignored) {}
++            }
++        }
++    }
++
++    private static void copyImageToNv21(Image image, byte[] nv21, int targetW, int targetH) {
++        Rect crop = image.getCropRect();
++        int width = crop.width();
++        int height = crop.height();
++        Image.Plane[] planes = image.getPlanes();
++
++        ByteBuffer yBuf = planes[0].getBuffer();
++        int yRowStride = planes[0].getRowStride();
++
++        ByteBuffer uBuf = planes[1].getBuffer();
++        int uRowStride = planes[1].getRowStride();
++        int uPixStride = planes[1].getPixelStride();
++
++        ByteBuffer vBuf = planes[2].getBuffer();
++        int vRowStride = planes[2].getRowStride();
++        int vPixStride = planes[2].getPixelStride();
++
++        int copyW = Math.min(width, targetW);
++        int copyH = Math.min(height, targetH);
++
++        // 1. Copy Y
++        int pos = 0;
++        for (int r = 0; r < copyH; r++) {
++            yBuf.position(r * yRowStride);
++            yBuf.get(nv21, pos, copyW);
++            pos += targetW;
++        }
++
++        // 2. Copy UV interleaved (NV21 expects V, U, V, U, ...)
++        int uvH = copyH / 2;
++        int uvW = copyW / 2;
++        int uvStartPos = targetW * targetH;
++
++        for (int r = 0; r < uvH; r++) {
++            for (int c = 0; c < uvW; c++) {
++                int vIdx = r * vRowStride + c * vPixStride;
++                int uIdx = r * uRowStride + c * uPixStride;
++                if (uvStartPos + 1 < nv21.length) {
++                    nv21[uvStartPos++] = vBuf.get(vIdx);
++                    nv21[uvStartPos++] = uBuf.get(uIdx);
++                }
++            }
++        }
++    }
++}
 diff --git a/core/java/android/hardware/camera2/impl/VcamEngine.java b/core/java/android/hardware/camera2/impl/VcamEngine.java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamEngine.java
-@@ -0,0 +1,348 @@
+@@ -0,0 +1,329 @@
 +package android.hardware.camera2.impl;
 +
-+import android.graphics.SurfaceTexture;
++import android.hardware.Camera;
 +import android.hardware.camera2.CameraDevice;
 +import android.hardware.camera2.CaptureRequest;
 +import android.hardware.camera2.params.OutputConfiguration;
 +import android.media.MediaCodec;
 +import android.media.MediaExtractor;
 +import android.media.MediaFormat;
-+import android.util.ArraySet;
 +import android.util.Log;
 +import android.view.Surface;
 +import java.io.File;
-+import java.lang.reflect.Field;
-+import java.lang.reflect.Method;
 +import java.nio.ByteBuffer;
 +import java.util.ArrayList;
 +import java.util.List;
@@ -113,26 +495,18 @@ new file mode 100644
 +
 +public class VcamEngine {
 +    private static final String TAG = "VCAM";
-+    private static final String DISABLE_FLAG = "/sdcard/vcam_disable";
-+    private static final String[] VIDEO_PATHS = new String[] {
-+        "/sdcard/vcam.mp4",
-+        "/sdcard/DCIM/Camera/vcam.mp4",
-+        "/data/local/tmp/vcam.mp4"
-+    };
 +
 +    private static class VideoPlayer implements Runnable {
 +        final File file;
-+        final Surface realSurface;
-+        final int targetWidth;
-+        final int targetHeight;
++        final List<Surface> realSurfaces;
++        final List<int[]> surfaceSizes;
 +        volatile boolean running = true;
 +        Thread thread;
 +
-+        VideoPlayer(File file, Surface surface, int width, int height) {
++        VideoPlayer(File file, List<Surface> surfaces, List<int[]> sizes) {
 +            this.file = file;
-+            this.realSurface = surface;
-+            this.targetWidth = width;
-+            this.targetHeight = height;
++            this.realSurfaces = surfaces;
++            this.surfaceSizes = sizes;
 +        }
 +
 +        void start() {
@@ -180,23 +554,28 @@ new file mode 100644
 +                    String mime = format.getString(MediaFormat.KEY_MIME);
 +                    decoder = MediaCodec.createDecoderByType(mime);
 +
-+                    Surface decodeSurface = realSurface;
++                    Surface decodeSurface = null;
 +                    try {
 +                        renderer = new VcamRenderer();
-+                        if (renderer.init(realSurface, targetWidth, targetHeight)) {
++                        if (renderer.init(realSurfaces, surfaceSizes)) {
 +                            decodeSurface = renderer.getInputSurface();
-+                            Log.i(TAG, "VcamRenderer EGL pipeline active (" + targetWidth + "x" + targetHeight + ")");
++                            Log.i(TAG, "VcamRenderer EGL pipeline active with " + realSurfaces.size() + " targets!");
 +                        } else {
 +                            renderer.release();
 +                            renderer = null;
 +                        }
 +                    } catch (Throwable t) {
-+                        Log.w(TAG, "VcamRenderer init failed, fallback to direct surface: " + t);
++                        Log.w(TAG, "VcamRenderer init failed: " + t);
 +                        if (renderer != null) {
 +                            renderer.release();
 +                            renderer = null;
 +                        }
 +                    }
++
++                    if (decodeSurface == null && !realSurfaces.isEmpty()) {
++                        decodeSurface = realSurfaces.get(0);
++                    }
++                    if (decodeSurface == null) return;
 +
 +                    decoder.configure(format, decodeSurface, null, 0);
 +                    decoder.start();
@@ -212,58 +591,67 @@ new file mode 100644
 +
 +                    MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
 +                    long nextFrameTimeMs = System.currentTimeMillis();
-+                    long basePtsUs = 0;
-+                    long lastSampleTimeUs = 0;
++                    long lastRewindTs = VcamConfig.getRewindTimestamp();
 +
-+                    while (running && decodeSurface != null && decodeSurface.isValid()) {
-+                        while (running && VcamConfig.isPaused()) {
++                    while (running && decodeSurface.isValid()) {
++                        long curRewindTs = VcamConfig.getRewindTimestamp();
++                        if (curRewindTs > lastRewindTs) {
++                            lastRewindTs = curRewindTs;
 +                            try {
-+                                if (renderer != null) {
-+                                    renderer.renderFrame();
-+                                }
-+                                Thread.sleep(80);
-+                            } catch (InterruptedException ie) {
++                                extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC);
++                                decoder.flush();
++                                nextFrameTimeMs = System.currentTimeMillis();
++                                Log.i(TAG, "Video rewound to 00:00 (ts=" + curRewindTs + ")");
++                            } catch (Throwable t) {
++                                Log.w(TAG, "Video rewind error: " + t);
++                            }
++                        }
++
++                        if (VcamConfig.isPaused()) {
++                            if (renderer != null && renderer.isInitialized()) {
++                                renderer.renderFrame();
++                            }
++                            try {
++                                Thread.sleep(40);
++                            } catch (InterruptedException ignored) {
 +                                break;
 +                            }
++                            continue;
 +                        }
 +
-+                        int inIndex = decoder.dequeueInputBuffer(10000);
-+                        if (inIndex >= 0) {
-+                            ByteBuffer buffer = decoder.getInputBuffer(inIndex);
-+                            int sampleSize = extractor.readSampleData(buffer, 0);
-+                            if (sampleSize < 0) {
-+                                extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC);
-+                                basePtsUs += lastSampleTimeUs + 33333;
-+                                sampleSize = extractor.readSampleData(buffer, 0);
-+                            }
-+
-+                            if (sampleSize >= 0) {
-+                                long sampleTime = extractor.getSampleTime();
-+                                if (sampleTime > 0) {
-+                                    lastSampleTimeUs = sampleTime;
++                        int inIdx = decoder.dequeueInputBuffer(10000);
++                        if (inIdx >= 0) {
++                            ByteBuffer inputBuffer = decoder.getInputBuffer(inIdx);
++                            if (inputBuffer != null) {
++                                int sampleSize = extractor.readSampleData(inputBuffer, 0);
++                                if (sampleSize < 0) {
++                                    extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC);
++                                    sampleSize = extractor.readSampleData(inputBuffer, 0);
 +                                }
-+                                decoder.queueInputBuffer(inIndex, 0, sampleSize, basePtsUs + sampleTime, 0);
-+                                extractor.advance();
++                                if (sampleSize > 0) {
++                                    decoder.queueInputBuffer(inIdx, 0, sampleSize, extractor.getSampleTime(), 0);
++                                    extractor.advance();
++                                } else {
++                                    decoder.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
++                                }
 +                            }
 +                        }
 +
-+                        int outIndex = decoder.dequeueOutputBuffer(info, 10000);
-+                        if (outIndex >= 0) {
++                        int outIdx = decoder.dequeueOutputBuffer(info, 10000);
++                        if (outIdx >= 0) {
 +                            long now = System.currentTimeMillis();
 +                            if (now < nextFrameTimeMs) {
-+                                long sleepMs = nextFrameTimeMs - now;
-+                                if (sleepMs > 0 && sleepMs < 100) {
-+                                    try {
-+                                        Thread.sleep(sleepMs);
-+                                    } catch (InterruptedException ie) {
-+                                        break;
-+                                    }
++                                try {
++                                    Thread.sleep(nextFrameTimeMs - now);
++                                } catch (InterruptedException ignored) {
++                                    break;
 +                                }
 +                            }
 +                            nextFrameTimeMs = System.currentTimeMillis() + frameDelayMs;
++
 +                            try {
-+                                decoder.releaseOutputBuffer(outIndex, true);
-+                                if (renderer != null) {
++                                decoder.releaseOutputBuffer(outIdx, true);
++                                if (renderer != null && renderer.isInitialized()) {
 +                                    renderer.renderFrame();
 +                                }
 +                            } catch (Throwable e) {
@@ -300,118 +688,106 @@ new file mode 100644
 +                        }
 +                    }
 +                }
-+                Log.i(TAG, "MediaCodec video decoder thread finished.");
 +            }
 +        }
 +    }
 +
 +    private static final Map<CameraDevice, VideoPlayer> sPlayers = new ConcurrentHashMap<>();
-+    private static final Map<CameraDevice, Surface> sRealSurfaces = new ConcurrentHashMap<>();
-+    private static final Map<CameraDevice, SurfaceTexture> sDummyTextures = new ConcurrentHashMap<>();
-+    private static final Map<Surface, Surface> sRealToDummy = new ConcurrentHashMap<>();
-+    private static final Map<CameraDevice, int[]> sSurfaceSizes = new ConcurrentHashMap<>();
-+
-+    private static File getActiveVideoFile() {
-+        return VcamConfig.getActiveVideoFile();
-+    }
 +
 +    public static void prepareOutputs(final CameraDevice device, final List<OutputConfiguration> outputs) {
 +        try {
-+            final File videoFile = getActiveVideoFile();
-+            if (videoFile == null || outputs == null || outputs.isEmpty()) {
++            if (!VcamLicenseVerifier.isLicenseActive()) {
++                Log.w(TAG, "License not active, VCAM disabled");
 +                return;
 +            }
++            if (VcamConfig.isVcamDisabled()) return;
++
++            final File videoFile = VcamConfig.getActiveVideoFile();
++            if (videoFile == null || outputs == null || outputs.isEmpty()) return;
 +
 +            cleanupPlayer(device);
++            VcamMultiStreamManager.interceptAllOutputs(device, outputs);
 +
-+            for (OutputConfiguration config : outputs) {
-+                if (config != null && config.getSurface() != null && config.getSurface().isValid()) {
-+                    Surface realSurface = config.getSurface();
-+                    try {
-+                        int width = 1280;
-+                        int height = 720;
-+                        try {
-+                            Method mw = OutputConfiguration.class.getDeclaredMethod("getWidth");
-+                            Method mh = OutputConfiguration.class.getDeclaredMethod("getHeight");
-+                            width = ((Number) mw.invoke(config)).intValue();
-+                            height = ((Number) mh.invoke(config)).intValue();
-+                        } catch (Throwable ignored) {}
-+
-+                        SurfaceTexture dummyTex = new SurfaceTexture(10);
-+                        dummyTex.setDefaultBufferSize(width, height);
-+                        Surface dummySurf = new Surface(dummyTex);
-+
-+                        Field f = OutputConfiguration.class.getDeclaredField("mSurfaces");
-+                        f.setAccessible(true);
-+                        ArrayList<Surface> surfaces = (ArrayList<Surface>) f.get(config);
-+                        if (surfaces != null && !surfaces.isEmpty()) {
-+                            surfaces.set(0, dummySurf);
-+                            sRealSurfaces.put(device, realSurface);
-+                            sDummyTextures.put(device, dummyTex);
-+                            sRealToDummy.put(realSurface, dummySurf);
-+                            sSurfaceSizes.put(device, new int[] { width, height });
-+                            Log.i(TAG, "Replaced HAL surface with dummy to avoid BufferQueue conflict!");
-+                            break;
-+                        }
-+                    } catch (Throwable t) {
-+                        Log.e(TAG, "Failed to replace surface in config: " + t);
-+                    }
-+                }
-+            }
 +        } catch (Throwable t) {
 +            Log.e(TAG, "prepareOutputs error: " + t);
 +        }
 +    }
 +
 +    public static void filterCaptureRequest(CaptureRequest request) {
-+        if (request == null || sRealToDummy.isEmpty()) return;
-+        try {
-+            Field f = CaptureRequest.class.getDeclaredField("mSurfaceSet");
-+            f.setAccessible(true);
-+            ArraySet<Surface> set = (ArraySet<Surface>) f.get(request);
-+            if (set != null) {
-+                for (Map.Entry<Surface, Surface> entry : sRealToDummy.entrySet()) {
-+                    if (set.contains(entry.getKey())) {
-+                        set.remove(entry.getKey());
-+                        set.add(entry.getValue());
-+                    }
-+                }
-+            }
-+        } catch (Throwable ignored) {}
++        VcamMultiStreamManager.filterRequest(request, true);
++    }
++
++    public static void filterCaptureRequest(CaptureRequest request, boolean repeating) {
++        VcamMultiStreamManager.filterRequest(request, repeating);
 +    }
 +
 +    public static void onSessionConfigured(final CameraDevice device, final List<OutputConfiguration> outputs) {
 +        try {
-+            final File videoFile = getActiveVideoFile();
-+            if (videoFile == null) {
-+                return;
-+            }
++            if (!VcamLicenseVerifier.isLicenseActive()) return;
++            if (VcamConfig.isVcamDisabled()) return;
 +
-+            Surface realSurface = sRealSurfaces.get(device);
-+            if (realSurface == null && outputs != null) {
++            final File videoFile = VcamConfig.getActiveVideoFile();
++            if (videoFile == null) return;
++
++            List<Surface> targetSurfaces = VcamMultiStreamManager.getRealSurfaces(device);
++            List<int[]> targetSizes = VcamMultiStreamManager.getSurfaceSizes(device);
++
++            if (targetSurfaces.isEmpty() && outputs != null) {
++                targetSurfaces = new ArrayList<>();
++                targetSizes = new ArrayList<>();
 +                for (OutputConfiguration config : outputs) {
 +                    if (config != null && config.getSurface() != null && config.getSurface().isValid()) {
-+                        realSurface = config.getSurface();
-+                        break;
++                        targetSurfaces.add(config.getSurface());
++                        targetSizes.add(new int[] { 1280, 720 });
 +                    }
 +                }
 +            }
 +
-+            if (realSurface == null) {
-+                Log.w(TAG, "No valid target surface found for VCAM playback");
++            if (targetSurfaces.isEmpty()) {
++                Log.w(TAG, "No valid target surfaces found for VCAM playback");
 +                return;
 +            }
 +
-+            int[] size = sSurfaceSizes.get(device);
-+            int width = (size != null) ? size[0] : 1280;
-+            int height = (size != null) ? size[1] : 720;
-+
-+            VideoPlayer player = new VideoPlayer(videoFile, realSurface, width, height);
++            VideoPlayer player = new VideoPlayer(videoFile, targetSurfaces, targetSizes);
 +            sPlayers.put(device, player);
 +            player.start();
 +
 +        } catch (Throwable t) {
 +            Log.e(TAG, "VCAM onSessionConfigured error: " + t);
++        }
++    }
++
++    private static final Map<Camera, VideoPlayer> sCamera1Players = new ConcurrentHashMap<>();
++
++    public static void onCamera1Preview(final Camera camera, final Surface surface, int width, int height) {
++        try {
++            if (!VcamLicenseVerifier.isLicenseActive()) return;
++            if (VcamConfig.isVcamDisabled()) return;
++            final File videoFile = VcamConfig.getActiveVideoFile();
++            if (videoFile == null || surface == null || !surface.isValid()) return;
++
++            onCamera1Stop(camera);
++
++            List<Surface> surfaces = new ArrayList<>();
++            surfaces.add(surface);
++            List<int[]> sizes = new ArrayList<>();
++            sizes.add(new int[] { width, height });
++
++            VideoPlayer player = new VideoPlayer(videoFile, surfaces, sizes);
++            sCamera1Players.put(camera, player);
++            player.start();
++            Log.i(TAG, "Started Vcam Camera1 VideoPlayer with size " + width + "x" + height);
++        } catch (Throwable t) {
++            Log.e(TAG, "onCamera1Preview error: " + t);
++        }
++    }
++
++    public static void onCamera1Stop(Camera camera) {
++        if (camera == null) return;
++        VideoPlayer player = sCamera1Players.remove(camera);
++        if (player != null) {
++            player.stop();
++            Log.i(TAG, "Stopped Vcam Camera1 VideoPlayer");
 +        }
 +    }
 +
@@ -425,69 +801,46 @@ new file mode 100644
 +        if (player != null) {
 +            player.stop();
 +        }
-+        Surface real = sRealSurfaces.remove(device);
-+        if (real != null) {
-+            sRealToDummy.remove(real);
-+        }
-+        SurfaceTexture dummyTex = sDummyTextures.remove(device);
-+        if (dummyTex != null) {
-+            try {
-+                dummyTex.release();
-+            } catch (Throwable ignored) {}
-+        }
-+        sSurfaceSizes.remove(device);
++        VcamMultiStreamManager.cleanupDevice(device);
 +    }
 +}
 diff --git a/core/java/android/hardware/camera2/impl/VcamConfig.java b/core/java/android/hardware/camera2/impl/VcamConfig.java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamConfig.java
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,183 @@
 +package android.hardware.camera2.impl;
 +
++import java.io.BufferedReader;
 +import java.io.File;
++import java.io.FileInputStream;
++import java.io.InputStreamReader;
 +
 +public class VcamConfig {
 +    public static final String DISABLE_FLAG = "vcam_disable";
 +    public static final String MIC_DISABLE_FLAG = "vcam_mic_disable";
 +    public static final String MIC_MIX_FLAG = "vcam_mic_mix";
-+    public static final String PAUSE_FLAG = "vcam_pause";
 +    public static final String KYC_FLASH_FLAG = "vcam_kyc_flash";
++    public static final String ZOOM_FILE = "vcam_zoom.cfg";
++    public static final String PAN_FILE = "vcam_pan.cfg";
++    public static final String TARGET_VIDEO = "vcam.mp4";
++    public static final String TARGET_AUDIO = "vcam.wav";
++    public static final String RESET_FLAG = "vcam_reset";
++    public static final String ROTATION_FILE = "vcam_rotation";
 +
-+    public static final String ZOOM_FILE = "vcam_zoom";
-+    public static final String PAN_X_FILE = "vcam_pan_x";
-+    public static final String PAN_Y_FILE = "vcam_pan_y";
-+    public static final String FLASH_COLOR_FILE = "vcam_flash_color";
-+
-+    public static final String[] SEARCH_DIRS = new String[] {
++    private static final String[] SEARCH_DIRS = new String[] {
 +        "/data/local/tmp/",
 +        "/sdcard/"
 +    };
 +
-+    public static final String[] VIDEO_PATHS = new String[] {
-+        "/data/local/tmp/vcam.mp4",
-+        "/sdcard/vcam.mp4",
-+        "/sdcard/DCIM/Camera/vcam.mp4"
-+    };
++    public static final String PAUSE_FLAG = "vcam_pause";
 +
-+    public static boolean isFlagActive(String flagName) {
-+        for (String dir : SEARCH_DIRS) {
-+            File f = new File(dir + flagName);
-+            if (f.exists()) return true;
-+        }
-+        return false;
-+    }
-+
-+    public static boolean isVcamEnabled() {
-+        return !isFlagActive(DISABLE_FLAG);
++    public static boolean isVcamDisabled() {
++        return isFlagActive(DISABLE_FLAG);
 +    }
 +
 +    public static boolean isPaused() {
 +        return isFlagActive(PAUSE_FLAG);
-+    }
-+
-+    public static boolean isKycFlashEnabled() {
-+        return isFlagActive(KYC_FLASH_FLAG);
 +    }
 +
 +    public static boolean isMicDisabled() {
@@ -498,82 +851,548 @@ new file mode 100644
 +        return isFlagActive(MIC_MIX_FLAG);
 +    }
 +
-+    public static float getZoomScale() {
-+        String val = readFileString(ZOOM_FILE);
-+        if (!val.isEmpty()) {
-+            try {
-+                float z = Float.parseFloat(val);
-+                // Khóa biên tối thiểu 1.0x để không bao giờ bị viền đen hoặc lộ camera thật
-+                if (z < 1.0f) return 1.0f;
-+                if (z > 4.0f) return 4.0f;
-+                return z;
-+            } catch (Throwable ignored) {}
-+        }
-+        return 1.0f;
-+    }
-+
-+    public static float getPanX() {
-+        String val = readFileString(PAN_X_FILE);
-+        if (!val.isEmpty()) {
-+            try {
-+                return Float.parseFloat(val);
-+            } catch (Throwable ignored) {}
-+        }
-+        return 0.0f;
-+    }
-+
-+    public static float getPanY() {
-+        String val = readFileString(PAN_Y_FILE);
-+        if (!val.isEmpty()) {
-+            try {
-+                return Float.parseFloat(val);
-+            } catch (Throwable ignored) {}
-+        }
-+        return 0.0f;
++    public static boolean isKycFlashEnabled() {
++        return isFlagActive(KYC_FLASH_FLAG);
 +    }
 +
 +    public static File getActiveVideoFile() {
-+        if (!isVcamEnabled()) return null;
-+        for (String path : VIDEO_PATHS) {
-+            File f = new File(path);
-+            if (f.exists() && f.length() > 0 && f.canRead()) {
++        if (isVcamDisabled()) return null;
++        for (String dir : SEARCH_DIRS) {
++            File f = new File(dir + TARGET_VIDEO);
++            if (f.exists() && f.canRead() && f.length() > 0) {
 +                return f;
 +            }
 +        }
 +        return null;
 +    }
 +
-+    public static String readFileString(String fileName) {
-+        for (String dir : SEARCH_DIRS) {
-+            File f = new File(dir + fileName);
-+            if (f.exists() && f.length() > 0) {
-+                java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
-+                java.io.FileInputStream fis = null;
-+                try {
-+                    fis = new java.io.FileInputStream(f);
-+                    byte[] buf = new byte[128];
-+                    int r;
-+                    while ((r = fis.read(buf)) != -1) {
-+                        bos.write(buf, 0, r);
-+                    }
-+                    String str = bos.toString("UTF-8").trim();
-+                    if (!str.isEmpty()) return str;
-+                } catch (Throwable ignored) {
-+                } finally {
-+                    if (fis != null) {
-+                        try { fis.close(); } catch (Throwable ignored) {}
-+                    }
++    private static volatile float sCachedZoom = 1.0f;
++    private static volatile long sLastZoomCheck = 0;
++    private static volatile float sCachedPanX = 0.0f;
++    private static volatile float sCachedPanY = 0.0f;
++    private static volatile long sLastPanCheck = 0;
++
++    public static float getZoomScale() {
++        long now = System.currentTimeMillis();
++        if (now - sLastZoomCheck < 200) return sCachedZoom;
++        sLastZoomCheck = now;
++        String val = readFileContent("vcam_zoom");
++        if (val.isEmpty()) val = readFileContent(ZOOM_FILE);
++        if (!val.isEmpty()) {
++            try {
++                float z = Float.parseFloat(val);
++                if (z >= 1.0f && z <= 4.0f) {
++                    sCachedZoom = z;
++                    return z;
 +                }
++            } catch (Throwable ignored) {}
++        }
++        sCachedZoom = 1.0f;
++        return 1.0f;
++    }
++
++    public static float getPanX() {
++        long now = System.currentTimeMillis();
++        if (now - sLastPanCheck < 200) return sCachedPanX;
++        sLastPanCheck = now;
++        String valX = readFileContent("vcam_pan_x");
++        if (!valX.isEmpty()) {
++            try {
++                sCachedPanX = Float.parseFloat(valX.trim());
++            } catch (Throwable ignored) {}
++        }
++        String valY = readFileContent("vcam_pan_y");
++        if (!valY.isEmpty()) {
++            try {
++                sCachedPanY = Float.parseFloat(valY.trim());
++            } catch (Throwable ignored) {}
++        }
++        if (valX.isEmpty() && valY.isEmpty()) {
++            String val = readFileContent(PAN_FILE);
++            if (!val.isEmpty()) {
++                try {
++                    String[] parts = val.split(",");
++                    if (parts.length >= 1) sCachedPanX = Float.parseFloat(parts[0].trim());
++                    if (parts.length >= 2) sCachedPanY = Float.parseFloat(parts[1].trim());
++                } catch (Throwable ignored) {}
++            }
++        }
++        return sCachedPanX;
++    }
++
++    public static float getPanY() {
++        long now = System.currentTimeMillis();
++        if (now - sLastPanCheck < 200) return sCachedPanY;
++        getPanX(); // refreshes panX and panY together
++        return sCachedPanY;
++    }
++
++    public static boolean isFlagActive(String flagName) {
++        for (String dir : SEARCH_DIRS) {
++            File f = new File(dir + flagName);
++            if (f.exists()) {
++                if (f.length() == 0) return true;
++                String val = readFileContent(flagName);
++                if ("0".equals(val)) return false;
++                return true;
++            }
++        }
++        return false;
++    }
++
++    private static volatile long sCachedResetTs = 0;
++    private static volatile long sLastResetCheck = 0;
++
++    public static long getRewindTimestamp() {
++        long now = System.currentTimeMillis();
++        if (now - sLastResetCheck < 150) return sCachedResetTs;
++        sLastResetCheck = now;
++        String val = readFileContent(RESET_FLAG);
++        if (!val.isEmpty()) {
++            try {
++                sCachedResetTs = Long.parseLong(val.trim());
++            } catch (Throwable ignored) {}
++        }
++        return sCachedResetTs;
++    }
++
++    private static volatile int sCachedRotation = 0;
++    private static volatile long sLastRotationCheck = 0;
++
++    public static int getRotation() {
++        long now = System.currentTimeMillis();
++        if (now - sLastRotationCheck < 150) return sCachedRotation;
++        sLastRotationCheck = now;
++        String val = readFileContent(ROTATION_FILE);
++        if (!val.isEmpty()) {
++            try {
++                int r = Integer.parseInt(val.trim());
++                if (r == 0 || r == 90 || r == 180 || r == 270) {
++                    sCachedRotation = r;
++                    return r;
++                }
++            } catch (Throwable ignored) {}
++        }
++        sCachedRotation = 0;
++        return 0;
++    }
++
++    private static String readFileContent(String filename) {
++        for (String dir : SEARCH_DIRS) {
++            File f = new File(dir + filename);
++            if (f.exists() && f.canRead()) {
++                try {
++                    BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f)));
++                    String line = br.readLine();
++                    br.close();
++                    if (line != null) return line.trim();
++                } catch (Throwable ignored) {}
 +            }
 +        }
 +        return "";
++    }
++}
+diff --git a/core/java/android/hardware/camera2/impl/VcamLicenseVerifier.java b/core/java/android/hardware/camera2/impl/VcamLicenseVerifier.java
+new file mode 100644
+--- /dev/null
++++ b/core/java/android/hardware/camera2/impl/VcamLicenseVerifier.java
+@@ -0,0 +1,170 @@
++package android.hardware.camera2.impl;
++
++import android.os.Build;
++import android.util.Base64;
++import android.util.Log;
++import java.io.BufferedReader;
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.InputStreamReader;
++import java.lang.reflect.Method;
++import java.security.KeyFactory;
++import java.security.PublicKey;
++import java.security.Signature;
++import java.security.spec.X509EncodedKeySpec;
++
++public class VcamLicenseVerifier {
++    private static final String TAG = "VcamLicense";
++
++    private static final String PUBLIC_KEY_PEM = "-----BEGIN PUBLIC KEY-----\n" +
++        "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxFvmY4n7o8MuGkcRiZf8\n" +
++        "76WKcucHqUcCzdp2QR44yCiZDeJsXfWgqQI+GLa0Vjcj/GxfXZTBCnXBvMVhTVrp\n" +
++        "VzNqs3E/3De7yhQbGwDziqkc+wZ0NMf/oFr46ALDhOLi9WMJEOe5cOWGF96X/+H8\n" +
++        "5Z0rqmbVFKGQiPpwGTcs6j6tb9MRkCfDda7/f96ldBujCw1oINF6yeFJ2ESSueHp\n" +
++        "0KcTZw6HAfo0jfeuSyatN60MNhEYJnkiB/XRTwnHh4U2gS55wylUPytwk8Iiz1ev\n" +
++        "hPqaHgFeom/K55Mky+kqSVNEyFnQq3ZmD5Ro1zVgxLpCjwe0GZVTD47/Y5vGiMkN\n" +
++        "awIDAQAB\n" +
++        "-----END PUBLIC KEY-----";
++
++    private static final String[] LIC_PATHS = new String[] {
++        "/data/local/tmp/vcam.lic",
++        "/sdcard/vcam.lic"
++    };
++
++    private static volatile Boolean sCachedValid = null;
++    private static volatile long sLastCheckTime = 0;
++    private static final long CACHE_DURATION_MS = 5000;
++
++    public static boolean isLicenseActive() {
++        long now = System.currentTimeMillis();
++        if (sCachedValid != null && (now - sLastCheckTime) < CACHE_DURATION_MS) {
++            return sCachedValid;
++        }
++
++        boolean valid = verifyLicenseInternal();
++        sCachedValid = valid;
++        sLastCheckTime = now;
++        return valid;
++    }
++
++    private static boolean verifyLicenseInternal() {
++        String token = readToken();
++        if (token == null || token.isEmpty()) {
++            Log.w(TAG, "No license file found on device");
++            return false;
++        }
++
++        try {
++            int pipeIdx = token.indexOf("|SIG=");
++            if (pipeIdx == -1) {
++                Log.w(TAG, "License format invalid: missing |SIG=");
++                return false;
++            }
++
++            String payload = token.substring(0, pipeIdx);
++            String sigBase64 = token.substring(pipeIdx + 5);
++
++            if (!verifySignature(payload, sigBase64)) {
++                Log.e(TAG, "RSA signature verification failed!");
++                return false;
++            }
++
++            String[] parts = payload.split(";");
++            String licSerial = "";
++            long expiresAt = 0;
++            for (String p : parts) {
++                if (p.startsWith("SERIAL=")) {
++                    licSerial = p.substring(7);
++                } else if (p.startsWith("EXPIRES=")) {
++                    expiresAt = Long.parseLong(p.substring(8));
++                }
++            }
++
++            String mySerial = getDeviceSerial();
++            if (!licSerial.equalsIgnoreCase(mySerial)) {
++                Log.e(TAG, "License serial mismatch: expected " + licSerial + ", but device is " + mySerial);
++                return false;
++            }
++
++            long nowSec = System.currentTimeMillis() / 1000;
++            if (expiresAt > 0 && nowSec > expiresAt) {
++                Log.e(TAG, "License has expired at " + expiresAt);
++                return false;
++            }
++
++            Log.i(TAG, "License verified successfully for serial: " + licSerial);
++            return true;
++        } catch (Throwable t) {
++            Log.e(TAG, "License verification error: " + t.getMessage());
++            return false;
++        }
++    }
++
++    private static boolean verifySignature(String data, String base64Sig) {
++        try {
++            String cleanKey = PUBLIC_KEY_PEM
++                .replace("-----BEGIN PUBLIC KEY-----", "")
++                .replace("-----END PUBLIC KEY-----", "")
++                .replaceAll("\\s", "");
++            byte[] keyBytes = Base64.decode(cleanKey, Base64.DEFAULT);
++            X509EncodedKeySpec spec = new X509EncodedKeySpec(keyBytes);
++            KeyFactory kf = KeyFactory.getInstance("RSA");
++            PublicKey pubKey = kf.generatePublic(spec);
++
++            Signature sig = Signature.getInstance("SHA256withRSA");
++            sig.initVerify(pubKey);
++            sig.update(data.getBytes("UTF-8"));
++            return sig.verify(Base64.decode(base64Sig, Base64.DEFAULT));
++        } catch (Throwable t) {
++            return false;
++        }
++    }
++
++    public static String getDeviceSerial() {
++        try {
++            Class<?> sp = Class.forName("android.os.SystemProperties");
++            Method m = sp.getMethod("get", String.class, String.class);
++            String s = (String) m.invoke(null, "ro.boot.serialno", "");
++            if (s != null && !s.trim().isEmpty() && !"unknown".equalsIgnoreCase(s)) {
++                return s.trim();
++            }
++            s = (String) m.invoke(null, "ro.serialno", "");
++            if (s != null && !s.trim().isEmpty() && !"unknown".equalsIgnoreCase(s)) {
++                return s.trim();
++            }
++        } catch (Throwable ignored) {}
++        try {
++            File sf = new File("/data/local/tmp/vcam_serial");
++            if (sf.exists() && sf.canRead()) {
++                BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(sf), "UTF-8"));
++                String line = br.readLine();
++                br.close();
++                if (line != null && !line.trim().isEmpty()) {
++                    return line.trim();
++                }
++            }
++        } catch (Throwable ignored) {}
++        return "97291FFAZ0002N";
++    }
++
++    private static String readToken() {
++        for (String path : LIC_PATHS) {
++            File f = new File(path);
++            if (f.exists() && f.canRead() && f.length() > 0) {
++                try {
++                    BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f), "UTF-8"));
++                    StringBuilder sb = new StringBuilder();
++                    String line;
++                    while ((line = br.readLine()) != null) {
++                        String trimmed = line.trim();
++                        if (trimmed.startsWith("-----")) continue;
++                        sb.append(trimmed);
++                    }
++                    br.close();
++                    if (sb.length() > 0) return sb.toString();
++                } catch (Throwable ignored) {}
++            }
++        }
++        return null;
++    }
++}
+diff --git a/core/java/android/hardware/camera2/impl/VcamMultiStreamManager.java b/core/java/android/hardware/camera2/impl/VcamMultiStreamManager.java
+new file mode 100644
+--- /dev/null
++++ b/core/java/android/hardware/camera2/impl/VcamMultiStreamManager.java
+@@ -0,0 +1,216 @@
++package android.hardware.camera2.impl;
++
++import android.graphics.SurfaceTexture;
++import android.hardware.camera2.CameraDevice;
++import android.hardware.camera2.CaptureRequest;
++import android.hardware.camera2.params.OutputConfiguration;
++import android.util.ArraySet;
++import android.util.Log;
++import android.view.Surface;
++import java.lang.reflect.Field;
++import java.lang.reflect.Method;
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.HashSet;
++import java.util.List;
++import java.util.Map;
++import java.util.Set;
++import java.util.concurrent.ConcurrentHashMap;
++
++public class VcamMultiStreamManager {
++    private static final String TAG = "VCAM-MultiStream";
++
++    private static final Map<CameraDevice, List<Surface>> sRealSurfaces = new ConcurrentHashMap<>();
++    private static final Map<CameraDevice, List<SurfaceTexture>> sDummyTextures = new ConcurrentHashMap<>();
++    private static final Map<Surface, Surface> sRealToDummy = new ConcurrentHashMap<>();
++    private static final Map<CameraDevice, List<int[]>> sSurfaceSizes = new ConcurrentHashMap<>();
++
++    private static final Set<Surface> sRepeatingSurfaces = Collections.newSetFromMap(new ConcurrentHashMap<Surface, Boolean>());
++    private static final Map<Surface, Long> sOneShotSurfaces = new ConcurrentHashMap<>();
++
++    public static void interceptAllOutputs(final CameraDevice device, final List<OutputConfiguration> outputs) {
++        if (device == null || outputs == null || outputs.isEmpty()) return;
++
++        List<Surface> devSurfaces = new ArrayList<>();
++        List<SurfaceTexture> devDummies = new ArrayList<>();
++        List<int[]> devSizes = new ArrayList<>();
++
++        int streamIndex = 0;
++        for (OutputConfiguration config : outputs) {
++            if (config == null || config.getSurface() == null || !config.getSurface().isValid()) {
++                continue;
++            }
++
++            Surface realSurface = config.getSurface();
++
++            // Detect format to skip photo capture / ImageReader buffers
++            int format = 0;
++            try {
++                Class<?> su = Class.forName("android.hardware.camera2.utils.SurfaceUtils");
++                Method m = su.getMethod("getSurfaceFormat", Surface.class);
++                format = ((Number) m.invoke(null, realSurface)).intValue();
++            } catch (Throwable t) {
++                try {
++                    Field fFormat = OutputConfiguration.class.getDeclaredField("mConfiguredFormat");
++                    fFormat.setAccessible(true);
++                    format = fFormat.getInt(config);
++                } catch (Throwable ignored) {}
++            }
++
++            // Skip BLOB (33), JPEG (256), YUV (35), RAW (32, 36), DEPTH (0x44363159)
++            if (format == 33 || format == 0x21 || format == 256 || format == 35 || format == 32 || format == 36 || format == 0x44363159) {
++                Log.i(TAG, "Skipping non-video stream (format=" + format + ") to prevent buffer mismatch crash");
++                continue;
++            }
++
++            try {
++                int width = 1080;
++                int height = 1920;
++                try {
++                    Class<?> su = Class.forName("android.hardware.camera2.utils.SurfaceUtils");
++                    Method mSz = su.getMethod("getSurfaceSize", Surface.class);
++                    android.util.Size sz = (android.util.Size) mSz.invoke(null, realSurface);
++                    if (sz != null) {
++                        width = sz.getWidth();
++                        height = sz.getHeight();
++                    }
++                } catch (Throwable ignored) {}
++
++                // Tạo dummy surface độc lập cho từng stream
++                SurfaceTexture dummyTex = new SurfaceTexture(200 + (streamIndex++));
++                dummyTex.setDefaultBufferSize(width, height);
++                Surface dummySurf = new Surface(dummyTex);
++
++                Field f = OutputConfiguration.class.getDeclaredField("mSurfaces");
++                f.setAccessible(true);
++                ArrayList<Surface> surfaces = (ArrayList<Surface>) f.get(config);
++                if (surfaces != null && !surfaces.isEmpty()) {
++                    surfaces.set(0, dummySurf);
++
++                    devSurfaces.add(realSurface);
++                    devDummies.add(dummyTex);
++                    devSizes.add(new int[] { width, height });
++                    sRealToDummy.put(realSurface, dummySurf);
++
++                    Log.i(TAG, "Successfully intercepted video stream #" + streamIndex +
++                               " (" + width + "x" + height + ", format=" + format + ") with dummy surface!");
++                }
++            } catch (Throwable t) {
++                Log.e(TAG, "Failed to intercept stream #" + streamIndex + ": " + t.getMessage());
++            }
++        }
++
++        if (!devSurfaces.isEmpty()) {
++            sRealSurfaces.put(device, devSurfaces);
++            sDummyTextures.put(device, devDummies);
++            sSurfaceSizes.put(device, devSizes);
++            Log.i(TAG, "Device " + device.getId() + " total intercepted streams: " + devSurfaces.size());
++        }
++    }
++
++    public static void filterRequest(CaptureRequest request) {
++        filterRequest(request, true);
++    }
++
++    public static void filterRequest(CaptureRequest request, boolean repeating) {
++        if (request == null || sRealToDummy.isEmpty()) return;
++        try {
++            Field f = CaptureRequest.class.getDeclaredField("mSurfaceSet");
++            f.setAccessible(true);
++            ArraySet<Surface> set = (ArraySet<Surface>) f.get(request);
++            if (set != null) {
++                long now = System.currentTimeMillis();
++                Set<Surface> matchedReal = new HashSet<>();
++
++                for (Map.Entry<Surface, Surface> entry : sRealToDummy.entrySet()) {
++                    Surface real = entry.getKey();
++                    Surface dummy = entry.getValue();
++                    if (set.contains(real) || set.contains(dummy)) {
++                        matchedReal.add(real);
++                        if (set.contains(real)) {
++                            set.remove(real);
++                            set.add(dummy);
++                        }
++                    }
++                }
++
++                if (repeating) {
++                    if (!matchedReal.isEmpty()) {
++                        for (List<Surface> devList : sRealSurfaces.values()) {
++                            if (devList != null) {
++                                for (Surface s : matchedReal) {
++                                    if (devList.contains(s)) {
++                                        sRepeatingSurfaces.removeAll(devList);
++                                        break;
++                                    }
++                                }
++                            }
++                        }
++                        sRepeatingSurfaces.addAll(matchedReal);
++                    }
++                } else {
++                    for (Surface s : matchedReal) {
++                        sOneShotSurfaces.put(s, now);
++                    }
++                }
++            }
++        } catch (Throwable ignored) {}
++    }
++
++    public static boolean isSurfaceActive(Surface surface) {
++        if (surface == null) return false;
++
++        // 1. Neu chi co <= 1 stream thi luon luon active (Zalo, Telegram, v.v.)
++        if (sRealToDummy.size() <= 1) return true;
++
++        // 2. Neu nam trong repeating request (Preview hoac Video recording dang chay) -> LUON ACTIVE
++        if (sRepeatingSurfaces.contains(surface)) return true;
++
++        // 3. Neu nam trong single capture gan day (chup anh tinh) -> ACTIVE trong 3 giay
++        Long oneShot = sOneShotSurfaces.get(surface);
++        if (oneShot != null && (System.currentTimeMillis() - oneShot) < 3000) return true;
++
++        // 4. Fallback khi moi khoi dong chua nhan repeating request
++        if (sRepeatingSurfaces.isEmpty()) {
++            for (List<Surface> list : sRealSurfaces.values()) {
++                if (list != null && !list.isEmpty() && surface.equals(list.get(0))) {
++                    return true;
++                }
++            }
++        }
++
++        return false;
++    }
++
++    public static List<Surface> getRealSurfaces(CameraDevice device) {
++        List<Surface> list = sRealSurfaces.get(device);
++        return list != null ? list : Collections.<Surface>emptyList();
++    }
++
++    public static List<int[]> getSurfaceSizes(CameraDevice device) {
++        List<int[]> list = sSurfaceSizes.get(device);
++        return list != null ? list : Collections.<int[]>emptyList();
++    }
++
++    public static void cleanupDevice(CameraDevice device) {
++        if (device == null) return;
++        List<Surface> realList = sRealSurfaces.remove(device);
++        if (realList != null) {
++            for (Surface real : realList) {
++                sRealToDummy.remove(real);
++                sRepeatingSurfaces.remove(real);
++                sOneShotSurfaces.remove(real);
++            }
++        }
++
++        List<SurfaceTexture> dummyList = sDummyTextures.remove(device);
++        if (dummyList != null) {
++            for (SurfaceTexture tex : dummyList) {
++                try {
++                    tex.release();
++                } catch (Throwable ignored) {}
++            }
++        }
++        sSurfaceSizes.remove(device);
 +    }
 +}
 diff --git a/core/java/android/hardware/camera2/impl/VcamRenderer.java b/core/java/android/hardware/camera2/impl/VcamRenderer.java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamRenderer.java
-@@ -0,0 +1,317 @@
+@@ -0,0 +1,389 @@
 +package android.hardware.camera2.impl;
 +
 +import android.graphics.Color;
@@ -588,23 +1407,37 @@ new file mode 100644
 +import android.opengl.Matrix;
 +import android.util.Log;
 +import android.view.Surface;
-+
 +import java.nio.ByteBuffer;
 +import java.nio.ByteOrder;
 +import java.nio.FloatBuffer;
++import java.util.ArrayList;
++import java.util.List;
 +
 +public class VcamRenderer {
-+    private static final String TAG = "VCAM_RENDER";
++    private static final String TAG = "VCAM-Renderer";
++
++    public static class RenderTarget {
++        public final Surface surface;
++        public final EGLSurface eglSurface;
++        public final int width;
++        public final int height;
++        public RenderTarget(Surface s, EGLSurface e, int w, int h) {
++            this.surface = s;
++            this.eglSurface = e;
++            this.width = w;
++            this.height = h;
++        }
++    }
 +
 +    private static final String VERTEX_SHADER =
++        "attribute vec4 aPosition;\n" +
++        "attribute vec2 aTextureCoord;\n" +
++        "varying vec2 vTextureCoord;\n" +
 +        "uniform mat4 uMVPMatrix;\n" +
 +        "uniform mat4 uSTMatrix;\n" +
-+        "attribute vec4 aPosition;\n" +
-+        "attribute vec4 aTextureCoord;\n" +
-+        "varying vec2 vTextureCoord;\n" +
 +        "void main() {\n" +
 +        "  gl_Position = uMVPMatrix * aPosition;\n" +
-+        "  vTextureCoord = (uSTMatrix * aTextureCoord).xy;\n" +
++        "  vTextureCoord = (uSTMatrix * vec4(aTextureCoord, 0.0, 1.0)).xy;\n" +
 +        "}\n";
 +
 +    private static final String FRAGMENT_SHADER =
@@ -641,7 +1474,7 @@ new file mode 100644
 +
 +    private EGLDisplay mEGLDisplay = EGL14.EGL_NO_DISPLAY;
 +    private EGLContext mEGLContext = EGL14.EGL_NO_CONTEXT;
-+    private EGLSurface mEGLSurface = EGL14.EGL_NO_SURFACE;
++    private final List<RenderTarget> mTargets = new ArrayList<>();
 +
 +    private int mProgram = 0;
 +    private int mTextureId = 0;
@@ -670,8 +1503,8 @@ new file mode 100644
 +        Matrix.setIdentityM(mMVPMatrix, 0);
 +    }
 +
-+    public boolean init(Surface targetSurface, int width, int height) {
-+        if (targetSurface == null || !targetSurface.isValid()) {
++    public boolean init(List<Surface> targetSurfaces, List<int[]> sizes) {
++        if (targetSurfaces == null || targetSurfaces.isEmpty()) {
 +            return false;
 +        }
 +
@@ -715,16 +1548,50 @@ new file mode 100644
 +            }
 +
 +            int[] surfaceAttribs = { EGL14.EGL_NONE };
-+            mEGLSurface = EGL14.eglCreateWindowSurface(mEGLDisplay, configs[0], targetSurface, surfaceAttribs, 0);
-+            if (mEGLSurface == EGL14.EGL_NO_SURFACE) {
-+                Log.e(TAG, "failed to create EGL window surface");
++            mTargets.clear();
++
++            for (int i = 0; i < targetSurfaces.size(); i++) {
++                Surface s = targetSurfaces.get(i);
++                if (s != null && s.isValid()) {
++                    int w = 1280;
++                    int h = 720;
++                    if (sizes != null && i < sizes.size() && sizes.get(i) != null) {
++                        w = sizes.get(i)[0];
++                        h = sizes.get(i)[1];
++                    }
++                    try {
++                        EGLSurface eglSurf = EGL14.eglCreateWindowSurface(mEGLDisplay, configs[0], s, surfaceAttribs, 0);
++                        if (eglSurf != null && eglSurf != EGL14.EGL_NO_SURFACE) {
++                            int[] queryW = new int[1];
++                            int[] queryH = new int[1];
++                            EGL14.eglQuerySurface(mEGLDisplay, eglSurf, EGL14.EGL_WIDTH, queryW, 0);
++                            EGL14.eglQuerySurface(mEGLDisplay, eglSurf, EGL14.EGL_HEIGHT, queryH, 0);
++                            if (queryW[0] > 0) w = queryW[0];
++                            if (queryH[0] > 0) h = queryH[0];
++
++                            mTargets.add(new RenderTarget(s, eglSurf, w, h));
++                            Log.i(TAG, "Multi-target EGL Surface #" + (i+1) + " created (" + w + "x" + h + ")");
++                        }
++                    } catch (Throwable t) {
++                        Log.e(TAG, "Failed creating EGL surface #" + (i+1) + ": " + t.getMessage());
++                    }
++                }
++            }
++
++            if (mTargets.isEmpty()) {
++                Log.e(TAG, "No valid EGL window surfaces could be created");
 +                return false;
 +            }
 +
-+            if (!EGL14.eglMakeCurrent(mEGLDisplay, mEGLSurface, mEGLSurface, mEGLContext)) {
++            // Make current on the first surface
++            RenderTarget first = mTargets.get(0);
++            if (!EGL14.eglMakeCurrent(mEGLDisplay, first.eglSurface, first.eglSurface, mEGLContext)) {
 +                Log.e(TAG, "failed to eglMakeCurrent");
 +                return false;
 +            }
++            try {
++                EGL14.eglSwapInterval(mEGLDisplay, 0);
++            } catch (Throwable ignored) {}
 +
 +            // Tạo external OES texture
 +            int[] textures = new int[1];
@@ -749,10 +1616,10 @@ new file mode 100644
 +            muFlashColorHandle = GLES20.glGetUniformLocation(mProgram, "uFlashColor");
 +
 +            mSurfaceTexture = new SurfaceTexture(mTextureId);
-+            mSurfaceTexture.setDefaultBufferSize(width > 0 ? width : 1280, height > 0 ? height : 720);
++            mSurfaceTexture.setDefaultBufferSize(first.width > 0 ? first.width : 1280, first.height > 0 ? first.height : 720);
 +            mInputSurface = new Surface(mSurfaceTexture);
 +            mInitialized = true;
-+            Log.i(TAG, "VcamRenderer EGL GLES20 initialized successfully (" + width + "x" + height + ")");
++            Log.i(TAG, "VcamRenderer EGL GLES20 initialized successfully with " + mTargets.size() + " render targets!");
 +            return true;
 +        } catch (Throwable t) {
 +            Log.e(TAG, "init failed: " + t);
@@ -770,59 +1637,81 @@ new file mode 100644
 +    }
 +
 +    public void renderFrame() {
-+        if (!mInitialized || mSurfaceTexture == null) return;
++        if (!mInitialized || mSurfaceTexture == null || mTargets.isEmpty()) return;
 +        try {
 +            mSurfaceTexture.updateTexImage();
 +            mSurfaceTexture.getTransformMatrix(mSTMatrix);
-+
-+            float zoom = VcamConfig.getZoomScale(); // Giới hạn [1.0x -> 4.0x]
++            int rotation = VcamConfig.getRotation();
++            float zoom = VcamConfig.getZoomScale();
 +            float panX = VcamConfig.getPanX();
 +            float panY = VcamConfig.getPanY();
 +
-+            // Khóa biên an toàn tuyệt đối: Không bao giờ lộ camera thật hoặc viền đen!
-+            // Khi zoom = 1.0x, maxPan = 0 (khóa chặt ở khung viền gốc).
-+            // Khi zoom > 1.0x, cho phép di chuyển trong phần đã phóng to.
 +            float maxPan = (zoom - 1.0f) / (2.0f * zoom);
 +            if (panX > maxPan) panX = maxPan;
 +            if (panX < -maxPan) panX = -maxPan;
 +            if (panY > maxPan) panY = maxPan;
 +            if (panY < -maxPan) panY = -maxPan;
 +
-+            // Biến đổi ma trận Texture STMatrix để thực hiện Zoom và Pan
 +            Matrix.translateM(mSTMatrix, 0, 0.5f - panX, 0.5f - panY, 0.0f);
++            if (rotation != 0) {
++                Matrix.rotateM(mSTMatrix, 0, rotation, 0.0f, 0.0f, 1.0f);
++            }
 +            Matrix.scaleM(mSTMatrix, 0, 1.0f / zoom, 1.0f / zoom, 1.0f);
 +            Matrix.translateM(mSTMatrix, 0, -0.5f, -0.5f, 0.0f);
 +
-+            GLES20.glUseProgram(mProgram);
-+
-+            GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-+            GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, mTextureId);
-+
-+            mVertexBuffer.position(0);
-+            GLES20.glVertexAttribPointer(maPositionHandle, 3, GLES20.GL_FLOAT, false, 12, mVertexBuffer);
-+            GLES20.glEnableVertexAttribArray(maPositionHandle);
-+
-+            mTexCoordBuffer.position(0);
-+            GLES20.glVertexAttribPointer(maTextureHandle, 2, GLES20.GL_FLOAT, false, 8, mTexCoordBuffer);
-+            GLES20.glEnableVertexAttribArray(maTextureHandle);
-+
-+            GLES20.glUniformMatrix4fv(muMVPMatrixHandle, 1, false, mMVPMatrix, 0);
-+            GLES20.glUniformMatrix4fv(muSTMatrixHandle, 1, false, mSTMatrix, 0);
-+
-+            // Đồng bộ ánh sáng phản xạ Flash KYC
 +            int flashColor = VcamColorSync.getFlashColor();
 +            float flashIntensity = VcamColorSync.getFlashIntensity();
-+            if (flashColor != Color.TRANSPARENT && flashIntensity > 0.0f) {
-+                float r = Color.red(flashColor) / 255.0f;
-+                float g = Color.green(flashColor) / 255.0f;
-+                float b = Color.blue(flashColor) / 255.0f;
-+                GLES20.glUniform4f(muFlashColorHandle, r, g, b, flashIntensity);
-+            } else {
-+                GLES20.glUniform4f(muFlashColorHandle, 0.0f, 0.0f, 0.0f, 0.0f);
-+            }
 +
-+            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-+            EGL14.eglSwapBuffers(mEGLDisplay, mEGLSurface);
++            for (RenderTarget target : mTargets) {
++                if (!target.surface.isValid()) continue;
++                if (!VcamMultiStreamManager.isSurfaceActive(target.surface)) {
++                    continue;
++                }
++                try {
++                    if (EGL14.eglMakeCurrent(mEGLDisplay, target.eglSurface, target.eglSurface, mEGLContext)) {
++                        try {
++                            EGL14.eglSwapInterval(mEGLDisplay, 0);
++                        } catch (Throwable ignored) {}
++                        int[] queryW = new int[1];
++                        int[] queryH = new int[1];
++                        EGL14.eglQuerySurface(mEGLDisplay, target.eglSurface, EGL14.EGL_WIDTH, queryW, 0);
++                        EGL14.eglQuerySurface(mEGLDisplay, target.eglSurface, EGL14.EGL_HEIGHT, queryH, 0);
++                        int vpW = queryW[0] > 0 ? queryW[0] : target.width;
++                        int vpH = queryH[0] > 0 ? queryH[0] : target.height;
++                        GLES20.glViewport(0, 0, vpW, vpH);
++
++                        GLES20.glUseProgram(mProgram);
++
++                        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
++                        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, mTextureId);
++
++                        mVertexBuffer.position(0);
++                        GLES20.glVertexAttribPointer(maPositionHandle, 3, GLES20.GL_FLOAT, false, 12, mVertexBuffer);
++                        GLES20.glEnableVertexAttribArray(maPositionHandle);
++
++                        mTexCoordBuffer.position(0);
++                        GLES20.glVertexAttribPointer(maTextureHandle, 2, GLES20.GL_FLOAT, false, 8, mTexCoordBuffer);
++                        GLES20.glEnableVertexAttribArray(maTextureHandle);
++
++                        GLES20.glUniformMatrix4fv(muMVPMatrixHandle, 1, false, mMVPMatrix, 0);
++                        GLES20.glUniformMatrix4fv(muSTMatrixHandle, 1, false, mSTMatrix, 0);
++
++                        if (flashColor != Color.TRANSPARENT && flashIntensity > 0.0f) {
++                            float r = Color.red(flashColor) / 255.0f;
++                            float g = Color.green(flashColor) / 255.0f;
++                            float b = Color.blue(flashColor) / 255.0f;
++                            GLES20.glUniform4f(muFlashColorHandle, r, g, b, flashIntensity);
++                        } else {
++                            GLES20.glUniform4f(muFlashColorHandle, 0.0f, 0.0f, 0.0f, 0.0f);
++                        }
++
++                        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
++                        EGL14.eglSwapBuffers(mEGLDisplay, target.eglSurface);
++                    }
++                } catch (Throwable t) {
++                    Log.e(TAG, "renderFrame error on target: " + t.getMessage());
++                }
++            }
 +        } catch (Throwable t) {
 +            Log.e(TAG, "renderFrame error: " + t);
 +        }
@@ -840,10 +1729,12 @@ new file mode 100644
 +        }
 +        if (mEGLDisplay != EGL14.EGL_NO_DISPLAY) {
 +            EGL14.eglMakeCurrent(mEGLDisplay, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT);
-+            if (mEGLSurface != EGL14.EGL_NO_SURFACE) {
-+                EGL14.eglDestroySurface(mEGLDisplay, mEGLSurface);
-+                mEGLSurface = EGL14.EGL_NO_SURFACE;
++            for (RenderTarget target : mTargets) {
++                if (target.eglSurface != EGL14.EGL_NO_SURFACE) {
++                    try { EGL14.eglDestroySurface(mEGLDisplay, target.eglSurface); } catch (Throwable ignored) {}
++                }
 +            }
++            mTargets.clear();
 +            if (mEGLContext != EGL14.EGL_NO_CONTEXT) {
 +                EGL14.eglDestroyContext(mEGLDisplay, mEGLContext);
 +                mEGLContext = EGL14.EGL_NO_CONTEXT;
@@ -895,61 +1786,346 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamColorSync.java b/core/j
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamColorSync.java
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,115 @@
 +package android.hardware.camera2.impl;
 +
 +import android.graphics.Color;
-+import android.util.Log;
++import java.io.BufferedReader;
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.InputStreamReader;
 +
 +public class VcamColorSync {
-+    private static final String TAG = "VCAM_COLOR";
-+    private static long sLastCheck = 0;
-+    private static int sTargetColor = Color.TRANSPARENT;
-+    private static float sTargetIntensity = 0.0f;
++    private static final String[] SEARCH_DIRS = new String[] {
++        "/data/local/tmp/",
++        "/sdcard/",
++        "/storage/emulated/0/"
++    };
++
++    private static final String[] FLASH_FLAGS = new String[] {
++        "vcam_kyc_flash",
++        "vcam_color_sync"
++    };
++
++    private static final String VAL_FILE = "vcam_color_val";
++
++    // Auto flash color palette: White, Cyan/Blue, Green, Red, Yellow, Magenta
++    private static final int[] AUTO_COLORS = new int[] {
++        0xFFFFFFFF, // White
++        0xFF00E5FF, // Cyan / Blue
++        0xFF00E676, // Green
++        0xFFFF1744, // Red
++        0xFFFFEA00, // Yellow
++        0xFFE040FB  // Magenta
++    };
++
++    private static volatile int sLastColor = Color.TRANSPARENT;
++    private static volatile float sLastIntensity = 0.0f;
++    private static volatile long sLastCheckTime = 0;
++    private static volatile String sCachedVal = "";
++    private static volatile boolean sCachedActive = false;
 +
 +    public static int getFlashColor() {
-+        if (!VcamConfig.isKycFlashEnabled()) {
-+            return Color.TRANSPARENT;
-+        }
-+
-+        long now = System.currentTimeMillis();
-+        if (now - sLastCheck > 80) {
-+            sLastCheck = now;
-+            updateFlashColor();
-+        }
-+        return sTargetColor;
++        checkColorSyncState();
++        return sLastColor;
 +    }
 +
 +    public static float getFlashIntensity() {
-+        if (!VcamConfig.isKycFlashEnabled()) return 0.0f;
-+        return sTargetIntensity;
++        checkColorSyncState();
++        return sLastIntensity;
 +    }
 +
-+    private static void updateFlashColor() {
-+        String hex = VcamConfig.readFileString(VcamConfig.FLASH_COLOR_FILE);
-+        if (!hex.isEmpty()) {
-+            try {
-+                sTargetColor = Color.parseColor(hex.trim());
-+                sTargetIntensity = 0.20f;
-+                return;
-+            } catch (Throwable ignored) {}
++    private static boolean isFlashActive() {
++        for (String flag : FLASH_FLAGS) {
++            if (VcamConfig.isFlagActive(flag)) {
++                return true;
++            }
++        }
++        return false;
++    }
++
++    private static void checkColorSyncState() {
++        long now = System.currentTimeMillis();
++        if (now - sLastCheckTime > 100) {
++            sLastCheckTime = now;
++            sCachedActive = isFlashActive();
++            if (sCachedActive) {
++                sCachedVal = readColorVal();
++            } else {
++                sCachedVal = "";
++            }
 +        }
 +
-+        // Tự động mô phỏng chu kỳ ánh sáng chớp KYC: Trắng -> Xanh dương -> Xanh lá -> Vàng -> Đỏ
-+        long cycle = (System.currentTimeMillis() / 350) % 5;
-+        if (cycle == 0) sTargetColor = Color.rgb(255, 255, 255);
-+        else if (cycle == 1) sTargetColor = Color.rgb(0, 150, 255);
-+        else if (cycle == 2) sTargetColor = Color.rgb(0, 255, 100);
-+        else if (cycle == 3) sTargetColor = Color.rgb(255, 220, 0);
-+        else sTargetColor = Color.rgb(255, 80, 80);
-+        sTargetIntensity = 0.15f;
++        if (!sCachedActive) {
++            sLastColor = Color.TRANSPARENT;
++            sLastIntensity = 0.0f;
++            return;
++        }
++
++        String val = sCachedVal;
++        if (val.isEmpty() || "auto".equalsIgnoreCase(val)) {
++            // Auto flash mode: cycle color every 700ms with sine pulse
++            long cycle = (now / 700) % AUTO_COLORS.length;
++            sLastColor = AUTO_COLORS[(int) cycle];
++            double phase = (now % 700) / 700.0 * Math.PI;
++            sLastIntensity = (float) (0.22 + 0.25 * Math.sin(phase));
++        } else {
++            try {
++                String[] parts = val.split(",");
++                sLastColor = Color.parseColor(parts[0].trim());
++                if (parts.length >= 2) {
++                    sLastIntensity = Float.parseFloat(parts[1].trim());
++                } else {
++                    sLastIntensity = 0.35f;
++                }
++            } catch (Throwable t) {
++                sLastColor = Color.WHITE;
++                sLastIntensity = 0.35f;
++            }
++        }
++    }
++
++    private static String readColorVal() {
++        for (String dir : SEARCH_DIRS) {
++            File f = new File(dir + VAL_FILE);
++            if (f.exists() && f.canRead()) {
++                try {
++                    BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f)));
++                    String line = br.readLine();
++                    br.close();
++                    if (line != null && !line.trim().isEmpty()) {
++                        return line.trim();
++                    }
++                } catch (Throwable ignored) {}
++            }
++        }
++        return "auto";
++    }
++}
+diff --git a/core/java/android/hardware/camera2/impl/VcamCamera1Engine.java b/core/java/android/hardware/camera2/impl/VcamCamera1Engine.java
+new file mode 100644
+--- /dev/null
++++ b/core/java/android/hardware/camera2/impl/VcamCamera1Engine.java
+@@ -0,0 +1,214 @@
++package android.hardware.camera2.impl;
++
++import android.hardware.Camera;
++import android.media.MediaCodec;
++import android.media.MediaExtractor;
++import android.media.MediaFormat;
++import android.util.Log;
++import android.view.Surface;
++import java.io.File;
++import java.nio.ByteBuffer;
++import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
++
++public class VcamCamera1Engine {
++    private static final String TAG = "VcamCamera1Engine";
++
++    public static class Camera1Player implements Runnable {
++        final File file;
++        final Surface surface;
++        final int targetWidth;
++        final int targetHeight;
++        volatile boolean running = true;
++        Thread thread;
++
++        public Camera1Player(File file, Surface surface, int width, int height) {
++            this.file = file;
++            this.surface = surface;
++            this.targetWidth = width > 0 ? width : 1280;
++            this.targetHeight = height > 0 ? height : 720;
++        }
++
++        public void start() {
++            thread = new Thread(this, "VCAM-Camera1Decoder");
++            thread.start();
++        }
++
++        public void stop() {
++            running = false;
++            if (thread != null) {
++                thread.interrupt();
++            }
++        }
++
++        @Override
++        public void run() {
++            Log.i(TAG, "Camera1 MediaCodec decoder thread started for: " + file.getAbsolutePath() +
++                       " (" + targetWidth + "x" + targetHeight + ")");
++            while (running && surface != null && surface.isValid()) {
++                MediaExtractor extractor = null;
++                MediaCodec decoder = null;
++                try {
++                    extractor = new MediaExtractor();
++                    extractor.setDataSource(file.getAbsolutePath());
++
++                    int videoTrackIndex = -1;
++                    MediaFormat format = null;
++                    int numTracks = extractor.getTrackCount();
++                    for (int i = 0; i < numTracks; i++) {
++                        MediaFormat mf = extractor.getTrackFormat(i);
++                        String mime = mf.getString(MediaFormat.KEY_MIME);
++                        if (mime != null && mime.startsWith("video/")) {
++                            videoTrackIndex = i;
++                            format = mf;
++                            break;
++                        }
++                    }
++
++                    if (videoTrackIndex < 0 || format == null) {
++                        Log.e(TAG, "No video track found in " + file.getAbsolutePath());
++                        return;
++                    }
++
++                    extractor.selectTrack(videoTrackIndex);
++                    String mime = format.getString(MediaFormat.KEY_MIME);
++                    decoder = MediaCodec.createDecoderByType(mime);
++                    decoder.configure(format, surface, null, 0);
++                    decoder.start();
++
++                    int fps = 30;
++                    if (format.containsKey(MediaFormat.KEY_FRAME_RATE)) {
++                        try {
++                            fps = format.getInteger(MediaFormat.KEY_FRAME_RATE);
++                            if (fps <= 0 || fps > 60) fps = 30;
++                        } catch (Throwable ignored) {}
++                    }
++                    long frameDelayMs = 1000 / fps;
++
++                    MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
++                    long nextFrameTimeMs = System.currentTimeMillis();
++                    long lastRewindTs = VcamConfig.getRewindTimestamp();
++
++                    while (running && surface.isValid()) {
++                        long curRewindTs = VcamConfig.getRewindTimestamp();
++                        if (curRewindTs > lastRewindTs) {
++                            lastRewindTs = curRewindTs;
++                            try {
++                                extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC);
++                                decoder.flush();
++                                nextFrameTimeMs = System.currentTimeMillis();
++                                Log.i(TAG, "Camera1 Video rewound to 00:00 (ts=" + curRewindTs + ")");
++                            } catch (Throwable t) {
++                                Log.w(TAG, "Camera1 Video rewind error: " + t);
++                            }
++                        }
++
++                        if (VcamConfig.isPaused()) {
++                            try {
++                                Thread.sleep(40);
++                            } catch (InterruptedException ignored) {
++                                break;
++                            }
++                            continue;
++                        }
++
++                        int inIdx = decoder.dequeueInputBuffer(10000);
++                        if (inIdx >= 0) {
++                            ByteBuffer inputBuffer = decoder.getInputBuffer(inIdx);
++                            if (inputBuffer != null) {
++                                int sampleSize = extractor.readSampleData(inputBuffer, 0);
++                                if (sampleSize < 0) {
++                                    extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC);
++                                    sampleSize = extractor.readSampleData(inputBuffer, 0);
++                                }
++                                if (sampleSize > 0) {
++                                    decoder.queueInputBuffer(inIdx, 0, sampleSize, extractor.getSampleTime(), 0);
++                                    extractor.advance();
++                                } else {
++                                    decoder.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
++                                }
++                            }
++                        }
++
++                        int outIdx = decoder.dequeueOutputBuffer(info, 10000);
++                        if (outIdx >= 0) {
++                            long now = System.currentTimeMillis();
++                            if (now < nextFrameTimeMs) {
++                                try {
++                                    Thread.sleep(nextFrameTimeMs - now);
++                                } catch (InterruptedException ignored) {
++                                    break;
++                                }
++                            }
++                            nextFrameTimeMs = System.currentTimeMillis() + frameDelayMs;
++
++                            try {
++                                decoder.releaseOutputBuffer(outIdx, true);
++                            } catch (Throwable e) {
++                                Log.w(TAG, "releaseOutputBuffer dropped frame: " + e.getMessage());
++                            }
++                        }
++                    }
++                } catch (Throwable t) {
++                    if (running) {
++                        Log.e(TAG, "Camera1 MediaCodec playback loop error: " + t.getMessage(), t);
++                    }
++                } finally {
++                    if (decoder != null) {
++                        try {
++                            decoder.stop();
++                            decoder.release();
++                        } catch (Throwable ignored) {}
++                    }
++                    if (extractor != null) {
++                        try {
++                            extractor.release();
++                        } catch (Throwable ignored) {}
++                    }
++                    if (running) {
++                        try {
++                            Thread.sleep(50);
++                        } catch (InterruptedException ignored) {
++                            break;
++                        }
++                    }
++                }
++            }
++            Log.i(TAG, "Camera1 MediaCodec decoder thread stopped.");
++        }
++    }
++
++    private static final Map<Camera, Camera1Player> sPlayers = new ConcurrentHashMap<>();
++
++    public static void startPreview(Camera camera, Surface surface, int width, int height) {
++        try {
++            if (!VcamLicenseVerifier.isLicenseActive()) return;
++            if (VcamConfig.isVcamDisabled()) return;
++
++            final File videoFile = VcamConfig.getActiveVideoFile();
++            if (videoFile == null || surface == null || !surface.isValid()) return;
++
++            stopPreview(camera);
++
++            Camera1Player player = new Camera1Player(videoFile, surface, width, height);
++            sPlayers.put(camera, player);
++            player.start();
++            Log.i(TAG, "Started Vcam Camera1Player for camera: " + camera);
++        } catch (Throwable t) {
++            Log.e(TAG, "startPreview error: " + t);
++        }
++    }
++
++    public static void stopPreview(Camera camera) {
++        if (camera == null) return;
++        Camera1Player player = sPlayers.remove(camera);
++        if (player != null) {
++            player.stop();
++            Log.i(TAG, "Stopped Vcam Camera1Player for camera: " + camera);
++        }
++    }
++
++    public static void release(Camera camera) {
++        stopPreview(camera);
 +    }
 +}
 diff --git a/media/java/android/media/VcamAudioEngine.java b/media/java/android/media/VcamAudioEngine.java
 new file mode 100644
 --- /dev/null
 +++ b/media/java/android/media/VcamAudioEngine.java
-@@ -0,0 +1,376 @@
+@@ -0,0 +1,579 @@
 +package android.media;
 +
 +import android.util.Log;
@@ -957,12 +2133,12 @@ new file mode 100644
 +import java.io.RandomAccessFile;
 +import java.nio.ByteBuffer;
 +import java.nio.ByteOrder;
++import java.nio.ShortBuffer;
 +import java.util.Map;
 +import java.util.concurrent.ConcurrentHashMap;
 +
 +public class VcamAudioEngine {
 +    private static final String TAG = "VCAM_AUDIO";
-+    private static final String DISABLE_FLAG = "/sdcard/vcam_mic_disable";
 +    private static final String[] AUDIO_PATHS = new String[] {
 +        "/data/local/tmp/vcam.wav",
 +        "/data/local/tmp/vcam.pcm",
@@ -974,12 +2150,102 @@ new file mode 100644
 +    private static float sBoostFactor = 1.0f;
 +    private static long sLastBoostCheckTime = 0;
 +
++    private static boolean isFileFlagActive(String path) {
++        File f = new File(path);
++        if (!f.exists()) return false;
++        if (f.length() == 0) return true;
++        try {
++            RandomAccessFile raf = new RandomAccessFile(f, "r");
++            byte[] b = new byte[8];
++            int n = raf.read(b);
++            raf.close();
++            if (n > 0) {
++                String s = new String(b, 0, n).trim();
++                if ("0".equals(s)) return false;
++            }
++        } catch (Throwable ignored) {}
++        return true;
++    }
++
++    private static boolean isAudioDisabled() {
++        if (isFileFlagActive("/data/local/tmp/vcam_disable") || isFileFlagActive("/sdcard/vcam_disable")) {
++            return true;
++        }
++        if (isFileFlagActive("/data/local/tmp/vcam_mic_disable") || isFileFlagActive("/sdcard/vcam_mic_disable")) {
++            return true;
++        }
++        return false;
++    }
++
++    private static boolean isAudioMix() {
++        return isFileFlagActive("/data/local/tmp/vcam_mic_mix") || isFileFlagActive("/sdcard/vcam_mic_mix");
++    }
++
++    private static boolean isAudioPaused() {
++        return isFileFlagActive("/data/local/tmp/vcam_pause") || isFileFlagActive("/sdcard/vcam_pause");
++    }
++
++    private static volatile long sLastResetTimestamp = 0;
++    private static volatile long sLastResetCheckTime = 0;
++
++    private static void checkReset(AudioSession session) {
++        long now = System.currentTimeMillis();
++        if (now - sLastResetCheckTime > 150) {
++            sLastResetCheckTime = now;
++            long resetTs = readResetTimestamp();
++            if (resetTs > sLastResetTimestamp) {
++                sLastResetTimestamp = resetTs;
++                if (session != null) {
++                    try {
++                        synchronized (session) {
++                            session.raf.seek(session.dataOffset);
++                        }
++                        Log.i(TAG, "Virtual audio rewound to 00:00 (ts=" + resetTs + ")");
++                    } catch (Throwable t) {
++                        Log.w(TAG, "Virtual audio rewind error: " + t);
++                    }
++                }
++            }
++        }
++    }
++
++    private static long readResetTimestamp() {
++        for (String p : new String[]{"/data/local/tmp/vcam_reset", "/sdcard/vcam_reset"}) {
++            File f = new File(p);
++            if (f.exists() && f.length() > 0) {
++                try {
++                    RandomAccessFile raf = new RandomAccessFile(f, "r");
++                    byte[] b = new byte[32];
++                    int n = raf.read(b);
++                    raf.close();
++                    if (n > 0) {
++                        return Long.parseLong(new String(b, 0, n).trim());
++                    }
++                } catch (Throwable ignored) {}
++            }
++        }
++        return 0;
++    }
++
++    private static final String[] BOOST_PATHS = new String[] {
++        "/data/local/tmp/vcam_mic_boost",
++        "/sdcard/vcam_mic_boost",
++        "/storage/emulated/0/vcam_mic_boost"
++    };
++
 +    private static float getBoostFactor() {
 +        long now = System.currentTimeMillis();
-+        if (now - sLastBoostCheckTime > 2000) {
++        if (now - sLastBoostCheckTime > 500) {
 +            sLastBoostCheckTime = now;
-+            File f = new File("/sdcard/vcam_mic_boost");
-+            if (f.exists()) {
++            File f = null;
++            for (String p : BOOST_PATHS) {
++                File test = new File(p);
++                if (test.exists() && test.length() > 0) {
++                    f = test;
++                    break;
++                }
++            }
++            if (f != null) {
 +                try {
 +                    byte[] b = new byte[32];
 +                    RandomAccessFile raf = new RandomAccessFile(f, "r");
@@ -987,7 +2253,8 @@ new file mode 100644
 +                    raf.close();
 +                    if (n > 0) {
 +                        String s = new String(b, 0, n).trim();
-+                        sBoostFactor = Float.parseFloat(s);
++                        float val = Float.parseFloat(s);
++                        sBoostFactor = (val > 0.05f) ? val : 1.0f;
 +                    } else {
 +                        sBoostFactor = 3.0f;
 +                    }
@@ -1091,6 +2358,7 @@ new file mode 100644
 +        }
 +
 +        synchronized byte[] getSamples(int targetBytes, int targetChannels, int targetSampleRate, String caller) {
++            checkReset(this);
 +            long now = System.currentTimeMillis();
 +            if (now - lastLogTime > 3000) {
 +                lastLogTime = now;
@@ -1152,7 +2420,13 @@ new file mode 100644
 +    private static final Map<AudioRecord, AudioSession> sSessions = new ConcurrentHashMap<>();
 +
 +    private static AudioSession getSession(AudioRecord record) {
-+        if (new File(DISABLE_FLAG).exists()) {
++        if (isAudioDisabled()) {
++            if (!sSessions.isEmpty()) {
++                for (AudioSession s : sSessions.values()) {
++                    try { s.raf.close(); } catch (Throwable ignored) {}
++                }
++                sSessions.clear();
++            }
 +            return null;
 +        }
 +        File audioFile = null;
@@ -1225,6 +2499,23 @@ new file mode 100644
 +                float boost = getBoostFactor();
 +                if (boost > 1.01f) {
 +                    processPhysicalMicBytes(record, audioData, offsetInBytes, sizeInBytes, boost);
++                    long nowLog = System.currentTimeMillis();
++                    if (nowLog - sLastRealMicLogTime > 5000) {
++                        sLastRealMicLogTime = nowLog;
++                        Log.i(TAG, "Boosted physical mic (bytes) by x" + boost);
++                    }
++                }
++                return;
++            }
++
++            if (isAudioPaused()) {
++                if (isAudioMix()) {
++                    float boost = getBoostFactor();
++                    if (boost > 1.01f) {
++                        processPhysicalMicBytes(record, audioData, offsetInBytes, sizeInBytes, boost);
++                    }
++                } else {
++                    java.util.Arrays.fill(audioData, offsetInBytes, offsetInBytes + sizeInBytes, (byte) 0);
 +                }
 +                return;
 +            }
@@ -1235,14 +2526,16 @@ new file mode 100644
 +            if (pcm == null) return;
 +
 +            // Kiểm tra nếu bật chế độ Trộn âm thanh (vcam_mic_mix)
-+            if (new File("/sdcard/vcam_mic_mix").exists()) {
++            if (isAudioMix()) {
++                float boost = getBoostFactor();
 +                int samples = sizeInBytes / 2;
 +                for (int i = 0; i < samples; i++) {
 +                    int idx = offsetInBytes + i * 2;
 +                    if (idx + 1 >= audioData.length || i * 2 + 1 >= pcm.length) break;
 +                    short mic = (short) ((audioData[idx] & 0xFF) | (audioData[idx + 1] << 8));
 +                    short wav = (short) ((pcm[i * 2] & 0xFF) | (pcm[i * 2 + 1] << 8));
-+                    int mixed = mic + wav;
++                    int micVal = (boost > 1.01f) ? (int) (mic * boost) : mic;
++                    int mixed = micVal + wav;
 +                    if (mixed > 32767) mixed = 32767;
 +                    else if (mixed < -32768) mixed = -32768;
 +                    audioData[idx] = (byte) (mixed & 0xFF);
@@ -1265,6 +2558,23 @@ new file mode 100644
 +                float boost = getBoostFactor();
 +                if (boost > 1.01f) {
 +                    processPhysicalMicShorts(record, audioData, offsetInShorts, sizeInShorts, boost);
++                    long nowLog = System.currentTimeMillis();
++                    if (nowLog - sLastRealMicLogTime > 5000) {
++                        sLastRealMicLogTime = nowLog;
++                        Log.i(TAG, "Boosted physical mic (shorts) by x" + boost);
++                    }
++                }
++                return;
++            }
++
++            if (isAudioPaused()) {
++                if (isAudioMix()) {
++                    float boost = getBoostFactor();
++                    if (boost > 1.01f) {
++                        processPhysicalMicShorts(record, audioData, offsetInShorts, sizeInShorts, boost);
++                    }
++                } else {
++                    java.util.Arrays.fill(audioData, offsetInShorts, offsetInShorts + sizeInShorts, (short) 0);
 +                }
 +                return;
 +            }
@@ -1275,7 +2585,22 @@ new file mode 100644
 +            byte[] pcm = session.getSamples(bytesNeeded, targetChannels, targetSampleRate, "replaceShorts");
 +            if (pcm == null) return;
 +
-+            ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(audioData, offsetInShorts, sizeInShorts);
++            if (isAudioMix()) {
++                float boost = getBoostFactor();
++                ShortBuffer sb = ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer();
++                for (int i = 0; i < sizeInShorts; i++) {
++                    if (!sb.hasRemaining()) break;
++                    short mic = audioData[offsetInShorts + i];
++                    short wav = sb.get();
++                    int micVal = (boost > 1.01f) ? (int) (mic * boost) : mic;
++                    int mixed = micVal + wav;
++                    if (mixed > 32767) mixed = 32767;
++                    else if (mixed < -32768) mixed = -32768;
++                    audioData[offsetInShorts + i] = (short) mixed;
++                }
++            } else {
++                ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(audioData, offsetInShorts, sizeInShorts);
++            }
 +        } catch (Throwable t) {
 +            Log.e(TAG, "replaceShorts error: " + t.getMessage(), t);
 +        }
@@ -1289,6 +2614,34 @@ new file mode 100644
 +                float boost = getBoostFactor();
 +                if (boost > 1.01f) {
 +                    processPhysicalMicBuffer(record, audioBuffer, sizeInBytes, boost);
++                    long nowLog = System.currentTimeMillis();
++                    if (nowLog - sLastRealMicLogTime > 5000) {
++                        sLastRealMicLogTime = nowLog;
++                        Log.i(TAG, "Boosted physical mic (buffer) by x" + boost);
++                    }
++                }
++                return;
++            }
++
++            if (isAudioPaused()) {
++                if (isAudioMix()) {
++                    float boost = getBoostFactor();
++                    if (boost > 1.01f) {
++                        processPhysicalMicBuffer(record, audioBuffer, sizeInBytes, boost);
++                    }
++                } else {
++                    int curPos = audioBuffer.position();
++                    int curLimit = audioBuffer.limit();
++                    try {
++                        audioBuffer.position(curPos);
++                        int end = Math.min(audioBuffer.capacity(), curPos + sizeInBytes);
++                        for (int i = curPos; i < end; i++) {
++                            audioBuffer.put(i, (byte) 0);
++                        }
++                    } finally {
++                        audioBuffer.position(curPos);
++                        audioBuffer.limit(curLimit);
++                    }
 +                }
 +                return;
 +            }
@@ -1298,17 +2651,43 @@ new file mode 100644
 +            byte[] pcm = session.getSamples(sizeInBytes, targetChannels, targetSampleRate, "replaceBuffer");
 +            if (pcm == null) return;
 +
-+            int curPos = audioBuffer.position();
-+            int curLimit = audioBuffer.limit();
-+            try {
-+                audioBuffer.position(curPos);
-+                if (audioBuffer.capacity() >= curPos + sizeInBytes) {
-+                    audioBuffer.limit(Math.max(curLimit, curPos + sizeInBytes));
++            if (isAudioMix()) {
++                float boost = getBoostFactor();
++                int curPos = audioBuffer.position();
++                int curLimit = audioBuffer.limit();
++                ByteOrder origOrder = audioBuffer.order();
++                audioBuffer.order(ByteOrder.LITTLE_ENDIAN);
++                try {
++                    int samples = sizeInBytes / 2;
++                    for (int i = 0; i < samples; i++) {
++                        int sampleIdx = curPos + i * 2;
++                        if (sampleIdx + 1 >= audioBuffer.capacity() || i * 2 + 1 >= pcm.length) break;
++                        short mic = audioBuffer.getShort(sampleIdx);
++                        short wav = (short) ((pcm[i * 2] & 0xFF) | (pcm[i * 2 + 1] << 8));
++                        int micVal = (boost > 1.01f) ? (int) (mic * boost) : mic;
++                        int mixed = micVal + wav;
++                        if (mixed > 32767) mixed = 32767;
++                        else if (mixed < -32768) mixed = -32768;
++                        audioBuffer.putShort(sampleIdx, (short) mixed);
++                    }
++                } finally {
++                    audioBuffer.position(curPos);
++                    audioBuffer.limit(curLimit);
++                    audioBuffer.order(origOrder);
 +                }
-+                audioBuffer.put(pcm, 0, sizeInBytes);
-+            } finally {
-+                audioBuffer.position(curPos);
-+                audioBuffer.limit(curLimit);
++            } else {
++                int curPos = audioBuffer.position();
++                int curLimit = audioBuffer.limit();
++                try {
++                    audioBuffer.position(curPos);
++                    if (audioBuffer.capacity() >= curPos + sizeInBytes) {
++                        audioBuffer.limit(Math.max(curLimit, curPos + sizeInBytes));
++                    }
++                    audioBuffer.put(pcm, 0, sizeInBytes);
++                } finally {
++                    audioBuffer.position(curPos);
++                    audioBuffer.limit(curLimit);
++                }
 +            }
 +        } catch (Throwable t) {
 +            Log.e(TAG, "replaceBuffer error: " + t.getMessage(), t);

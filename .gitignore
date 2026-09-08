@@ -7,3 +7,27 @@ crave.conf
 *.jar
 patch_work/
 step_build_smali.py
+scratch/
+
+# Temp test and media
+*.png
+*.log
+*.txt
+*.xml
+vcam.mp4
+vcam.wav
+vcam.lic
+test_*.js
+test_*.mjs
+extracted_script.js
+build_camera_assistant.bat
+
+# IDE and build outputs
+.idea/
+build/
+*.bak
+org.lineageos.camera.assistant/.idea/
+org.lineageos.camera.assistant/build/
+org.lineageos.camera.assistant/*.png
+org.lineageos.camera.assistant/keystore.properties
+org.lineageos.camera.assistant/release.keystore

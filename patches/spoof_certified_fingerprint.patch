@@ -1,0 +1,42 @@
+diff --git a/core/java/android/os/Build.java b/core/java/android/os/Build.java
+--- a/core/java/android/os/Build.java
++++ b/core/java/android/os/Build.java
+@@ -1170,8 +1170,8 @@ public class Build {
+ 
+     /** A string that provides information about the characteristics of the build, like "user" or "eng". */
+     public static final String TYPE = "user";
+ 
+     /** A string that provides information about the characteristics of the build, like "user" or "eng". */
+     public static final String TAGS = "release-keys";
+diff --git a/core/java/android/os/SystemProperties.java b/core/java/android/os/SystemProperties.java
+--- a/core/java/android/os/SystemProperties.java
++++ b/core/java/android/os/SystemProperties.java
+@@ -230,6 +230,29 @@ public class SystemProperties {
+     private static String spoofProperty(String key) {
+         if ("ro.boot.flash.locked".equals(key)) return "1";
+         if ("ro.boot.verifiedbootstate".equals(key)) return "green";
+         if ("ro.boot.vbmeta.device_state".equals(key)) return "locked";
+         if ("ro.boot.veritymode".equals(key)) return "enforcing";
+         if ("ro.build.tags".equals(key)) return "release-keys";
+         if ("ro.build.type".equals(key)) return "user";
++
++        boolean isCoral = "coral".equals(native_get("ro.product.device")) || "coral".equals(native_get("ro.build.product"));
++        if ("ro.build.fingerprint".equals(key) || "ro.bootimage.build.fingerprint".equals(key)
++                || "ro.system.build.fingerprint".equals(key) || "ro.vendor.build.fingerprint".equals(key)) {
++            return isCoral ? "google/coral/coral:13/TP1A.221005.002/8866180:user/release-keys"
++                           : "google/flame/flame:13/TP1A.221005.002.B2/9382335:user/release-keys";
++        }
++        if ("ro.build.id".equals(key) || "ro.build.display.id".equals(key)) {
++            return isCoral ? "TP1A.221005.002" : "TP1A.221005.002.B2";
++        }
++        if ("ro.product.brand".equals(key)) return "google";
++        if ("ro.product.manufacturer".equals(key)) return "Google";
++        if ("ro.product.model".equals(key)) {
++            return isCoral ? "Pixel 4 XL" : "Pixel 4";
++        }
++        if ("ro.build.version.security_patch".equals(key)) {
++            return "2022-10-05";
++        }
+         return null;
+     }
+

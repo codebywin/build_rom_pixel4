@@ -1,7 +1,7 @@
 diff --git a/init/property_service.cpp b/init/property_service.cpp
 --- a/init/property_service.cpp
 +++ b/init/property_service.cpp
-@@ -1180,6 +1180,15 @@ static void ExportKernelBootProps() {
+@@ -1180,6 +1180,21 @@ static void ExportKernelBootProps() {
      auto fn = [](const std::string& key, const std::string& value) {
          if (key.starts_with(androidboot_prefix)) {
              std::string prop_name = "ro.boot." + key.substr(strlen(androidboot_prefix));
@@ -23,9 +23,13 @@ diff --git a/init/property_service.cpp b/init/property_service.cpp
      ProcessBootconfig(fn);
      ProcessKernelCmdline(fn);
 +
-+    // Ensure locked bootloader state is always exported
++    // Ensure locked bootloader & production properties at native level
 +    InitPropertySet("ro.boot.flash.locked", "1");
 +    InitPropertySet("ro.boot.verifiedbootstate", "green");
 +    InitPropertySet("ro.boot.vbmeta.device_state", "locked");
 +    InitPropertySet("ro.boot.veritymode", "enforcing");
++    InitPropertySet("ro.debuggable", "0");
++    InitPropertySet("ro.secure", "1");
++    InitPropertySet("ro.build.type", "user");
++    InitPropertySet("ro.build.tags", "release-keys");
  }

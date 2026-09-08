@@ -1,7 +1,7 @@
 diff --git a/core/java/android/os/Build.java b/core/java/android/os/Build.java
 --- a/core/java/android/os/Build.java
 +++ b/core/java/android/os/Build.java
-@@ -1170,8 +1170,8 @@ public class Build {
+@@ -1170,8 +1170,11 @@ public class Build {
  
      /** A string that provides information about the characteristics of the build, like "user" or "eng". */
 -    public static final String TYPE = getString("ro.build.type");
@@ -10,6 +10,9 @@ diff --git a/core/java/android/os/Build.java b/core/java/android/os/Build.java
      /** A string that provides information about the characteristics of the build, like "user" or "eng". */
 -    public static final String TAGS = getString("ro.build.tags");
 +    public static final String TAGS = "release-keys";
++
++    /** A boolean that indicates whether the device is debuggable. */
++    public static final boolean IS_DEBUGGABLE = false;
 diff --git a/core/java/android/os/SystemProperties.java b/core/java/android/os/SystemProperties.java
 --- a/core/java/android/os/SystemProperties.java
 +++ b/core/java/android/os/SystemProperties.java
@@ -29,21 +32,25 @@ diff --git a/core/java/android/os/SystemProperties.java b/core/java/android/os/S
          return native_get(key, def);
      }
  
-@@ -179,6 +183,7 @@ public class SystemProperties {
+@@ -179,6 +183,9 @@ public class SystemProperties {
      public static int getInt(@NonNull String key, int def) {
          if (TRACK_KEY_ACCESS) onKeyAccess(key);
 +        if ("ro.boot.flash.locked".equals(key)) return 1;
++        if ("ro.debuggable".equals(key)) return 0;
++        if ("ro.secure".equals(key)) return 1;
          return native_get_int(key, def);
      }
  
-@@ -214,6 +219,7 @@ public class SystemProperties {
+@@ -214,6 +221,9 @@ public class SystemProperties {
      public static boolean getBoolean(@NonNull String key, boolean def) {
          if (TRACK_KEY_ACCESS) onKeyAccess(key);
 +        if ("ro.boot.flash.locked".equals(key)) return true;
++        if ("ro.debuggable".equals(key)) return false;
++        if ("ro.secure".equals(key)) return true;
          return native_get_boolean(key, def);
      }
  
-@@ -230,6 +236,17 @@ public class SystemProperties {
+@@ -230,6 +240,32 @@ public class SystemProperties {
 +    private static String spoofProperty(String key) {
 +        if ("ro.boot.flash.locked".equals(key)) return "1";
 +        if ("ro.boot.verifiedbootstate".equals(key)) return "green";
@@ -51,6 +58,26 @@ diff --git a/core/java/android/os/SystemProperties.java b/core/java/android/os/S
 +        if ("ro.boot.veritymode".equals(key)) return "enforcing";
 +        if ("ro.build.tags".equals(key)) return "release-keys";
 +        if ("ro.build.type".equals(key)) return "user";
++        if ("ro.debuggable".equals(key)) return "0";
++        if ("ro.secure".equals(key)) return "1";
++
++        boolean isCoral = "coral".equals(native_get("ro.product.device")) || "coral".equals(native_get("ro.build.product"));
++        if ("ro.build.fingerprint".equals(key) || "ro.bootimage.build.fingerprint".equals(key)
++                || "ro.system.build.fingerprint".equals(key) || "ro.vendor.build.fingerprint".equals(key)) {
++            return isCoral ? "google/coral/coral:13/TP1A.221005.002/8866180:user/release-keys"
++                           : "google/flame/flame:13/TP1A.221005.002.B2/9382335:user/release-keys";
++        }
++        if ("ro.build.id".equals(key) || "ro.build.display.id".equals(key)) {
++            return isCoral ? "TP1A.221005.002" : "TP1A.221005.002.B2";
++        }
++        if ("ro.product.brand".equals(key) || "ro.product.system.brand".equals(key) || "ro.product.vendor.brand".equals(key)) return "google";
++        if ("ro.product.manufacturer".equals(key) || "ro.product.system.manufacturer".equals(key)) return "Google";
++        if ("ro.product.model".equals(key) || "ro.product.system.model".equals(key) || "ro.product.vendor.model".equals(key)) {
++            return isCoral ? "Pixel 4 XL" : "Pixel 4";
++        }
++        if ("ro.build.version.security_patch".equals(key)) {
++            return "2022-10-05";
++        }
 +        return null;
 +    }
 +

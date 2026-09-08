@@ -1,0 +1,32 @@
+diff --git a/init.coral.rc b/init.coral.rc
+index 1234567..89abcde 100644
+--- a/init.coral.rc
++++ b/init.coral.rc
+@@ -100,6 +100,10 @@ on boot
+     chown system system /sys/class/backlight/panel0-backlight/brightness
+     chmod 0664 /sys/class/backlight/panel0-backlight/brightness
+ 
++    # LineageOS Charging Control sysfs permissions
++    chown system system /sys/class/power_supply/battery/charge_deadline
++    chmod 0664 /sys/class/power_supply/battery/charge_deadline
++
+diff --git a/sepolicy/vendor/hal_lineage_health_default.te b/sepolicy/vendor/hal_lineage_health_default.te
+new file mode 100644
+index 0000000..1234567
+--- /dev/null
++++ b/sepolicy/vendor/hal_lineage_health_default.te
+@@ -0,0 +1,4 @@
++# Allow Lineage Health HAL to access battery charging control sysfs nodes
++allow hal_lineage_health_default sysfs_batteryinfo:file rw_file_perms;
++allow hal_lineage_health_default sysfs_batteryinfo:dir r_dir_perms;
++
+diff --git a/health/vendor.lineage.health-service.default.rc b/health/vendor.lineage.health-service.default.rc
+index 2345678..9abcdef 100644
+--- a/health/vendor.lineage.health-service.default.rc
++++ b/health/vendor.lineage.health-service.default.rc
+@@ -2,4 +2,4 @@ service vendor.lineage_health /vendor/bin/hw/vendor.lineage.health-service.defau
+     class hal
+     user system
+     group system
+-interface aidl vendor.lineage.health.IChargingControl/default
++    interface aidl vendor.lineage.health.IChargingControl/default

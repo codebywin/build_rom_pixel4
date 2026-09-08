@@ -1,0 +1,9 @@
+name = "api"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+# Tạo KV namespace: npx wrangler kv:namespace create VCAM_KV
+# Sau đó điền id vào đây (nếu có):
+# kv_namespaces = [
+#   { binding = "VCAM_KV", id = "YOUR_KV_NAMESPACE_ID" }
+# ]

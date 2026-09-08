@@ -17,20 +17,20 @@
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:layout_marginBottom="16dp">
-
             <TextView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="VCAM Assistant"
+                android:text="@string/header_title"
                 android:textSize="22sp"
                 android:textStyle="bold"
-                android:textColor="#00E5FF" />
-
+                android:textColor="#00E5FF"
+                />
+  
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Pixel 4 ROM"
+                android:text="@string/header_badge"
                 android:textSize="12sp"
                 android:textColor="#80DEEA"
                 android:background="@drawable/bg_floating_card"
@@ -38,6 +38,148 @@
                 android:paddingRight="10dp"
                 android:paddingTop="4dp"
                 android:paddingBottom="4dp" />
+
+            <!-- NÚT SETTING CẠNH PIXEL 4 ROM -->
+            <TextView
+                android:id="@+id/btn_settings"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="@string/btn_settings"
+                android:textSize="12sp"
+                android:textColor="#00E5FF"
+                android:textStyle="bold"
+                android:background="@drawable/bg_floating_card"
+                android:paddingLeft="10dp"
+                android:paddingRight="10dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:clickable="true"
+                android:focusable="true" />
+        </LinearLayout>
+
+        <!-- CARD 0: QUẢN LÝ BẢN QUYỀN (LICENSE & ACTIVATION) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_floating_card"
+            android:padding="16dp"
+            android:layout_marginBottom="14dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/license_title"
+                    android:textStyle="bold"
+                    android:textSize="15sp"
+                    android:textColor="#FFFFFF" />
+
+                <TextView
+                    android:id="@+id/txt_license_badge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/license_inactive"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:textColor="#FF5252" />
+            </LinearLayout>
+
+            <!-- Mã thiết bị -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="10dp"
+                android:background="#262626"
+                android:padding="8dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/device_serial_label"
+                    android:textSize="10sp"
+                    android:textColor="#888888" />
+
+                <TextView
+                    android:id="@+id/txt_device_serial"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="97291FFAZ0002N"
+                    android:textStyle="bold"
+                    android:textSize="13sp"
+                    android:textColor="#00E5FF" />
+
+                <Button
+                    android:id="@+id/btn_copy_serial"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="@string/btn_copy"
+                    android:textSize="11sp"
+                    android:backgroundTint="#37474F"
+                    android:textColor="#FFFFFF" />
+
+                <Button
+                    android:id="@+id/btn_reset_license"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="@string/btn_reset_key"
+                    android:textSize="11sp"
+                    android:backgroundTint="#B71C1C"
+                    android:textColor="#FFFFFF"
+                    android:layout_marginStart="6dp" />
+            </LinearLayout>
+
+            <!-- Trạng thái chi tiết -->
+            <TextView
+                android:id="@+id/txt_license_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/license_status_default"
+                android:textSize="12sp"
+                android:textColor="#B0BEC5"
+                android:layout_marginTop="8dp" />
+
+            <!-- Ô nhập Key & Nút Kích hoạt (Ẩn khi đã kích hoạt) -->
+            <LinearLayout
+                android:id="@+id/layout_activation_input"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="8dp">
+
+                <EditText
+                    android:id="@+id/edt_active_key"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:hint="@string/edt_key_hint"
+                    android:textColorHint="#666666"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp"
+                    android:background="#1E1E1E"
+                    android:paddingHorizontal="10dp"
+                    android:singleLine="true" />
+
+                <Button
+                    android:id="@+id/btn_activate_online"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:text="@string/btn_activate_online"
+                    android:backgroundTint="#00E5FF"
+                    android:textColor="#000000"
+                    android:textStyle="bold"
+                    android:textSize="13sp"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- 1. BẬT / TẮT MASTER & CỬA SỔ NỔI -->
@@ -53,7 +195,7 @@
                 android:id="@+id/switch_vcam"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Kích hoạt Camera Ảo (VCAM)"
+                android:text="@string/vcam_master_switch"
                 android:textStyle="bold"
                 android:textSize="16sp"
                 android:textColor="#FFFFFF"
@@ -62,7 +204,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Tự động can thiệp luồng camera và micro vào mọi ứng dụng"
+                android:text="@string/vcam_master_desc"
                 android:textSize="12sp"
                 android:textColor="#B0BEC5"
                 android:layout_marginTop="2dp"
@@ -72,7 +214,7 @@
                 android:id="@+id/btn_open_floating"
                 android:layout_width="match_parent"
                 android:layout_height="52dp"
-                android:text="✨ MỞ CỬA SỔ NỔI (FLOAT HUD)"
+                android:text="@string/btn_open_floating"
                 android:backgroundTint="#00E5FF"
                 android:textColor="#000000"
                 android:textStyle="bold"
@@ -81,7 +223,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="* Cửa sổ nổi hỗ trợ Zoom, D-Pad, Tạm dừng trực tiếp ngay trên app KYC / Livestream."
+                android:text="@string/floating_desc"
                 android:textSize="11sp"
                 android:textColor="#80DEEA"
                 android:layout_marginTop="8dp" />
@@ -99,7 +241,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="🎬 Tệp Video Nguồn (.mp4)"
+                android:text="@string/video_title"
                 android:textStyle="bold"
                 android:textSize="15sp"
                 android:textColor="#FFFFFF" />
@@ -108,7 +250,7 @@
                 android:id="@+id/txt_video_info"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Đang dùng: /data/local/tmp/vcam.mp4"
+                android:text="Video: /data/local/tmp/vcam.mp4 (4 MB)"
                 android:textSize="12sp"
                 android:textColor="#B0BEC5"
                 android:layout_marginTop="4dp"
@@ -118,7 +260,7 @@
                 android:id="@+id/btn_pick_video"
                 android:layout_width="match_parent"
                 android:layout_height="44dp"
-                android:text="Chọn Video Mới Từ Máy"
+                android:text="@string/btn_pick_video"
                 android:backgroundTint="#37474F"
                 android:textColor="#FFFFFF"
                 android:textSize="13sp" />
@@ -136,7 +278,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="🎙️ Quản Lý Âm Thanh (Audio Hook)"
+                android:text="@string/audio_title"
                 android:textStyle="bold"
                 android:textSize="15sp"
                 android:textColor="#FFFFFF" />
@@ -145,7 +287,7 @@
                 android:id="@+id/txt_audio_info"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Đang dùng: /data/local/tmp/vcam.wav"
+                android:text="Audio: /data/local/tmp/vcam.wav (2 MB)"
                 android:textSize="12sp"
                 android:textColor="#B0BEC5"
                 android:layout_marginTop="4dp"
@@ -155,7 +297,7 @@
                 android:id="@+id/btn_pick_audio"
                 android:layout_width="match_parent"
                 android:layout_height="44dp"
-                android:text="Chọn Nhạc Mới (.wav / .mp3)"
+                android:text="@string/btn_pick_audio"
                 android:backgroundTint="#37474F"
                 android:textColor="#FFFFFF"
                 android:textSize="13sp"
@@ -164,7 +306,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Chế Độ Micro:"
+                android:text="@string/audio_mode_label"
                 android:textStyle="bold"
                 android:textSize="13sp"
                 android:textColor="#ECEFF1"
@@ -179,7 +321,7 @@
                     android:id="@+id/rb_audio_virtual"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Chỉ phát nhạc ảo (100% tiếng sạch, ngắt tiếng ngoài)"
+                    android:text="@string/audio_mode_virtual"
                     android:textColor="#ECEFF1"
                     android:textSize="13sp"
                     android:checked="true" />
@@ -188,7 +330,7 @@
                     android:id="@+id/rb_audio_mix"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Trộn âm thanh (Vừa phát nhạc vừa nói mic thật)"
+                    android:text="@string/audio_mode_mix"
                     android:textColor="#ECEFF1"
                     android:textSize="13sp" />
 
@@ -196,10 +338,31 @@
                     android:id="@+id/rb_audio_real"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Chỉ dùng mic thật (Tắt can thiệp âm thanh)"
+                    android:text="@string/audio_mode_real"
                     android:textColor="#ECEFF1"
                     android:textSize="13sp" />
             </RadioGroup>
+
+            <!-- Khuếch đại âm lượng Micro thật (Mic Boost) -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Khuếch đại Micro thật (Chống nhỏ tiếng khi gọi Zalo/Tele):"
+                android:textStyle="bold"
+                android:textSize="12sp"
+                android:textColor="#80CBC4"
+                android:layout_marginTop="10dp"
+                android:layout_marginBottom="4dp" />
+
+            <Button
+                android:id="@+id/btn_main_mic_boost"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:text="🎙️ KHUẾCH ĐẠI MIC: x3.0 (TO RÕ - KHUYÊN DÙNG)"
+                android:backgroundTint="#00838F"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold"
+                android:textSize="12sp" />
         </LinearLayout>
 
         <!-- 4. LƯU CÀI ĐẶT -->
@@ -207,7 +370,7 @@
             android:id="@+id/btn_apply"
             android:layout_width="match_parent"
             android:layout_height="52dp"
-            android:text="LƯU CÀI ĐẶT"
+            android:text="@string/btn_apply"
             android:backgroundTint="#00897B"
             android:textColor="#FFFFFF"
             android:textStyle="bold"
