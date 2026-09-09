@@ -47,7 +47,6 @@ public class XposedCamera2Hook {
     private static float sLastZoom = 1.0f;
     private static float sLastPanX = 0.0f;
     private static float sLastPanY = 0.0f;
-
     public static void registerPreviewView(android.view.View view) {
         if (view == null) return;
         for (java.lang.ref.WeakReference<android.view.View> ref : sPreviewViews) {
@@ -81,7 +80,8 @@ public class XposedCamera2Hook {
         float panX = XposedSharedConfig.getPanX();
         float panY = XposedSharedConfig.getPanY();
 
-        if (Math.abs(zoom - sLastZoom) > 0.01f || Math.abs(panX - sLastPanX) > 0.01f || Math.abs(panY - sLastPanY) > 0.01f) {
+        if (Math.abs(zoom - sLastZoom) > 0.01f || Math.abs(panX - sLastPanX) > 0.01f ||
+            Math.abs(panY - sLastPanY) > 0.01f) {
             sLastZoom = zoom;
             sLastPanX = panX;
             sLastPanY = panY;

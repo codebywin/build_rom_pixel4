@@ -124,7 +124,6 @@ public class VideoToFrames implements Runnable {
                     sawOutputEOS = false;
                     startWhen = System.currentTimeMillis();
                 }
-
                 // 3. Kiểm tra xoay video động (Dynamic Rotation: 0, 90, 180, 270)
                 int targetRotation = XposedSharedConfig.getRotation();
                 if (targetRotation != currentRotation) {

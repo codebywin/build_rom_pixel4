@@ -611,25 +611,30 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         writeStringFile("/sdcard/" + name, s);
     }
 
-    private void writeStringFile(String path, String val) {
-        boolean ok = false;
-        try {
-            File f = new File(path);
-            FileOutputStream fos = new FileOutputStream(f);
-            fos.write(val.getBytes("UTF-8"));
-            fos.close();
-            f.setReadable(true, false);
-            f.setWritable(true, false);
-            ok = true;
-        } catch (Throwable ignored) {}
+    private static final java.util.concurrent.ExecutorService sIoExecutor =
+            java.util.concurrent.Executors.newSingleThreadExecutor();
 
-        if (!ok) {
+    private void writeStringFile(String path, String val) {
+        sIoExecutor.execute(() -> {
+            boolean ok = false;
             try {
-                String cmd = "echo -n '" + val + "' > " + path + " && chmod 666 " + path;
-                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", cmd});
-                p.waitFor();
-            } catch (Throwable ignored2) {}
-        }
+                File f = new File(path);
+                FileOutputStream fos = new FileOutputStream(f);
+                fos.write(val.getBytes("UTF-8"));
+                fos.close();
+                f.setReadable(true, false);
+                f.setWritable(true, false);
+                ok = true;
+            } catch (Throwable ignored) {}
+
+            if (!ok) {
+                try {
+                    String cmd = "echo -n '" + val + "' > " + path + " && chmod 666 " + path;
+                    Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", cmd});
+                    p.waitFor();
+                } catch (Throwable ignored2) {}
+            }
+        });
     }
 
     private void ensureAllConfigFiles() {
