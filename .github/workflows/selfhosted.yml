@@ -569,6 +569,7 @@ jobs:
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/org.lineageos.camera.assistant/CameraAssistant.apk > packages/apps/CameraAssistant/CameraAssistant.apk && \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/CameraAssistant_Android.bp > packages/apps/CameraAssistant/Android.bp && \
         if [ -f device/google/coral/device.mk ]; then echo "PRODUCT_PACKAGES += CameraAssistant" >> device/google/coral/device.mk ; fi ; \
+        if [ -f device/google/coral/lineage_flame.mk ]; then echo "PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += %/CameraAssistant.apk" >> device/google/coral/lineage_flame.mk ; fi ; \
         source build/envsetup.sh && \
 
         echo "Repository: ${{ github.repository }}"; \

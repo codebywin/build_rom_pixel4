@@ -1,5 +1,4 @@
 package org.lineageos.camera.assistant.xposed;
-
 import android.graphics.Color;
 import android.graphics.SurfaceTexture;
 import android.opengl.EGL14;
@@ -12,14 +11,12 @@ import android.opengl.GLES20;
 import android.opengl.Matrix;
 import android.util.Log;
 import android.view.Surface;
-
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-
 public class VcamRenderer {
     private static final String TAG = "VcamRenderer";
 

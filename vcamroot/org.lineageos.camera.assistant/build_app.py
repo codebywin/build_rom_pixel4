@@ -1,4 +1,4 @@
-import os, sys, subprocess, zipfile, shutil
+import os, sys, subprocess, zipfile, shutil, re
 
 try:
     sys.stdout.reconfigure(encoding='utf-8')
@@ -7,6 +7,7 @@ except Exception:
 
 app_dir = os.path.dirname(os.path.abspath(__file__))
 android_jar = r"C:\Users\admin\AppData\Local\Android\Sdk\platforms\android-33\android.jar"
+d8_jar = r"C:\Users\admin\AppData\Local\Android\Sdk\build-tools\37.0.0\lib\d8.jar"
 
 build_mode = "debug"
 if len(sys.argv) > 1 and sys.argv[1].lower() in ["release", "--release", "-r"]:
@@ -33,9 +34,93 @@ subprocess.check_call([
     "build/res.zip"
 ], shell=True)
 
-print("[3/5] Compiling Java code with javac...")
+# Helper for XOR String Encryption
+def gen_xor_java_call(plain_text, key=0x7B):
+    data = plain_text.encode('utf-8')
+    enc = [(b ^ key) for b in data]
+    bytes_str = ", ".join(str(b if b < 128 else b - 256) for b in enc)
+    return f"_xdec(new byte[]{{{bytes_str}}}, (byte){key})"
+
+print("[3/5] Pre-processing & Compiling Java code with javac...")
+src_proc = "build/src_proc"
+if os.path.exists(src_proc):
+    shutil.rmtree(src_proc)
+shutil.copytree("src/main/java", src_proc)
+
+lic_manager_path = os.path.join(src_proc, "org", "lineageos", "camera", "assistant", "LicenseManager.java")
+if os.path.exists(lic_manager_path):
+    with open(lic_manager_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    server_match = re.search(r'public\s+static\s+final\s+String\s+SERVER_URL\s*=\s*"([^"]+)";', content)
+    check_match = re.search(r'public\s+static\s+final\s+String\s+CHECK_URL\s*=\s*"([^"]+)";', content)
+    pubkey_match = re.search(r'public\s+static\s+final\s+String\s+PUBLIC_KEY_PEM\s*=\s*"([^"]+)";', content, re.DOTALL)
+
+    if server_match and check_match and pubkey_match:
+        server_url = server_match.group(1)
+        check_url = check_match.group(1)
+        pubkey_pem = pubkey_match.group(1)
+
+        enc_server = gen_xor_java_call(server_url, 0x4D)
+        enc_check = gen_xor_java_call(check_url, 0x5E)
+        enc_pubkey = gen_xor_java_call(pubkey_pem, 0x6A)
+        enc_head = gen_xor_java_call("-----BEGIN PUBLIC KEY-----", 0x33)
+        enc_tail = gen_xor_java_call("-----END PUBLIC KEY-----", 0x44)
+        enc_lic_tmp = gen_xor_java_call("/data/local/tmp/vcam.lic", 0x1A)
+        enc_lic_sd = gen_xor_java_call("/sdcard/vcam.lic", 0x2B)
+
+        content = re.sub(
+            r'public\s+static\s+final\s+String\s+SERVER_URL\s*=\s*"[^"]+";',
+            f'public static final String SERVER_URL = {enc_server};',
+            content
+        )
+        content = re.sub(
+            r'public\s+static\s+final\s+String\s+CHECK_URL\s*=\s*"[^"]+";',
+            f'public static final String CHECK_URL = {enc_check};',
+            content
+        )
+        content = re.sub(
+            r'public\s+static\s+final\s+String\s+PUBLIC_KEY_PEM\s*=\s*"[^"]+";',
+            f'public static final String PUBLIC_KEY_PEM = {enc_pubkey};',
+            content,
+            flags=re.DOTALL
+        )
+        content = re.sub(
+            r'private\s+static\s+final\s+String\s+LIC_FILE_TMP\s*=\s*"[^"]+";',
+            f'private static final String LIC_FILE_TMP = {enc_lic_tmp};',
+            content
+        )
+        content = re.sub(
+            r'private\s+static\s+final\s+String\s+LIC_FILE_SD\s*=\s*"[^"]+";',
+            f'private static final String LIC_FILE_SD = {enc_lic_sd};',
+            content
+        )
+        content = content.replace('"-----BEGIN PUBLIC KEY-----"', enc_head)
+        content = content.replace('"-----END PUBLIC KEY-----"', enc_tail)
+
+        last_brace = content.rfind("}")
+        if last_brace != -1:
+            helper_code = """
+    private static String _xdec(byte[] b, byte k) {
+        byte[] r = new byte[b.length];
+        for (int i = 0; i < b.length; i++) {
+            r[i] = (byte)(b[i] ^ k);
+        }
+        try {
+            return new String(r, "UTF-8");
+        } catch (Throwable t) {
+            return new String(r);
+        }
+    }
+"""
+            content = content[:last_brace] + helper_code + content[last_brace:]
+
+        with open(lic_manager_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        print("  -> Sensitive strings encrypted in build/src_proc/LicenseManager.java")
+
 java_files = []
-for root, _, files in os.walk("src/main/java"):
+for root, _, files in os.walk(src_proc):
     for f in files:
         if f.endswith(".java"):
             java_files.append(os.path.join(root, f))
@@ -44,20 +129,58 @@ for root, _, files in os.walk("build/gen"):
         if f.endswith(".java"):
             java_files.append(os.path.join(root, f))
 
+if os.path.exists("build/obj"):
+    shutil.rmtree("build/obj")
+os.makedirs("build/obj", exist_ok=True)
+
 subprocess.check_call(["javac", "-cp", f"{android_jar};build/gen", "-d", "build/obj"] + java_files, shell=True)
 
-print(f"[4/5] Converting classes to dex with d8 ({build_mode} mode)...")
-class_files = []
-for root, _, files in os.walk("build/obj"):
-    for f in files:
-        if f.endswith(".class"):
-            rel_path = os.path.relpath(os.path.join(root, f), "build/obj")
-            # Do NOT include Xposed API classes into module dex (compileOnly requirement)
-            if not rel_path.startswith("de" + os.sep + "robv") and not rel_path.startswith("de/robv"):
-                class_files.append(os.path.join(root, f))
+if os.path.exists(src_proc):
+    shutil.rmtree(src_proc)
 
-d8_mode_flag = "--release" if build_mode == "release" else "--debug"
-subprocess.check_call(["d8", d8_mode_flag, "--min-api", "28", "--output", "build/apk"] + class_files, shell=True)
+print(f"[4/5] Converting classes to dex ({build_mode} mode)...")
+
+app_classes_jar = "build/app_classes.jar"
+xposed_stubs_jar = "build/xposed_stubs.jar"
+
+with zipfile.ZipFile(app_classes_jar, "w") as app_jar, zipfile.ZipFile(xposed_stubs_jar, "w") as stubs_jar:
+    for root, _, files in os.walk("build/obj"):
+        for f in files:
+            if f.endswith(".class"):
+                full_p = os.path.join(root, f)
+                rel_p = os.path.relpath(full_p, "build/obj").replace("\\", "/")
+                if rel_p.startswith("de/robv"):
+                    stubs_jar.write(full_p, rel_p)
+                else:
+                    app_jar.write(full_p, rel_p)
+
+if build_mode == "release" and os.path.exists("proguard-rules.pro") and os.path.exists(d8_jar):
+    print("  -> Running Google R8 Obfuscator & Minifier with proguard-rules.pro...")
+    if os.path.exists("build/apk/classes.dex"):
+        os.remove("build/apk/classes.dex")
+    r8_cmd = [
+        "java", "-cp", d8_jar,
+        "com.android.tools.r8.R8",
+        "--release",
+        "--min-api", "28",
+        "--output", "build/apk",
+        "--lib", android_jar,
+        "--classpath", xposed_stubs_jar,
+        "--pg-conf", "proguard-rules.pro",
+        "--pg-map-output", "build/mapping.txt",
+        app_classes_jar
+    ]
+    subprocess.check_call(r8_cmd)
+else:
+    d8_mode_flag = "--release" if build_mode == "release" else "--debug"
+    class_files = []
+    for root, _, files in os.walk("build/obj"):
+        for f in files:
+            if f.endswith(".class"):
+                rel_path = os.path.relpath(os.path.join(root, f), "build/obj")
+                if not rel_path.startswith("de" + os.sep + "robv") and not rel_path.startswith("de/robv"):
+                    class_files.append(os.path.join(root, f))
+    subprocess.check_call(["d8", d8_mode_flag, "--min-api", "28", "--output", "build/apk"] + class_files, shell=True)
 
 print("[5/5] Packaging classes.dex and signing APK...")
 with zipfile.ZipFile("build/apk/app-unsigned.apk", "a") as apk:
