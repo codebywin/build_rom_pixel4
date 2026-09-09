@@ -3,6 +3,7 @@ package org.lineageos.camera.assistant.xposed;
 import android.media.MediaCodec;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
+import android.os.Build;
 import android.util.Log;
 import android.view.Surface;
 
@@ -86,25 +87,87 @@ public class VideoToFrames implements Runnable {
             MediaFormat mediaFormat = extractor.getTrackFormat(trackIndex);
             String mime = mediaFormat.getString(MediaFormat.KEY_MIME);
 
+            int currentRotation = XposedSharedConfig.getRotation();
+            if (currentRotation != 0) {
+                mediaFormat.setInteger(MediaFormat.KEY_ROTATION, currentRotation);
+            }
+
             decoder = MediaCodec.createDecoderByType(mime);
             decoder.configure(mediaFormat, mSurface, null, 0);
             decoder.start();
 
-            Log.i(TAG, "Hardware decoder configured and started on Surface: " + mSurface);
+            Log.i(TAG, "Hardware decoder started on Surface with rotation=" + currentRotation + "°");
 
             MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
             boolean sawInputEOS = false;
             boolean sawOutputEOS = false;
             long startWhen = System.currentTimeMillis();
+            String lastResetTs = XposedSharedConfig.getResetTimestamp();
 
             while (!mStopDecode) {
-                if (XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_PAUSE)) {
+                // 1. Kiểm tra VCAM bị tắt (disable)
+                if (XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_DISABLE)) {
                     try {
                         Thread.sleep(100);
                     } catch (InterruptedException ignored) {}
                     continue;
                 }
 
+                // 2. Kiểm tra tua lại / Reset (Rewind to 00:00)
+                String currentResetTs = XposedSharedConfig.getResetTimestamp();
+                if (!currentResetTs.isEmpty() && !currentResetTs.equals(lastResetTs)) {
+                    lastResetTs = currentResetTs;
+                    Log.i(TAG, "Rewind triggered by timestamp: " + currentResetTs);
+                    extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC);
+                    try { decoder.flush(); } catch (Throwable ignored) {}
+                    sawInputEOS = false;
+                    sawOutputEOS = false;
+                    startWhen = System.currentTimeMillis();
+                }
+
+                // 3. Kiểm tra xoay video động (Dynamic Rotation: 0, 90, 180, 270)
+                int targetRotation = XposedSharedConfig.getRotation();
+                if (targetRotation != currentRotation) {
+                    currentRotation = targetRotation;
+                    Log.i(TAG, "Applying dynamic rotation: " + currentRotation + "°");
+                    long currentPosUs = extractor.getSampleTime();
+
+                    try {
+                        decoder.stop();
+                        decoder.release();
+                    } catch (Throwable ignored) {}
+
+                    mediaFormat.setInteger(MediaFormat.KEY_ROTATION, currentRotation);
+                    decoder = MediaCodec.createDecoderByType(mime);
+                    decoder.configure(mediaFormat, mSurface, null, 0);
+                    decoder.start();
+
+                    if (currentPosUs >= 0) {
+                        extractor.seekTo(currentPosUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC);
+                        startWhen = System.currentTimeMillis() - (extractor.getSampleTime() / 1000);
+                    } else {
+                        extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC);
+                        startWhen = System.currentTimeMillis();
+                    }
+                    sawInputEOS = false;
+                    sawOutputEOS = false;
+                    continue;
+                }
+
+                // 4. Kiểm tra tạm dừng (Pause) - Giữ nguyên vị trí, không tua nhanh khi tiếp tục
+                if (XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_PAUSE)) {
+                    long pauseStart = System.currentTimeMillis();
+                    while (XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_PAUSE) && !mStopDecode) {
+                        try {
+                            Thread.sleep(50);
+                        } catch (InterruptedException ignored) {}
+                    }
+                    long pauseDuration = System.currentTimeMillis() - pauseStart;
+                    startWhen += pauseDuration; // Bù thời gian tạm dừng để không bị chạy vọt
+                    continue;
+                }
+
+                // 5. Nạp buffer giải mã (Decode Input)
                 if (!sawInputEOS) {
                     int inIndex = decoder.dequeueInputBuffer(TIMEOUT_US);
                     if (inIndex >= 0) {
@@ -121,6 +184,7 @@ public class VideoToFrames implements Runnable {
                     }
                 }
 
+                // 6. Xuất khung hình ra Surface (Render Output)
                 int outIndex = decoder.dequeueOutputBuffer(bufferInfo, TIMEOUT_US);
                 if (outIndex >= 0) {
                     if ((bufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
@@ -133,14 +197,14 @@ public class VideoToFrames implements Runnable {
                         long sleepTime = presentationMs - elapsedMs;
 
                         if (sleepTime > 50) {
-                            sleepTime = 33; // Cap excessive delays
+                            sleepTime = 33; // Giới hạn độ trễ tối đa 33ms (tương đương 30fps)
                         }
                         if (sleepTime > 0) {
                             try {
                                 Thread.sleep(sleepTime);
                             } catch (InterruptedException ignored) {}
                         } else if (sleepTime < -500) {
-                            // Falling behind significantly, resync reference clock
+                            // Bị chậm quá nhiều, đồng bộ lại đồng hồ chuẩn
                             startWhen = System.currentTimeMillis() - presentationMs;
                         }
 
@@ -155,10 +219,10 @@ public class VideoToFrames implements Runnable {
                     }
                 }
 
-                // Check for end of stream or loop restart
+                // 7. Tự động lặp lại video vô tận khi hết video
                 if (sawOutputEOS) {
                     extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC);
-                    decoder.flush();
+                    try { decoder.flush(); } catch (Throwable ignored) {}
                     sawInputEOS = false;
                     sawOutputEOS = false;
                     startWhen = System.currentTimeMillis();

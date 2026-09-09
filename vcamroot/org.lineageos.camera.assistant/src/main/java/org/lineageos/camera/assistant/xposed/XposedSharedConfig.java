@@ -37,8 +37,25 @@ public class XposedSharedConfig {
         return false;
     }
 
+    public static int getRotation() {
+        String val = readString("vcam_rotation", "");
+        if (val.isEmpty()) val = readString("vcam_rotate", "0");
+        try {
+            int deg = Integer.parseInt(val);
+            return (deg % 360 + 360) % 360;
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
     public static String getRotateValue() {
-        return readString("vcam_rotate", "0");
+        return String.valueOf(getRotation());
+    }
+
+    public static String getResetTimestamp() {
+        String ts = readString("vcam_reset", "");
+        if (ts.isEmpty()) ts = readString("vcam_rewind", "");
+        return ts;
     }
 
     public static float getMicBoost() {
@@ -65,12 +82,18 @@ public class XposedSharedConfig {
     }
 
     public static File getAudioFile() {
-        File f1 = new File("/data/local/tmp/" + TARGET_AUDIO);
-        if (f1.exists() && f1.length() > 0) return f1;
-        File f2 = new File("/sdcard/" + TARGET_AUDIO);
-        if (f2.exists() && f2.length() > 0) return f2;
-        File f3 = new File("/storage/emulated/0/" + TARGET_AUDIO);
-        if (f3.exists() && f3.length() > 0) return f3;
+        String[] audioNames = new String[] {
+            TARGET_AUDIO, "vcam.mp3", "vcam.m4a", "vcam.aac", "virtual.wav", "virtual.mp3"
+        };
+        String[] dirs = new String[] {
+            "/data/local/tmp/", "/sdcard/", "/storage/emulated/0/", "/sdcard/DCIM/Camera1/", "/storage/emulated/0/DCIM/Camera1/"
+        };
+        for (String dir : dirs) {
+            for (String name : audioNames) {
+                File f = new File(dir + name);
+                if (f.exists() && f.length() > 0) return f;
+            }
+        }
         return null;
     }
 

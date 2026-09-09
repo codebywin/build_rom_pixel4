@@ -17,6 +17,7 @@ public class XposedAudioHook {
     private static FileInputStream sAudioStream = null;
     private static long sAudioPos = 0;
     private static long sAudioDataStart = 44; // Standard WAV header length
+    private static String sLastResetTs = "";
 
     public static void initHook(ClassLoader classLoader) {
         try {
@@ -66,33 +67,37 @@ public class XposedAudioHook {
         boolean isMicDisable = XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_MIC_DISABLE);
         boolean isMicMix = XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_MIC_MIX);
         float boost = XposedSharedConfig.getMicBoost();
+        File wavFile = XposedSharedConfig.getAudioFile();
 
-        // 1. Chỉ dùng Mic thật: Khuếch đại âm lượng
-        if (isMicDisable && !isMicMix) {
+        // 1. Trường hợp mic bị tắt hoàn toàn
+        if (isMicDisable && wavFile == null) {
+            java.util.Arrays.fill(buffer, offset, offset + length, (byte) 0);
+            return;
+        }
+
+        // 2. Không có file nhạc ảo -> Áp dụng khuếch đại Mic thật
+        if (wavFile == null) {
             if (boost > 1.0f) {
                 applyBoostBytes(buffer, offset, length, boost);
             }
             return;
         }
 
-        // 2. Chế độ có phát nhạc ảo (Chỉ nhạc ảo hoặc Trộn âm)
-        File wavFile = XposedSharedConfig.getAudioFile();
-        if (wavFile == null) return;
-
+        // 3. Có nhạc ảo nhưng đang tạm dừng
         if (XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_PAUSE)) {
             if (!isMicMix) {
-                // Tạm dừng và tắt mic: làm im lặng
                 java.util.Arrays.fill(buffer, offset, offset + length, (byte) 0);
             }
             return;
         }
 
+        // 4. Đọc luồng nhạc ảo
         byte[] virtualChunk = new byte[length];
         int bytesRead = readWavChunk(wavFile, virtualChunk, length);
         if (bytesRead <= 0) return;
 
-        if (isMicMix) {
-            // Trộn nhạc ảo với mic thật
+        if (isMicMix && !isMicDisable) {
+            // Trộn nhạc ảo với mic thật (Mic thật được khuếch đại theo boost)
             for (int i = 0; i < length - 1; i += 2) {
                 int idx = offset + i;
                 short orig = (short) ((buffer[idx] & 0xFF) | (buffer[idx + 1] << 8));
@@ -104,7 +109,7 @@ public class XposedAudioHook {
                 buffer[idx + 1] = (byte) ((mixed >> 8) & 0xFF);
             }
         } else {
-            // 100% tiếng nhạc ảo sạch
+            // 100% tiếng nhạc ảo
             System.arraycopy(virtualChunk, 0, buffer, offset, length);
         }
     }
@@ -113,8 +118,16 @@ public class XposedAudioHook {
         boolean isMicDisable = XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_MIC_DISABLE);
         boolean isMicMix = XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_MIC_MIX);
         float boost = XposedSharedConfig.getMicBoost();
+        File wavFile = XposedSharedConfig.getAudioFile();
 
-        if (isMicDisable && !isMicMix) {
+        // 1. Trường hợp mic bị tắt hoàn toàn
+        if (isMicDisable && wavFile == null) {
+            java.util.Arrays.fill(buffer, offset, offset + length, (short) 0);
+            return;
+        }
+
+        // 2. Không có file nhạc ảo -> Áp dụng khuếch đại Mic thật
+        if (wavFile == null) {
             if (boost > 1.0f) {
                 for (int i = 0; i < length; i++) {
                     int val = (int) (buffer[offset + i] * boost);
@@ -126,9 +139,7 @@ public class XposedAudioHook {
             return;
         }
 
-        File wavFile = XposedSharedConfig.getAudioFile();
-        if (wavFile == null) return;
-
+        // 3. Có nhạc ảo nhưng đang tạm dừng
         if (XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_PAUSE)) {
             if (!isMicMix) {
                 java.util.Arrays.fill(buffer, offset, offset + length, (short) 0);
@@ -136,6 +147,7 @@ public class XposedAudioHook {
             return;
         }
 
+        // 4. Đọc luồng nhạc ảo
         int byteLen = length * 2;
         byte[] raw = new byte[byteLen];
         int bytesRead = readWavChunk(wavFile, raw, byteLen);
@@ -144,7 +156,7 @@ public class XposedAudioHook {
         short[] virtShorts = new short[length];
         ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(virtShorts);
 
-        if (isMicMix) {
+        if (isMicMix && !isMicDisable) {
             for (int i = 0; i < length; i++) {
                 int mixed = (int) (buffer[offset + i] * boost + virtShorts[i] * 0.8f);
                 if (mixed > Short.MAX_VALUE) mixed = Short.MAX_VALUE;
@@ -170,10 +182,16 @@ public class XposedAudioHook {
 
     private static int readWavChunk(File wavFile, byte[] out, int len) {
         try {
-            if (sAudioStream == null || XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_REWIND)) {
+            String currentResetTs = XposedSharedConfig.getResetTimestamp();
+            if (!currentResetTs.isEmpty() && !currentResetTs.equals(sLastResetTs)) {
+                sLastResetTs = currentResetTs;
                 if (sAudioStream != null) {
                     try { sAudioStream.close(); } catch (Throwable ignored) {}
+                    sAudioStream = null;
                 }
+            }
+
+            if (sAudioStream == null) {
                 sAudioStream = new FileInputStream(wavFile);
                 sAudioStream.skip(sAudioDataStart);
                 sAudioPos = sAudioDataStart;
@@ -181,7 +199,7 @@ public class XposedAudioHook {
 
             int read = sAudioStream.read(out, 0, len);
             if (read < len) {
-                // Loop audio
+                // Hết file -> Lặp lại từ đầu
                 sAudioStream.close();
                 sAudioStream = new FileInputStream(wavFile);
                 sAudioStream.skip(sAudioDataStart);
@@ -198,4 +216,3 @@ public class XposedAudioHook {
         }
     }
 }
-

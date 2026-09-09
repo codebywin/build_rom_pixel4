@@ -39,6 +39,7 @@ public class XposedCamera2Hook {
     private static volatile Surface sPreviewSurface1 = null;
     private static MediaPlayer sPlayer = null;
     private static MediaPlayer sPlayer1 = null;
+    private static String sLastResetTs = "";
 
     private static synchronized Surface getVirtualSurface() {
         if (sVirtualTexture == null) {
@@ -327,8 +328,10 @@ public class XposedCamera2Hook {
                 startPlayer(sPreviewSurface, 0, videoPath);
             } else {
                 try {
-                    if (!sPlayer.isPlaying()) {
-                        startPlayer(sPreviewSurface, 0, videoPath);
+                    if (XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_PAUSE)) {
+                        if (sPlayer.isPlaying()) sPlayer.pause();
+                    } else if (!sPlayer.isPlaying()) {
+                        sPlayer.start();
                     }
                 } catch (Throwable ignored) {
                     startPlayer(sPreviewSurface, 0, videoPath);
@@ -342,13 +345,25 @@ public class XposedCamera2Hook {
                 startPlayer(sPreviewSurface1, 1, videoPath);
             } else {
                 try {
-                    if (!sPlayer1.isPlaying()) {
-                        startPlayer(sPreviewSurface1, 1, videoPath);
+                    if (XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_PAUSE)) {
+                        if (sPlayer1.isPlaying()) sPlayer1.pause();
+                    } else if (!sPlayer1.isPlaying()) {
+                        sPlayer1.start();
                     }
                 } catch (Throwable ignored) {
                     startPlayer(sPreviewSurface1, 1, videoPath);
                 }
             }
+        }
+
+        // 5. Kiểm tra tua lại / Reset trên MediaPlayer
+        String currentResetTs = XposedSharedConfig.getResetTimestamp();
+        if (!currentResetTs.isEmpty() && !currentResetTs.equals(sLastResetTs)) {
+            sLastResetTs = currentResetTs;
+            try {
+                if (sPlayer != null) sPlayer.seekTo(0);
+                if (sPlayer1 != null) sPlayer1.seekTo(0);
+            } catch (Throwable ignored) {}
         }
     }
 
