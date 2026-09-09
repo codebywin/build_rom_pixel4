@@ -41,6 +41,59 @@ public class XposedCamera2Hook {
     private static MediaPlayer sPlayer1 = null;
     private static String sLastResetTs = "";
 
+    // Preview views tracked for dynamic Zoom and Pan
+    private static final java.util.List<java.lang.ref.WeakReference<android.view.View>> sPreviewViews =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+    private static float sLastZoom = 1.0f;
+    private static float sLastPanX = 0.0f;
+    private static float sLastPanY = 0.0f;
+
+    public static void registerPreviewView(android.view.View view) {
+        if (view == null) return;
+        for (java.lang.ref.WeakReference<android.view.View> ref : sPreviewViews) {
+            if (ref.get() == view) return;
+        }
+        sPreviewViews.add(new java.lang.ref.WeakReference<>(view));
+        Log.i(TAG, "Registered camera preview View for Zoom/Pan: " + view);
+        applyTransformToView(view, sLastZoom, sLastPanX, sLastPanY);
+    }
+
+    private static void applyTransformToView(android.view.View v, float zoom, float panX, float panY) {
+        if (v == null) return;
+        v.post(() -> {
+            try {
+                int w = v.getWidth();
+                int h = v.getHeight();
+                if (w > 0 && h > 0) {
+                    v.setPivotX(w / 2f);
+                    v.setPivotY(h / 2f);
+                    v.setScaleX(zoom);
+                    v.setScaleY(zoom);
+                    v.setTranslationX(panX * w);
+                    v.setTranslationY(panY * h);
+                }
+            } catch (Throwable ignored) {}
+        });
+    }
+
+    private static void checkAndApplyZoomPan() {
+        float zoom = XposedSharedConfig.getZoom();
+        float panX = XposedSharedConfig.getPanX();
+        float panY = XposedSharedConfig.getPanY();
+
+        if (Math.abs(zoom - sLastZoom) > 0.01f || Math.abs(panX - sLastPanX) > 0.01f || Math.abs(panY - sLastPanY) > 0.01f) {
+            sLastZoom = zoom;
+            sLastPanX = panX;
+            sLastPanY = panY;
+            for (java.lang.ref.WeakReference<android.view.View> ref : sPreviewViews) {
+                android.view.View v = ref.get();
+                if (v != null) {
+                    applyTransformToView(v, zoom, panX, panY);
+                }
+            }
+        }
+    }
+
     private static synchronized Surface getVirtualSurface() {
         if (sVirtualTexture == null) {
             sVirtualTexture = new SurfaceTexture(15);
@@ -53,6 +106,27 @@ public class XposedCamera2Hook {
 
     public static void initHook(ClassLoader classLoader) {
         try {
+            // Hook SurfaceView and TextureView to track preview views for Zoom & Pan
+            try {
+                Class<?> svClass = XposedHelpers.findClass("android.view.SurfaceView", classLoader);
+                XposedBridge.hookAllConstructors(svClass, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                        registerPreviewView((android.view.View) param.thisObject);
+                    }
+                });
+            } catch (Throwable ignored) {}
+
+            try {
+                Class<?> tvClass = XposedHelpers.findClass("android.view.TextureView", classLoader);
+                XposedBridge.hookAllConstructors(tvClass, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                        registerPreviewView((android.view.View) param.thisObject);
+                    }
+                });
+            } catch (Throwable ignored) {}
+
             // Track all ImageReader surfaces
             try {
                 Class<?> imageReaderClass = XposedHelpers.findClass("android.media.ImageReader", classLoader);
@@ -103,6 +177,7 @@ public class XposedCamera2Hook {
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                     if (XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_DISABLE)) return;
                     startVirtualVideoFeeds();
+                    checkAndApplyZoomPan();
                 }
             });
 
@@ -269,6 +344,7 @@ public class XposedCamera2Hook {
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                     if (XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_DISABLE)) return;
                     startVirtualVideoFeeds();
+                    checkAndApplyZoomPan();
                 }
             };
 

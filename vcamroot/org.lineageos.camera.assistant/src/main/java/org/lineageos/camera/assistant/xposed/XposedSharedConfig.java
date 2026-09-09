@@ -23,15 +23,13 @@ public class XposedSharedConfig {
             new File("/storage/emulated/0/" + name)
         };
         for (File f : targets) {
-            if (f.exists()) {
-                if (f.length() == 0) return true;
+            if (f.exists() && f.length() > 0) {
                 try (BufferedReader reader = new BufferedReader(new FileReader(f))) {
                     String line = reader.readLine();
-                    if (line != null && "0".equals(line.trim())) {
-                        return false;
+                    if (line != null && "1".equals(line.trim())) {
+                        return true;
                     }
                 } catch (Throwable ignored) {}
-                return true;
             }
         }
         return false;
@@ -65,6 +63,42 @@ public class XposedSharedConfig {
         } catch (Throwable t) {
             return 3.0f;
         }
+    }
+
+    public static float getZoom() {
+        String val = readString("vcam_zoom", "1.0");
+        try {
+            float z = Float.parseFloat(val);
+            return Math.max(1.0f, Math.min(z, 5.0f));
+        } catch (Throwable t) {
+            return 1.0f;
+        }
+    }
+
+    public static float getPanX() {
+        String val = readString("vcam_pan_x", "0.0");
+        try {
+            return Float.parseFloat(val);
+        } catch (Throwable t) {
+            return 0.0f;
+        }
+    }
+
+    public static float getPanY() {
+        String val = readString("vcam_pan_y", "0.0");
+        try {
+            return Float.parseFloat(val);
+        } catch (Throwable t) {
+            return 0.0f;
+        }
+    }
+
+    public static boolean isKycFlashActive() {
+        return isFlagActive("vcam_kyc_flash") || isFlagActive("vcam_color_sync");
+    }
+
+    public static String getColorVal() {
+        return readString("vcam_color_val", "auto");
     }
 
     public static File getVideoFile() {

@@ -483,16 +483,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void writeStringFile(String path, String val) {
-        try {
-            File f = new File(path);
-            FileOutputStream fos = new FileOutputStream(f);
-            fos.write(val.getBytes("UTF-8"));
-            fos.close();
-            f.setReadable(true, false);
-            f.setWritable(true, false);
-        } catch (Throwable ignored) {}
-    }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -586,92 +576,42 @@ public class MainActivity extends Activity {
 
     private void writeFlag(String name, boolean active) {
         Log.i("CameraAssistant", "MainActivity writeFlag: " + name + " -> " + active);
-        File[] targets = new File[] {
-            new File("/data/local/tmp/" + name),
-            new File("/sdcard/" + name),
-            new File("/storage/emulated/0/" + name),
-            new File(Environment.getExternalStorageDirectory(), name)
-        };
-        for (File f : targets) {
+        String val = active ? "1\n" : "0\n";
+        writeStringFile("/data/local/tmp/" + name, val);
+        writeStringFile("/sdcard/" + name, val);
+        writeStringFile("/storage/emulated/0/" + name, val);
+    }
+
+    private void writeStringFile(String path, String val) {
+        boolean ok = false;
+        try {
+            File f = new File(path);
+            FileOutputStream fos = new FileOutputStream(f);
+            fos.write(val.getBytes("UTF-8"));
+            fos.close();
+            f.setReadable(true, false);
+            f.setWritable(true, false);
+            ok = true;
+        } catch (Throwable ignored) {}
+
+        if (!ok) {
             try {
-                if (active) {
-                    if (!f.exists()) {
-                        f.createNewFile();
-                    }
-                    FileOutputStream fos = new FileOutputStream(f);
-                    fos.write("1\n".getBytes("UTF-8"));
-                    fos.close();
-                    f.setReadable(true, false);
-                    f.setWritable(true, false);
-                    Log.i("CameraAssistant", "MainActivity created flag: " + f.getAbsolutePath());
-                } else {
-                    deleteFileSafely(f);
-                }
-            } catch (Throwable t) {
-                Log.w("CameraAssistant", "MainActivity writeFlag error for " + f.getAbsolutePath() + ": " + t.getMessage());
-            }
+                String cmd = "echo -n '" + val + "' > " + path + " && chmod 666 " + path;
+                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", cmd});
+                p.waitFor();
+            } catch (Throwable ignored2) {}
         }
     }
 
     private void deleteFileSafely(File file) {
         if (file == null || !file.exists()) return;
-
-        // 1. Standard File.delete
-        boolean deleted = file.delete();
-        if (deleted) {
-            Log.i("CameraAssistant", "MainActivity deleteFileSafely: File.delete succeeded for " + file.getAbsolutePath());
-            return;
-        }
-
-        // 2. Canonical delete
-        try {
-            if (file.getCanonicalFile().delete()) {
-                Log.i("CameraAssistant", "MainActivity deleteFileSafely: CanonicalFile.delete succeeded for " + file.getAbsolutePath());
-                return;
-            }
-        } catch (Throwable ignored) {}
-
-        // 3. Java NIO deleteIfExists
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try {
-                if (java.nio.file.Files.deleteIfExists(file.toPath())) {
-                    Log.i("CameraAssistant", "MainActivity deleteFileSafely: NIO delete succeeded for " + file.getAbsolutePath());
-                    return;
-                }
-            } catch (Throwable ignored) {}
-        }
-
-        // 4. MediaStore delete
-        try {
-            Uri contentUri = MediaStore.Files.getContentUri("external");
-            int count = getContentResolver().delete(contentUri,
-                    MediaStore.MediaColumns.DATA + "=?",
-                    new String[]{file.getAbsolutePath()});
-            if (count > 0) {
-                Log.i("CameraAssistant", "MainActivity deleteFileSafely: MediaStore delete succeeded for " + file.getAbsolutePath());
-                return;
-            }
-        } catch (Throwable ignored) {}
-
-        // 5. Shell rm
-        try {
-            Process p = Runtime.getRuntime().exec(new String[]{"/system/bin/rm", "-f", file.getAbsolutePath()});
-            p.waitFor();
-            if (!file.exists()) {
-                Log.i("CameraAssistant", "MainActivity deleteFileSafely: /system/bin/rm succeeded for " + file.getAbsolutePath());
-                return;
-            }
-        } catch (Throwable ignored) {}
-
-        // 6. Overwrite with 0 if delete failed
         try {
             FileOutputStream fos = new FileOutputStream(file);
             fos.write("0\n".getBytes("UTF-8"));
             fos.close();
-            Log.i("CameraAssistant", "MainActivity deleteFileSafely: Overwritten with 0 for " + file.getAbsolutePath());
-            return;
         } catch (Throwable ignored) {}
-
-        Log.w("CameraAssistant", "MainActivity deleteFileSafely: Could NOT delete " + file.getAbsolutePath() + ", still exists=" + file.exists());
+        try {
+            file.delete();
+        } catch (Throwable ignored) {}
     }
 }

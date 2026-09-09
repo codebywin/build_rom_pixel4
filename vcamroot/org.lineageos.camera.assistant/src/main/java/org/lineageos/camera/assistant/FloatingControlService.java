@@ -71,6 +71,22 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         "#FFEA00,0.40"
     };
 
+    // KYC Color Overlay
+    private View mKycOverlayView;
+    private WindowManager.LayoutParams mKycParams;
+    private final android.os.Handler mKycHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private int mAutoColorIndex = 1;
+    private final Runnable mAutoFlashRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (mSwitchKyc != null && mSwitchKyc.isChecked() && mCurrentColorMode == 0) {
+                mAutoColorIndex = (mAutoColorIndex % (COLOR_MODE_VALS.length - 1)) + 1;
+                applyKycOverlayColor(COLOR_MODE_VALS[mAutoColorIndex]);
+                mKycHandler.postDelayed(this, 1200);
+            }
+        }
+    };
+
     // Drag touch state
     private int mDragInitialX, mDragInitialY;
     private float mDragInitialTouchX, mDragInitialTouchY;
@@ -166,6 +182,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         super.onCreate();
         sInstance = this;
         startAsForeground();
+        ensureAllConfigFiles();
 
         mWindowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         mFloatingView = LayoutInflater.from(this).inflate(R.layout.floating_control_layout, null);
@@ -271,8 +288,10 @@ public class FloatingControlService extends Service implements View.OnTouchListe
             writeFlag("vcam_color_sync", isChecked);
             if (isChecked) {
                 writeColorVal(COLOR_MODE_VALS[mCurrentColorMode]);
+                updateKycOverlayState(true);
                 Toast.makeText(this, "🎨 Đã BẬT: " + COLOR_MODE_NAMES[mCurrentColorMode], Toast.LENGTH_SHORT).show();
             } else {
+                updateKycOverlayState(false);
                 Toast.makeText(this, "⚪ Đã TẮT Đổi màu", Toast.LENGTH_SHORT).show();
             }
         });
@@ -361,6 +380,9 @@ public class FloatingControlService extends Service implements View.OnTouchListe
             }
         }
         updateColorModeUi();
+        if (kycActive) {
+            updateKycOverlayState(true);
+        }
 
         String savedBoost = readStringFile("/data/local/tmp/" + FILE_MIC_BOOST);
         if (savedBoost.isEmpty()) savedBoost = readStringFile("/sdcard/" + FILE_MIC_BOOST);
@@ -400,7 +422,9 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         mCurrentColorMode = (mCurrentColorMode + 1) % COLOR_MODE_NAMES.length;
         updateColorModeUi();
         writeColorVal(COLOR_MODE_VALS[mCurrentColorMode]);
-        if (mSwitchKyc != null && !mSwitchKyc.isChecked()) {
+        if (mSwitchKyc != null && mSwitchKyc.isChecked()) {
+            updateKycOverlayState(true);
+        } else if (mSwitchKyc != null) {
             mSwitchKyc.setChecked(true);
         } else {
             Toast.makeText(this, COLOR_MODE_NAMES[mCurrentColorMode], Toast.LENGTH_SHORT).show();
@@ -521,6 +545,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
 
         mTxtZoom.setText("1.00x");
         if (mSwitchKyc != null) mSwitchKyc.setChecked(false);
+        updateKycOverlayState(false);
         writeFlag(FLAG_KYC_FLASH, false);
         writeFlag("vcam_color_sync", false);
         mCurrentColorMode = 0;
@@ -548,15 +573,13 @@ public class FloatingControlService extends Service implements View.OnTouchListe
             new File(Environment.getExternalStorageDirectory(), name)
         };
         for (File f : targets) {
-            if (f.exists()) {
-                if (f.length() == 0) return true; // File created by touch from adb shell
+            if (f.exists() && f.length() > 0) {
                 try (BufferedReader reader = new BufferedReader(new FileReader(f))) {
                     String line = reader.readLine();
-                    if (line != null && "0".equals(line.trim())) {
-                        return false;
+                    if (line != null && "1".equals(line.trim())) {
+                        return true;
                     }
                 } catch (Throwable ignored) {}
-                return true;
             }
         }
         return false;
@@ -564,93 +587,22 @@ public class FloatingControlService extends Service implements View.OnTouchListe
 
     private void writeFlag(String name, boolean active) {
         Log.i(TAG, "writeFlag: " + name + " -> " + active);
-        File[] targets = new File[] {
-            new File("/data/local/tmp/" + name),
-            new File("/sdcard/" + name),
-            new File("/storage/emulated/0/" + name),
-            new File(Environment.getExternalStorageDirectory(), name)
-        };
-        for (File f : targets) {
-            try {
-                if (active) {
-                    if (!f.exists()) {
-                        f.createNewFile();
-                    }
-                    FileOutputStream fos = new FileOutputStream(f);
-                    fos.write("1\n".getBytes("UTF-8"));
-                    fos.close();
-                    f.setReadable(true, false);
-                    f.setWritable(true, false);
-                    Log.i(TAG, "Created flag file: " + f.getAbsolutePath());
-                } else {
-                    deleteFileSafely(f);
-                }
-            } catch (Throwable t) {
-                Log.w(TAG, "writeFlag error for " + f.getAbsolutePath() + ": " + t.getMessage());
-            }
-        }
+        String val = active ? "1\n" : "0\n";
+        writeStringFile("/data/local/tmp/" + name, val);
+        writeStringFile("/sdcard/" + name, val);
+        writeStringFile("/storage/emulated/0/" + name, val);
     }
 
     private void deleteFileSafely(File file) {
         if (file == null || !file.exists()) return;
-
-        // 1. Standard File.delete
-        boolean deleted = file.delete();
-        if (deleted) {
-            Log.i(TAG, "deleteFileSafely: File.delete succeeded for " + file.getAbsolutePath());
-            return;
-        }
-
-        // 2. Canonical delete
-        try {
-            if (file.getCanonicalFile().delete()) {
-                Log.i(TAG, "deleteFileSafely: CanonicalFile.delete succeeded for " + file.getAbsolutePath());
-                return;
-            }
-        } catch (Throwable ignored) {}
-
-        // 3. Java NIO deleteIfExists
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try {
-                if (java.nio.file.Files.deleteIfExists(file.toPath())) {
-                    Log.i(TAG, "deleteFileSafely: NIO delete succeeded for " + file.getAbsolutePath());
-                    return;
-                }
-            } catch (Throwable ignored) {}
-        }
-
-        // 4. MediaStore delete
-        try {
-            Uri contentUri = MediaStore.Files.getContentUri("external");
-            int count = getContentResolver().delete(contentUri,
-                    MediaStore.MediaColumns.DATA + "=?",
-                    new String[]{file.getAbsolutePath()});
-            if (count > 0) {
-                Log.i(TAG, "deleteFileSafely: MediaStore delete succeeded for " + file.getAbsolutePath());
-                return;
-            }
-        } catch (Throwable ignored) {}
-
-        // 5. Shell rm
-        try {
-            Process p = Runtime.getRuntime().exec(new String[]{"/system/bin/rm", "-f", file.getAbsolutePath()});
-            p.waitFor();
-            if (!file.exists()) {
-                Log.i(TAG, "deleteFileSafely: /system/bin/rm succeeded for " + file.getAbsolutePath());
-                return;
-            }
-        } catch (Throwable ignored) {}
-
-        // 6. Overwrite with 0 if delete failed
         try {
             FileOutputStream fos = new FileOutputStream(file);
             fos.write("0\n".getBytes("UTF-8"));
             fos.close();
-            Log.i(TAG, "deleteFileSafely: Overwritten with 0 for " + file.getAbsolutePath());
-            return;
         } catch (Throwable ignored) {}
-
-        Log.w(TAG, "deleteFileSafely: Could NOT delete " + file.getAbsolutePath() + ", still exists=" + file.exists());
+        try {
+            file.delete();
+        } catch (Throwable ignored) {}
     }
 
     private void writeFloatValue(String name, float val) {
@@ -660,6 +612,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
     }
 
     private void writeStringFile(String path, String val) {
+        boolean ok = false;
         try {
             File f = new File(path);
             FileOutputStream fos = new FileOutputStream(f);
@@ -667,7 +620,95 @@ public class FloatingControlService extends Service implements View.OnTouchListe
             fos.close();
             f.setReadable(true, false);
             f.setWritable(true, false);
+            ok = true;
         } catch (Throwable ignored) {}
+
+        if (!ok) {
+            try {
+                String cmd = "echo -n '" + val + "' > " + path + " && chmod 666 " + path;
+                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", cmd});
+                p.waitFor();
+            } catch (Throwable ignored2) {}
+        }
+    }
+
+    private void ensureAllConfigFiles() {
+        new Thread(() -> {
+            try {
+                String cmd = "for f in vcam_pause vcam_disable vcam_kyc_flash vcam_reset; do [ ! -s /data/local/tmp/$f ] && echo '0' > /data/local/tmp/$f; done; " +
+                        "[ ! -s /data/local/tmp/vcam_rotation ] && echo '0' > /data/local/tmp/vcam_rotation; " +
+                        "[ ! -s /data/local/tmp/vcam_zoom ] && echo '1.0' > /data/local/tmp/vcam_zoom; " +
+                        "[ ! -s /data/local/tmp/vcam_pan_x ] && echo '0.0' > /data/local/tmp/vcam_pan_x; " +
+                        "[ ! -s /data/local/tmp/vcam_pan_y ] && echo '0.0' > /data/local/tmp/vcam_pan_y; " +
+                        "[ ! -s /data/local/tmp/vcam_mic_boost ] && echo '3.0' > /data/local/tmp/vcam_mic_boost; " +
+                        "[ ! -s /data/local/tmp/vcam_color_val ] && echo 'auto' > /data/local/tmp/vcam_color_val; " +
+                        "chmod 666 /data/local/tmp/vcam*";
+                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", cmd});
+                p.waitFor();
+            } catch (Throwable ignored) {}
+        }).start();
+    }
+
+    private void setupKycOverlay() {
+        if (mKycOverlayView == null) {
+            mKycOverlayView = new View(this);
+            mKycParams = new WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                            | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    PixelFormat.TRANSLUCENT
+            );
+        }
+    }
+
+    private void updateKycOverlayState(boolean show) {
+        setupKycOverlay();
+        mKycHandler.removeCallbacks(mAutoFlashRunnable);
+
+        if (!show) {
+            if (mKycOverlayView != null && mKycOverlayView.getParent() != null) {
+                try {
+                    mWindowManager.removeView(mKycOverlayView);
+                } catch (Throwable ignored) {}
+            }
+            return;
+        }
+
+        if (mCurrentColorMode == 0) {
+            applyKycOverlayColor(COLOR_MODE_VALS[1]);
+            mKycHandler.postDelayed(mAutoFlashRunnable, 1200);
+        } else {
+            applyKycOverlayColor(COLOR_MODE_VALS[mCurrentColorMode]);
+        }
+
+        if (mKycOverlayView.getParent() == null) {
+            try {
+                mWindowManager.addView(mKycOverlayView, mKycParams);
+            } catch (Throwable t) {
+                Log.e(TAG, "Failed to add KYC overlay view: " + t.getMessage());
+            }
+        }
+    }
+
+    private void applyKycOverlayColor(String colorConfig) {
+        if (mKycOverlayView == null) return;
+        try {
+            if ("auto".equalsIgnoreCase(colorConfig)) {
+                colorConfig = "#FFFFFF,0.40";
+            }
+            String[] parts = colorConfig.split(",");
+            String hex = parts[0].trim();
+            float alpha = (parts.length > 1) ? Float.parseFloat(parts[1].trim()) : 0.40f;
+            int baseColor = android.graphics.Color.parseColor(hex);
+            int alphaInt = (int) (alpha * 255);
+            int finalColor = (alphaInt << 24) | (baseColor & 0x00FFFFFF);
+            mKycOverlayView.setBackgroundColor(finalColor);
+        } catch (Throwable t) {
+            mKycOverlayView.setBackgroundColor(0x66FFFFFF);
+        }
     }
 
     private float readFloatValue(String name, float defVal) {
@@ -712,6 +753,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
     public void onDestroy() {
         super.onDestroy();
         sInstance = null;
+        updateKycOverlayState(false);
         try {
             stopForeground(true);
         } catch (Throwable ignored) {}
