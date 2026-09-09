@@ -17,20 +17,19 @@ public class XposedSharedConfig {
     public static final String TARGET_AUDIO = "vcam.wav";
 
     public static boolean isFlagActive(String name) {
-        File[] targets = new File[] {
-            new File("/data/local/tmp/" + name),
-            new File("/sdcard/" + name),
-            new File("/storage/emulated/0/" + name)
-        };
-        for (File f : targets) {
-            if (f.exists() && f.length() > 0) {
-                try (BufferedReader reader = new BufferedReader(new FileReader(f))) {
-                    String line = reader.readLine();
-                    if (line != null && "1".equals(line.trim())) {
-                        return true;
-                    }
-                } catch (Throwable ignored) {}
-            }
+        File f1 = new File("/data/local/tmp/" + name);
+        if (f1.exists()) {
+            try (BufferedReader reader = new BufferedReader(new FileReader(f1))) {
+                String line = reader.readLine();
+                return line != null && "1".equals(line.trim());
+            } catch (Throwable ignored) {}
+        }
+        File f2 = new File("/sdcard/" + name);
+        if (f2.exists()) {
+            try (BufferedReader reader = new BufferedReader(new FileReader(f2))) {
+                String line = reader.readLine();
+                return line != null && "1".equals(line.trim());
+            } catch (Throwable ignored) {}
         }
         return false;
     }
@@ -132,20 +131,23 @@ public class XposedSharedConfig {
     }
 
     public static String readString(String name, String def) {
-        File[] targets = new File[] {
-            new File("/data/local/tmp/" + name),
-            new File("/sdcard/" + name),
-            new File("/storage/emulated/0/" + name)
-        };
-        for (File f : targets) {
-            if (f.exists() && f.length() > 0) {
-                try (BufferedReader reader = new BufferedReader(new FileReader(f))) {
-                    String line = reader.readLine();
-                    if (line != null && !line.trim().isEmpty()) {
-                        return line.trim();
-                    }
-                } catch (Throwable ignored) {}
-            }
+        File f1 = new File("/data/local/tmp/" + name);
+        if (f1.exists()) {
+            try (BufferedReader reader = new BufferedReader(new FileReader(f1))) {
+                String line = reader.readLine();
+                if (line != null && !line.trim().isEmpty()) {
+                    return line.trim();
+                }
+            } catch (Throwable ignored) {}
+        }
+        File f2 = new File("/sdcard/" + name);
+        if (f2.exists()) {
+            try (BufferedReader reader = new BufferedReader(new FileReader(f2))) {
+                String line = reader.readLine();
+                if (line != null && !line.trim().isEmpty()) {
+                    return line.trim();
+                }
+            } catch (Throwable ignored) {}
         }
         return def;
     }

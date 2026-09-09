@@ -362,7 +362,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
 
         mCurrentZoom = readFloatValue(FILE_ZOOM, 1.0f);
         if (mCurrentZoom < 1.0f) mCurrentZoom = 1.0f;
-        if (mCurrentZoom > 3.0f) mCurrentZoom = 3.0f;
+        if (mCurrentZoom > 5.0f) mCurrentZoom = 5.0f;
         mTxtZoom.setText(String.format(Locale.US, "%.2fx", mCurrentZoom));
 
         mCurrentPanX = readFloatValue(FILE_PAN_X, 0.0f);
@@ -499,7 +499,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
 
     private void setZoom(float zoom) {
         if (zoom < 1.0f) zoom = 1.0f;
-        if (zoom > 3.0f) zoom = 3.0f;
+        if (zoom > 5.0f) zoom = 5.0f;
         mCurrentZoom = zoom;
 
         mTxtZoom.setText(String.format(Locale.US, "%.2fx", mCurrentZoom));
@@ -512,7 +512,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         mCurrentPanX += dx;
         mCurrentPanY += dy;
 
-        float maxPan = (mCurrentZoom - 1.0f) / (2.0f * mCurrentZoom);
+        float maxPan = Math.max(0.40f, (mCurrentZoom - 1.0f) / (2.0f * mCurrentZoom));
         if (mCurrentPanX > maxPan) mCurrentPanX = maxPan;
         if (mCurrentPanX < -maxPan) mCurrentPanX = -maxPan;
         if (mCurrentPanY > maxPan) mCurrentPanY = maxPan;

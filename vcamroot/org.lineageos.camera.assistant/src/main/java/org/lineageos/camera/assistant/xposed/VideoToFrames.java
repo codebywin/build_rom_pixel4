@@ -3,28 +3,49 @@ package org.lineageos.camera.assistant.xposed;
 import android.media.MediaCodec;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
-import android.os.Build;
 import android.util.Log;
 import android.view.Surface;
 
 import java.io.File;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 
 public class VideoToFrames implements Runnable {
-    private static final String TAG = "VcamVideoToFrames";
+    private static final String TAG = "VcamVideoFrames";
     private static final long TIMEOUT_US = 10000;
 
     private volatile boolean mStopDecode = false;
     private String mVideoPath;
-    private Surface mSurface;
+    private final List<Surface> mTargetSurfaces = new ArrayList<>();
     private Thread mWorkerThread;
 
     public void setSurface(Surface surface) {
-        mSurface = surface;
+        synchronized (mTargetSurfaces) {
+            mTargetSurfaces.clear();
+            if (surface != null && surface.isValid()) {
+                mTargetSurfaces.add(surface);
+            }
+        }
+    }
+
+    public void setSurfaces(List<Surface> surfaces) {
+        synchronized (mTargetSurfaces) {
+            mTargetSurfaces.clear();
+            if (surfaces != null) {
+                for (Surface s : surfaces) {
+                    if (s != null && s.isValid()) {
+                        mTargetSurfaces.add(s);
+                    }
+                }
+            }
+        }
     }
 
     public Surface getSurface() {
-        return mSurface;
+        synchronized (mTargetSurfaces) {
+            return mTargetSurfaces.isEmpty() ? null : mTargetSurfaces.get(0);
+        }
     }
 
     public boolean isPlaying() {
@@ -50,8 +71,12 @@ public class VideoToFrames implements Runnable {
 
     @Override
     public void run() {
-        if (mSurface == null || !mSurface.isValid()) {
-            Log.e(TAG, "Cannot decode: Surface is invalid or null");
+        List<Surface> targets;
+        synchronized (mTargetSurfaces) {
+            targets = new ArrayList<>(mTargetSurfaces);
+        }
+        if (targets.isEmpty()) {
+            Log.e(TAG, "Cannot decode: No valid target surfaces");
             return;
         }
 
@@ -63,6 +88,7 @@ public class VideoToFrames implements Runnable {
 
         MediaExtractor extractor = null;
         MediaCodec decoder = null;
+        VcamRenderer renderer = null;
 
         try {
             extractor = new MediaExtractor();
@@ -87,16 +113,37 @@ public class VideoToFrames implements Runnable {
             MediaFormat mediaFormat = extractor.getTrackFormat(trackIndex);
             String mime = mediaFormat.getString(MediaFormat.KEY_MIME);
 
+            int videoWidth = 1280;
+            int videoHeight = 720;
+            try {
+                if (mediaFormat.containsKey(MediaFormat.KEY_WIDTH)) {
+                    videoWidth = mediaFormat.getInteger(MediaFormat.KEY_WIDTH);
+                }
+                if (mediaFormat.containsKey(MediaFormat.KEY_HEIGHT)) {
+                    videoHeight = mediaFormat.getInteger(MediaFormat.KEY_HEIGHT);
+                }
+            } catch (Throwable ignored) {}
+
+            renderer = new VcamRenderer();
+            boolean useRenderer = renderer.init(targets, videoWidth, videoHeight);
+            Surface decodeSurface;
+
             int currentRotation = XposedSharedConfig.getRotation();
-            if (currentRotation != 0) {
-                mediaFormat.setInteger(MediaFormat.KEY_ROTATION, currentRotation);
+            if (useRenderer) {
+                decodeSurface = renderer.getInputSurface();
+                Log.i(TAG, "Hardware decoder rendering via OpenGL ES VcamRenderer (" + targets.size() + " targets)");
+            } else {
+                renderer = null;
+                decodeSurface = targets.get(0);
+                if (currentRotation != 0) {
+                    mediaFormat.setInteger(MediaFormat.KEY_ROTATION, currentRotation);
+                }
+                Log.i(TAG, "Hardware decoder rendering directly to Surface (fallback)");
             }
 
             decoder = MediaCodec.createDecoderByType(mime);
-            decoder.configure(mediaFormat, mSurface, null, 0);
+            decoder.configure(mediaFormat, decodeSurface, null, 0);
             decoder.start();
-
-            Log.i(TAG, "Hardware decoder started on Surface with rotation=" + currentRotation + "°");
 
             MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
             boolean sawInputEOS = false;
@@ -124,45 +171,54 @@ public class VideoToFrames implements Runnable {
                     sawOutputEOS = false;
                     startWhen = System.currentTimeMillis();
                 }
+
                 // 3. Kiểm tra xoay video động (Dynamic Rotation: 0, 90, 180, 270)
                 int targetRotation = XposedSharedConfig.getRotation();
                 if (targetRotation != currentRotation) {
                     currentRotation = targetRotation;
-                    Log.i(TAG, "Applying dynamic rotation: " + currentRotation + "°");
-                    long currentPosUs = extractor.getSampleTime();
-
-                    try {
-                        decoder.stop();
-                        decoder.release();
-                    } catch (Throwable ignored) {}
-
-                    mediaFormat.setInteger(MediaFormat.KEY_ROTATION, currentRotation);
-                    decoder = MediaCodec.createDecoderByType(mime);
-                    decoder.configure(mediaFormat, mSurface, null, 0);
-                    decoder.start();
-
-                    if (currentPosUs >= 0) {
-                        extractor.seekTo(currentPosUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC);
-                        startWhen = System.currentTimeMillis() - (extractor.getSampleTime() / 1000);
+                    Log.i(TAG, "Rotation updated: " + currentRotation + "°");
+                    if (renderer != null) {
+                        // VcamRenderer handles rotation dynamically via Shader matrix!
+                        renderer.renderFrame();
                     } else {
-                        extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC);
-                        startWhen = System.currentTimeMillis();
+                        // Fallback codec re-init
+                        long currentPosUs = extractor.getSampleTime();
+                        try {
+                            decoder.stop();
+                            decoder.release();
+                        } catch (Throwable ignored) {}
+
+                        mediaFormat.setInteger(MediaFormat.KEY_ROTATION, currentRotation);
+                        decoder = MediaCodec.createDecoderByType(mime);
+                        decoder.configure(mediaFormat, decodeSurface, null, 0);
+                        decoder.start();
+
+                        if (currentPosUs >= 0) {
+                            extractor.seekTo(currentPosUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC);
+                            startWhen = System.currentTimeMillis() - (extractor.getSampleTime() / 1000);
+                        } else {
+                            extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC);
+                            startWhen = System.currentTimeMillis();
+                        }
+                        sawInputEOS = false;
+                        sawOutputEOS = false;
+                        continue;
                     }
-                    sawInputEOS = false;
-                    sawOutputEOS = false;
-                    continue;
                 }
 
-                // 4. Kiểm tra tạm dừng (Pause) - Giữ nguyên vị trí, không tua nhanh khi tiếp tục
+                // 4. Kiểm tra tạm dừng (Pause) - Giữ nguyên vị trí, cập nhật frame nếu chỉnh zoom/pan/color/rotate
                 if (XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_PAUSE)) {
                     long pauseStart = System.currentTimeMillis();
                     while (XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_PAUSE) && !mStopDecode) {
+                        if (renderer != null) {
+                            renderer.renderFrame();
+                        }
                         try {
                             Thread.sleep(50);
                         } catch (InterruptedException ignored) {}
                     }
                     long pauseDuration = System.currentTimeMillis() - pauseStart;
-                    startWhen += pauseDuration; // Bù thời gian tạm dừng để không bị chạy vọt
+                    startWhen += pauseDuration;
                     continue;
                 }
 
@@ -196,19 +252,21 @@ public class VideoToFrames implements Runnable {
                         long sleepTime = presentationMs - elapsedMs;
 
                         if (sleepTime > 50) {
-                            sleepTime = 33; // Giới hạn độ trễ tối đa 33ms (tương đương 30fps)
+                            sleepTime = 33;
                         }
                         if (sleepTime > 0) {
                             try {
                                 Thread.sleep(sleepTime);
                             } catch (InterruptedException ignored) {}
                         } else if (sleepTime < -500) {
-                            // Bị chậm quá nhiều, đồng bộ lại đồng hồ chuẩn
                             startWhen = System.currentTimeMillis() - presentationMs;
                         }
 
-                        if (mSurface != null && mSurface.isValid()) {
+                        if (decodeSurface != null && decodeSurface.isValid()) {
                             decoder.releaseOutputBuffer(outIndex, true);
+                            if (renderer != null) {
+                                renderer.renderFrame();
+                            }
                         } else {
                             decoder.releaseOutputBuffer(outIndex, false);
                             break;
@@ -240,6 +298,11 @@ public class VideoToFrames implements Runnable {
             if (extractor != null) {
                 try {
                     extractor.release();
+                } catch (Throwable ignored) {}
+            }
+            if (renderer != null) {
+                try {
+                    renderer.release();
                 } catch (Throwable ignored) {}
             }
             Log.i(TAG, "VideoToFrames decoder stopped and released");

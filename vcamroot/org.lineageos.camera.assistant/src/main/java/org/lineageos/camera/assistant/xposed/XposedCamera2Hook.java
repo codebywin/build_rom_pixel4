@@ -6,7 +6,6 @@ import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.params.OutputConfiguration;
 import android.hardware.camera2.params.SessionConfiguration;
-import android.media.MediaPlayer;
 import android.os.Build;
 import android.util.Log;
 import android.view.Surface;
@@ -37,62 +36,8 @@ public class XposedCamera2Hook {
     // Preview surfaces (TextureView - SurfaceTexture)
     private static volatile Surface sPreviewSurface = null;
     private static volatile Surface sPreviewSurface1 = null;
-    private static MediaPlayer sPlayer = null;
-    private static MediaPlayer sPlayer1 = null;
-    private static String sLastResetTs = "";
-
-    // Preview views tracked for dynamic Zoom and Pan
-    private static final java.util.List<java.lang.ref.WeakReference<android.view.View>> sPreviewViews =
-            new java.util.concurrent.CopyOnWriteArrayList<>();
-    private static float sLastZoom = 1.0f;
-    private static float sLastPanX = 0.0f;
-    private static float sLastPanY = 0.0f;
-    public static void registerPreviewView(android.view.View view) {
-        if (view == null) return;
-        for (java.lang.ref.WeakReference<android.view.View> ref : sPreviewViews) {
-            if (ref.get() == view) return;
-        }
-        sPreviewViews.add(new java.lang.ref.WeakReference<>(view));
-        Log.i(TAG, "Registered camera preview View for Zoom/Pan: " + view);
-        applyTransformToView(view, sLastZoom, sLastPanX, sLastPanY);
-    }
-
-    private static void applyTransformToView(android.view.View v, float zoom, float panX, float panY) {
-        if (v == null) return;
-        v.post(() -> {
-            try {
-                int w = v.getWidth();
-                int h = v.getHeight();
-                if (w > 0 && h > 0) {
-                    v.setPivotX(w / 2f);
-                    v.setPivotY(h / 2f);
-                    v.setScaleX(zoom);
-                    v.setScaleY(zoom);
-                    v.setTranslationX(panX * w);
-                    v.setTranslationY(panY * h);
-                }
-            } catch (Throwable ignored) {}
-        });
-    }
-
-    private static void checkAndApplyZoomPan() {
-        float zoom = XposedSharedConfig.getZoom();
-        float panX = XposedSharedConfig.getPanX();
-        float panY = XposedSharedConfig.getPanY();
-
-        if (Math.abs(zoom - sLastZoom) > 0.01f || Math.abs(panX - sLastPanX) > 0.01f ||
-            Math.abs(panY - sLastPanY) > 0.01f) {
-            sLastZoom = zoom;
-            sLastPanX = panX;
-            sLastPanY = panY;
-            for (java.lang.ref.WeakReference<android.view.View> ref : sPreviewViews) {
-                android.view.View v = ref.get();
-                if (v != null) {
-                    applyTransformToView(v, zoom, panX, panY);
-                }
-            }
-        }
-    }
+    private static VideoToFrames sPreviewDecoder = null;
+    private static VideoToFrames sPreviewDecoder1 = null;
 
     private static synchronized Surface getVirtualSurface() {
         if (sVirtualTexture == null) {
@@ -106,27 +51,6 @@ public class XposedCamera2Hook {
 
     public static void initHook(ClassLoader classLoader) {
         try {
-            // Hook SurfaceView and TextureView to track preview views for Zoom & Pan
-            try {
-                Class<?> svClass = XposedHelpers.findClass("android.view.SurfaceView", classLoader);
-                XposedBridge.hookAllConstructors(svClass, new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        registerPreviewView((android.view.View) param.thisObject);
-                    }
-                });
-            } catch (Throwable ignored) {}
-
-            try {
-                Class<?> tvClass = XposedHelpers.findClass("android.view.TextureView", classLoader);
-                XposedBridge.hookAllConstructors(tvClass, new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        registerPreviewView((android.view.View) param.thisObject);
-                    }
-                });
-            } catch (Throwable ignored) {}
-
             // Track all ImageReader surfaces
             try {
                 Class<?> imageReaderClass = XposedHelpers.findClass("android.media.ImageReader", classLoader);
@@ -177,7 +101,6 @@ public class XposedCamera2Hook {
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                     if (XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_DISABLE)) return;
                     startVirtualVideoFeeds();
-                    checkAndApplyZoomPan();
                 }
             });
 
@@ -246,12 +169,18 @@ public class XposedCamera2Hook {
         if (target.equals(sPreviewSurface)) {
             Log.i(TAG, "Unregistered sPreviewSurface: " + target);
             sPreviewSurface = null;
-            stopPlayer(0);
+            if (sPreviewDecoder != null) {
+                sPreviewDecoder.stopDecode();
+                sPreviewDecoder = null;
+            }
         }
         if (target.equals(sPreviewSurface1)) {
             Log.i(TAG, "Unregistered sPreviewSurface1: " + target);
             sPreviewSurface1 = null;
-            stopPlayer(1);
+            if (sPreviewDecoder1 != null) {
+                sPreviewDecoder1.stopDecode();
+                sPreviewDecoder1 = null;
+            }
         }
     }
 
@@ -344,7 +273,6 @@ public class XposedCamera2Hook {
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                     if (XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_DISABLE)) return;
                     startVirtualVideoFeeds();
-                    checkAndApplyZoomPan();
                 }
             };
 
@@ -376,7 +304,7 @@ public class XposedCamera2Hook {
         }
         String videoPath = videoFile.getAbsolutePath();
 
-        // 1. Feed sReaderSurface (SurfaceView / ImageReader) via Hardware VideoToFrames
+        // 1. Feed sReaderSurface (SurfaceView / ImageReader) via Hardware VideoToFrames + VcamRenderer
         if (sReaderSurface != null && sReaderSurface.isValid()) {
             if (sHwDecoder == null || !sHwDecoder.isPlaying() || !sReaderSurface.equals(sHwDecoder.getSurface())) {
                 if (sHwDecoder != null) sHwDecoder.stopDecode();
@@ -387,7 +315,7 @@ public class XposedCamera2Hook {
             }
         }
 
-        // 2. Feed sReaderSurface1 (Secondary SurfaceView / ImageReader) via VideoToFrames
+        // 2. Feed sReaderSurface1 (Secondary SurfaceView / ImageReader) via VideoToFrames + VcamRenderer
         if (sReaderSurface1 != null && sReaderSurface1.isValid()) {
             if (sHwDecoder1 == null || !sHwDecoder1.isPlaying() || !sReaderSurface1.equals(sHwDecoder1.getSurface())) {
                 if (sHwDecoder1 != null) sHwDecoder1.stopDecode();
@@ -398,93 +326,26 @@ public class XposedCamera2Hook {
             }
         }
 
-        // 3. Feed sPreviewSurface (TextureView) via MediaPlayer
+        // 3. Feed sPreviewSurface (TextureView) via VideoToFrames + VcamRenderer
         if (sPreviewSurface != null && sPreviewSurface.isValid()) {
-            if (sPlayer == null) {
-                startPlayer(sPreviewSurface, 0, videoPath);
-            } else {
-                try {
-                    if (XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_PAUSE)) {
-                        if (sPlayer.isPlaying()) sPlayer.pause();
-                    } else if (!sPlayer.isPlaying()) {
-                        sPlayer.start();
-                    }
-                } catch (Throwable ignored) {
-                    startPlayer(sPreviewSurface, 0, videoPath);
-                }
+            if (sPreviewDecoder == null || !sPreviewDecoder.isPlaying() || !sPreviewSurface.equals(sPreviewDecoder.getSurface())) {
+                if (sPreviewDecoder != null) sPreviewDecoder.stopDecode();
+                sPreviewDecoder = new VideoToFrames();
+                sPreviewDecoder.setSurface(sPreviewSurface);
+                sPreviewDecoder.decode(videoPath);
+                Log.i(TAG, "Started VideoToFrames on sPreviewSurface: " + sPreviewSurface);
             }
         }
 
-        // 4. Feed sPreviewSurface1 (Secondary named Surface) via MediaPlayer
+        // 4. Feed sPreviewSurface1 (Secondary named Surface) via VideoToFrames + VcamRenderer
         if (sPreviewSurface1 != null && sPreviewSurface1.isValid()) {
-            if (sPlayer1 == null) {
-                startPlayer(sPreviewSurface1, 1, videoPath);
-            } else {
-                try {
-                    if (XposedSharedConfig.isFlagActive(XposedSharedConfig.FLAG_PAUSE)) {
-                        if (sPlayer1.isPlaying()) sPlayer1.pause();
-                    } else if (!sPlayer1.isPlaying()) {
-                        sPlayer1.start();
-                    }
-                } catch (Throwable ignored) {
-                    startPlayer(sPreviewSurface1, 1, videoPath);
-                }
+            if (sPreviewDecoder1 == null || !sPreviewDecoder1.isPlaying() || !sPreviewSurface1.equals(sPreviewDecoder1.getSurface())) {
+                if (sPreviewDecoder1 != null) sPreviewDecoder1.stopDecode();
+                sPreviewDecoder1 = new VideoToFrames();
+                sPreviewDecoder1.setSurface(sPreviewSurface1);
+                sPreviewDecoder1.decode(videoPath);
+                Log.i(TAG, "Started VideoToFrames on sPreviewSurface1: " + sPreviewSurface1);
             }
-        }
-
-        // 5. Kiểm tra tua lại / Reset trên MediaPlayer
-        String currentResetTs = XposedSharedConfig.getResetTimestamp();
-        if (!currentResetTs.isEmpty() && !currentResetTs.equals(sLastResetTs)) {
-            sLastResetTs = currentResetTs;
-            try {
-                if (sPlayer != null) sPlayer.seekTo(0);
-                if (sPlayer1 != null) sPlayer1.seekTo(0);
-            } catch (Throwable ignored) {}
-        }
-    }
-
-    private static synchronized void startPlayer(Surface surface, int index, String videoPath) {
-        try {
-            stopPlayer(index);
-
-            MediaPlayer mp = new MediaPlayer();
-            mp.setDataSource(videoPath);
-            mp.setSurface(surface);
-            mp.setLooping(true);
-            mp.setVolume(0f, 0f);
-
-            mp.setOnPreparedListener(p -> {
-                try {
-                    p.start();
-                    Log.i(TAG, "MediaPlayer[" + index + "] started on Surface: " + surface);
-                } catch (Throwable t) {
-                    Log.e(TAG, "Error starting MediaPlayer[" + index + "]", t);
-                }
-            });
-
-            mp.setOnErrorListener((p, what, extra) -> {
-                Log.e(TAG, "MediaPlayer[" + index + "] error: " + what + ", " + extra);
-                return true;
-            });
-
-            mp.prepareAsync();
-            if (index == 0) sPlayer = mp;
-            else sPlayer1 = mp;
-
-        } catch (Throwable t) {
-            Log.e(TAG, "Failed to initialize MediaPlayer[" + index + "]", t);
-        }
-    }
-
-    private static synchronized void stopPlayer(int index) {
-        MediaPlayer mp = (index == 0) ? sPlayer : sPlayer1;
-        if (mp != null) {
-            try {
-                if (mp.isPlaying()) mp.stop();
-                mp.release();
-            } catch (Throwable ignored) {}
-            if (index == 0) sPlayer = null;
-            else sPlayer1 = null;
         }
     }
 
@@ -497,7 +358,13 @@ public class XposedCamera2Hook {
             sHwDecoder1.stopDecode();
             sHwDecoder1 = null;
         }
-        stopPlayer(0);
-        stopPlayer(1);
+        if (sPreviewDecoder != null) {
+            sPreviewDecoder.stopDecode();
+            sPreviewDecoder = null;
+        }
+        if (sPreviewDecoder1 != null) {
+            sPreviewDecoder1.stopDecode();
+            sPreviewDecoder1 = null;
+        }
     }
 }
