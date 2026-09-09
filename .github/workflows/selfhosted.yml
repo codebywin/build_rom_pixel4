@@ -567,7 +567,7 @@ jobs:
         find . -name "vendor.lineage.health-service.default.rc" -exec sed -i '/service vendor.lineage_health/a \    interface aidl vendor.lineage.health.IChargingControl/default' {} + ; \
         mkdir -p packages/apps/CameraAssistant && \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/org.lineageos.camera.assistant/CameraAssistant.apk > packages/apps/CameraAssistant/CameraAssistant.apk && \
-        printf 'android_app_import {\n    name: "CameraAssistant",\n    apk: "CameraAssistant.apk",\n    certificate: "platform",\n    dex_preopt: {\n        enabled: false,\n    },\n}\n' > packages/apps/CameraAssistant/Android.bp && \
+        curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/CameraAssistant_Android.bp > packages/apps/CameraAssistant/Android.bp && \
         if [ -f device/google/coral/device.mk ]; then echo "PRODUCT_PACKAGES += CameraAssistant" >> device/google/coral/device.mk ; fi ; \
         source build/envsetup.sh && \
 

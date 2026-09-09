@@ -1,0 +1,8 @@
+android_app_import {
+    name: "CameraAssistant",
+    apk: "CameraAssistant.apk",
+    certificate: "platform",
+    dex_preopt: {
+        enabled: false,
+    },
+}
