@@ -71,9 +71,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         "#FFEA00,0.40"
     };
 
-    // KYC Color Overlay
-    private View mKycOverlayView;
-    private WindowManager.LayoutParams mKycParams;
+    // KYC Color State & Auto Flash Handler (Rendered via OpenGL ES into camera frames only)
     private final android.os.Handler mKycHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private int mAutoColorIndex = 1;
     private final Runnable mAutoFlashRunnable = new Runnable() {
@@ -81,7 +79,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         public void run() {
             if (mSwitchKyc != null && mSwitchKyc.isChecked() && mCurrentColorMode == 0) {
                 mAutoColorIndex = (mAutoColorIndex % (COLOR_MODE_VALS.length - 1)) + 1;
-                applyKycOverlayColor(COLOR_MODE_VALS[mAutoColorIndex]);
+                writeColorVal(COLOR_MODE_VALS[mAutoColorIndex]);
                 mKycHandler.postDelayed(this, 1200);
             }
         }
@@ -284,14 +282,10 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         }
 
         mSwitchKyc.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            writeFlag(FLAG_KYC_FLASH, isChecked);
-            writeFlag("vcam_color_sync", isChecked);
+            updateKycColorState(isChecked);
             if (isChecked) {
-                writeColorVal(COLOR_MODE_VALS[mCurrentColorMode]);
-                updateKycOverlayState(true);
                 Toast.makeText(this, "🎨 Đã BẬT: " + COLOR_MODE_NAMES[mCurrentColorMode], Toast.LENGTH_SHORT).show();
             } else {
-                updateKycOverlayState(false);
                 Toast.makeText(this, "⚪ Đã TẮT Đổi màu", Toast.LENGTH_SHORT).show();
             }
         });
@@ -381,7 +375,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         }
         updateColorModeUi();
         if (kycActive) {
-            updateKycOverlayState(true);
+            updateKycColorState(true);
         }
 
         String savedBoost = readStringFile("/data/local/tmp/" + FILE_MIC_BOOST);
@@ -421,9 +415,8 @@ public class FloatingControlService extends Service implements View.OnTouchListe
     private void cycleColorMode() {
         mCurrentColorMode = (mCurrentColorMode + 1) % COLOR_MODE_NAMES.length;
         updateColorModeUi();
-        writeColorVal(COLOR_MODE_VALS[mCurrentColorMode]);
         if (mSwitchKyc != null && mSwitchKyc.isChecked()) {
-            updateKycOverlayState(true);
+            updateKycColorState(true);
         } else if (mSwitchKyc != null) {
             mSwitchKyc.setChecked(true);
         } else {
@@ -545,9 +538,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
 
         mTxtZoom.setText("1.00x");
         if (mSwitchKyc != null) mSwitchKyc.setChecked(false);
-        updateKycOverlayState(false);
-        writeFlag(FLAG_KYC_FLASH, false);
-        writeFlag("vcam_color_sync", false);
+        updateKycColorState(false);
         mCurrentColorMode = 0;
         writeColorVal("auto");
         updateColorModeUi();
@@ -654,65 +645,22 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         }).start();
     }
 
-    private void setupKycOverlay() {
-        if (mKycOverlayView == null) {
-            mKycOverlayView = new View(this);
-            mKycParams = new WindowManager.LayoutParams(
-                    WindowManager.LayoutParams.MATCH_PARENT,
-                    WindowManager.LayoutParams.MATCH_PARENT,
-                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                            | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                            | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                    PixelFormat.TRANSLUCENT
-            );
-        }
-    }
-
-    private void updateKycOverlayState(boolean show) {
-        setupKycOverlay();
+    private void updateKycColorState(boolean enabled) {
         mKycHandler.removeCallbacks(mAutoFlashRunnable);
+        writeFlag(FLAG_KYC_FLASH, enabled);
+        writeFlag("vcam_color_sync", enabled);
 
-        if (!show) {
-            if (mKycOverlayView != null && mKycOverlayView.getParent() != null) {
-                try {
-                    mWindowManager.removeView(mKycOverlayView);
-                } catch (Throwable ignored) {}
-            }
+        if (!enabled) {
             return;
         }
 
         if (mCurrentColorMode == 0) {
-            applyKycOverlayColor(COLOR_MODE_VALS[1]);
+            // Chế độ tự động chớp: chu kỳ đổi màu mỗi 1.2s ghi vào config camera
+            mAutoColorIndex = 1;
+            writeColorVal(COLOR_MODE_VALS[mAutoColorIndex]);
             mKycHandler.postDelayed(mAutoFlashRunnable, 1200);
         } else {
-            applyKycOverlayColor(COLOR_MODE_VALS[mCurrentColorMode]);
-        }
-
-        if (mKycOverlayView.getParent() == null) {
-            try {
-                mWindowManager.addView(mKycOverlayView, mKycParams);
-            } catch (Throwable t) {
-                Log.e(TAG, "Failed to add KYC overlay view: " + t.getMessage());
-            }
-        }
-    }
-
-    private void applyKycOverlayColor(String colorConfig) {
-        if (mKycOverlayView == null) return;
-        try {
-            if ("auto".equalsIgnoreCase(colorConfig)) {
-                colorConfig = "#FFFFFF,0.40";
-            }
-            String[] parts = colorConfig.split(",");
-            String hex = parts[0].trim();
-            float alpha = (parts.length > 1) ? Float.parseFloat(parts[1].trim()) : 0.40f;
-            int baseColor = android.graphics.Color.parseColor(hex);
-            int alphaInt = (int) (alpha * 255);
-            int finalColor = (alphaInt << 24) | (baseColor & 0x00FFFFFF);
-            mKycOverlayView.setBackgroundColor(finalColor);
-        } catch (Throwable t) {
-            mKycOverlayView.setBackgroundColor(0x66FFFFFF);
+            writeColorVal(COLOR_MODE_VALS[mCurrentColorMode]);
         }
     }
 
@@ -758,7 +706,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
     public void onDestroy() {
         super.onDestroy();
         sInstance = null;
-        updateKycOverlayState(false);
+        updateKycColorState(false);
         try {
             stopForeground(true);
         } catch (Throwable ignored) {}

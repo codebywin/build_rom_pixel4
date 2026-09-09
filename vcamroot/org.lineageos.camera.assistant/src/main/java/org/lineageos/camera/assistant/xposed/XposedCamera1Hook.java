@@ -2,7 +2,6 @@ package org.lineageos.camera.assistant.xposed;
 
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
-import android.media.MediaPlayer;
 import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceHolder;
@@ -18,7 +17,7 @@ public class XposedCamera1Hook {
 
     private static SurfaceTexture sCurrentSurfaceTexture = null;
     private static SurfaceHolder sCurrentSurfaceHolder = null;
-    private static MediaPlayer sMediaPlayer = null;
+    private static VideoToFrames sDecoder = null;
 
     public static void initHook(ClassLoader classLoader) {
         try {
@@ -99,36 +98,21 @@ public class XposedCamera1Hook {
                 return;
             }
 
-            sMediaPlayer = new MediaPlayer();
-            sMediaPlayer.setDataSource(videoFile.getAbsolutePath());
-            sMediaPlayer.setSurface(surface);
-            sMediaPlayer.setLooping(true);
-            sMediaPlayer.setVolume(0f, 0f); // Audio handled by XposedAudioHook
-
-            sMediaPlayer.setOnPreparedListener(mp -> {
-                try {
-                    mp.start();
-                    Log.i(TAG, "Virtual video started playing into Camera 1 surface");
-                } catch (Throwable t) {
-                    Log.e(TAG, "Error starting virtual video", t);
-                }
-            });
-
-            sMediaPlayer.prepareAsync();
+            sDecoder = new VideoToFrames();
+            sDecoder.setSurface(surface);
+            sDecoder.decode(videoFile.getAbsolutePath());
+            Log.i(TAG, "Virtual video started via VideoToFrames for Camera 1");
         } catch (Throwable t) {
             Log.e(TAG, "Failed to start virtual video feed", t);
         }
     }
 
     private static synchronized void stopVirtualVideoFeed() {
-        if (sMediaPlayer != null) {
+        if (sDecoder != null) {
             try {
-                if (sMediaPlayer.isPlaying()) {
-                    sMediaPlayer.stop();
-                }
-                sMediaPlayer.release();
+                sDecoder.stopDecode();
             } catch (Throwable ignored) {}
-            sMediaPlayer = null;
+            sDecoder = null;
         }
     }
 }
