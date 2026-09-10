@@ -544,34 +544,34 @@ jobs:
         fi ; \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/vcam_pixel4.patch > /tmp/vcam_pixel4.patch && \
         sed -i 's/\r$//' /tmp/vcam_pixel4.patch && \
-        ( cd frameworks/base && patch -p1 --fuzz=5 --forward --ignore-whitespace < /tmp/vcam_pixel4.patch && echo "VCAM patch applied successfully!" || echo "VCAM patch already applied or skipped" ) ; \
+        ( git -C frameworks/base apply --ignore-space-change --ignore-whitespace --check /tmp/vcam_pixel4.patch && git -C frameworks/base apply --ignore-space-change --ignore-whitespace /tmp/vcam_pixel4.patch && echo "VCAM patch applied successfully!" || echo "VCAM patch already applied or skipped" ) ; \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/sepolicy_vcam_coral.patch > /tmp/sepolicy_vcam_coral.patch && \
         sed -i 's/\r$//' /tmp/sepolicy_vcam_coral.patch && \
-        ( cd device/google/coral && patch -p1 --fuzz=5 --forward --ignore-whitespace < /tmp/sepolicy_vcam_coral.patch && echo "VCAM SEPolicy patch applied successfully!" || echo "VCAM SEPolicy patch already applied or skipped" ) ; \
+        ( git -C device/google/coral apply --ignore-space-change --ignore-whitespace --check /tmp/sepolicy_vcam_coral.patch && git -C device/google/coral apply --ignore-space-change --ignore-whitespace /tmp/sepolicy_vcam_coral.patch && echo "VCAM SEPolicy patch applied successfully!" || echo "VCAM SEPolicy patch already applied or skipped" ) ; \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/spoof_locked_bootloader.patch > /tmp/spoof_locked_bootloader.patch && \
         sed -i 's/\r$//' /tmp/spoof_locked_bootloader.patch && \
-        ( cd frameworks/base && patch -p1 --fuzz=5 --forward --ignore-whitespace < /tmp/spoof_locked_bootloader.patch && echo "Bootloader spoof patch applied successfully!" || echo "Bootloader spoof patch already applied or skipped" ) ; \
+        ( git -C frameworks/base apply --ignore-space-change --ignore-whitespace --check /tmp/spoof_locked_bootloader.patch && git -C frameworks/base apply --ignore-space-change --ignore-whitespace /tmp/spoof_locked_bootloader.patch && echo "Bootloader spoof patch applied successfully!" || echo "Bootloader spoof patch already applied or skipped" ) ; \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/init_spoof_bootloader.patch > /tmp/init_spoof_bootloader.patch && \
         sed -i 's/\r$//' /tmp/init_spoof_bootloader.patch && \
-        ( cd system/core && patch -p1 --fuzz=5 --forward --ignore-whitespace < /tmp/init_spoof_bootloader.patch && echo "System core spoof patch applied successfully!" || echo "System core spoof patch already applied or skipped" ) ; \
+        ( git -C system/core apply --ignore-space-change --ignore-whitespace --check /tmp/init_spoof_bootloader.patch && git -C system/core apply --ignore-space-change --ignore-whitespace /tmp/init_spoof_bootloader.patch && echo "System core spoof patch applied successfully!" || echo "System core spoof patch already applied or skipped" ) ; \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/disable_flag_secure.patch > /tmp/disable_flag_secure.patch && \
         sed -i 's/\r$//' /tmp/disable_flag_secure.patch && \
-        ( cd frameworks/base && patch -p1 --fuzz=5 --forward --ignore-whitespace < /tmp/disable_flag_secure.patch && echo "FLAG_SECURE patch applied successfully!" || echo "FLAG_SECURE patch already applied or skipped" ) ; \
+        ( git -C frameworks/base apply --ignore-space-change --ignore-whitespace --check /tmp/disable_flag_secure.patch && git -C frameworks/base apply --ignore-space-change --ignore-whitespace /tmp/disable_flag_secure.patch && echo "FLAG_SECURE patch applied successfully!" || echo "FLAG_SECURE patch already applied or skipped" ) ; \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/health_charge_deadline_fix.patch > /tmp/health_charge_deadline_fix.patch && \
         sed -i 's/\r$//' /tmp/health_charge_deadline_fix.patch && \
-        ( cd device/google/coral && patch -p1 --fuzz=5 --forward --ignore-whitespace < /tmp/health_charge_deadline_fix.patch && echo "Health charge fix patch applied successfully!" || echo "Health charge fix patch already applied or skipped" ) ; \
+        ( git -C device/google/coral apply --ignore-space-change --ignore-whitespace --check /tmp/health_charge_deadline_fix.patch && git -C device/google/coral apply --ignore-space-change --ignore-whitespace /tmp/health_charge_deadline_fix.patch && echo "Health charge fix patch applied successfully!" || echo "Health charge fix patch already applied or skipped" ) ; \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/hide_developer_options.patch > /tmp/hide_developer_options.patch && \
         sed -i 's/\r$//' /tmp/hide_developer_options.patch && \
-        ( cd frameworks/base && patch -p1 --fuzz=5 --forward --ignore-whitespace < /tmp/hide_developer_options.patch && echo "Hide developer options patch applied successfully!" || echo "Hide developer options patch already applied or skipped" ) ; \
+        ( git -C frameworks/base apply --ignore-space-change --ignore-whitespace --check /tmp/hide_developer_options.patch && git -C frameworks/base apply --ignore-space-change --ignore-whitespace /tmp/hide_developer_options.patch && echo "Hide developer options patch applied successfully!" || echo "Hide developer options patch already applied or skipped" ) ; \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/hide_accessibility_services.patch > /tmp/hide_accessibility_services.patch && \
         sed -i 's/\r$//' /tmp/hide_accessibility_services.patch && \
-        ( cd frameworks/base && patch -p1 --fuzz=5 --forward --ignore-whitespace < /tmp/hide_accessibility_services.patch && echo "Hide accessibility patch applied successfully!" || echo "Hide accessibility patch already applied or skipped" ) ; \
+        ( git -C frameworks/base apply --ignore-space-change --ignore-whitespace --check /tmp/hide_accessibility_services.patch && git -C frameworks/base apply --ignore-space-change --ignore-whitespace /tmp/hide_accessibility_services.patch && echo "Hide accessibility patch applied successfully!" || echo "Hide accessibility patch already applied or skipped" ) ; \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/bypass_overlay_tapjacking.patch > /tmp/bypass_overlay_tapjacking.patch && \
         sed -i 's/\r$//' /tmp/bypass_overlay_tapjacking.patch && \
-        ( cd frameworks/base && patch -p1 --fuzz=5 --forward --ignore-whitespace < /tmp/bypass_overlay_tapjacking.patch && echo "Bypass overlay patch applied successfully!" || echo "Bypass overlay patch already applied or skipped" ) ; \
+        ( git -C frameworks/base apply --ignore-space-change --ignore-whitespace --check /tmp/bypass_overlay_tapjacking.patch && git -C frameworks/base apply --ignore-space-change --ignore-whitespace /tmp/bypass_overlay_tapjacking.patch && echo "Bypass overlay patch applied successfully!" || echo "Bypass overlay patch already applied or skipped" ) ; \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/hide_sensitive_packages.patch > /tmp/hide_sensitive_packages.patch && \
         sed -i 's/\r$//' /tmp/hide_sensitive_packages.patch && \
-        ( cd frameworks/base && patch -p1 --fuzz=5 --forward --ignore-whitespace < /tmp/hide_sensitive_packages.patch && echo "Hide sensitive packages patch applied successfully!" || echo "Hide sensitive packages patch already applied or skipped" ) ; \
+        ( git -C frameworks/base apply --ignore-space-change --ignore-whitespace --check /tmp/hide_sensitive_packages.patch && git -C frameworks/base apply --ignore-space-change --ignore-whitespace /tmp/hide_sensitive_packages.patch && echo "Hide sensitive packages patch applied successfully!" || echo "Hide sensitive packages patch already applied or skipped" ) ; \
         find build/make -name "sysprop.mk" -exec sed -i 's/BUILD_KEYS := test-keys/BUILD_KEYS := release-keys/g' {} + ; \
         find build/make -name "Makefile" -exec sed -i 's/BUILD_KEYS := test-keys/BUILD_KEYS := release-keys/g' {} + ; \
         find . -name "vendor.lineage.health-service.default.rc" -exec sed -i '/service vendor.lineage_health/a \    interface aidl vendor.lineage.health.IChargingControl/default' {} + ; \
