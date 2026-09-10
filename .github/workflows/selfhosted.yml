@@ -572,6 +572,9 @@ jobs:
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/hide_sensitive_packages.patch > /tmp/hide_sensitive_packages.patch && \
         sed -i 's/\r$//' /tmp/hide_sensitive_packages.patch && \
         ( git -C frameworks/base apply --ignore-space-change --ignore-whitespace --check /tmp/hide_sensitive_packages.patch && git -C frameworks/base apply --ignore-space-change --ignore-whitespace /tmp/hide_sensitive_packages.patch && echo "Hide sensitive packages patch applied successfully!" || echo "Hide sensitive packages patch already applied or skipped" ) ; \
+        curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/fix_acore_sqlite_tokenizer.patch > /tmp/fix_acore_sqlite_tokenizer.patch && \
+        sed -i 's/\r$//' /tmp/fix_acore_sqlite_tokenizer.patch && \
+        ( git -C frameworks/base apply --ignore-space-change --ignore-whitespace --check /tmp/fix_acore_sqlite_tokenizer.patch && git -C frameworks/base apply --ignore-space-change --ignore-whitespace /tmp/fix_acore_sqlite_tokenizer.patch && echo "Acore SQLiteTokenizer fix patch applied successfully!" || echo "Acore SQLiteTokenizer fix patch already applied or skipped" ) ; \
         find build/make -name "sysprop.mk" -exec sed -i 's/BUILD_KEYS := test-keys/BUILD_KEYS := release-keys/g' {} + ; \
         find build/make -name "Makefile" -exec sed -i 's/BUILD_KEYS := test-keys/BUILD_KEYS := release-keys/g' {} + ; \
         find . -name "vendor.lineage.health-service.default.rc" -exec sed -i '/service vendor.lineage_health/a \    interface aidl vendor.lineage.health.IChargingControl/default' {} + ; \
@@ -580,6 +583,7 @@ jobs:
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/CameraAssistant_Android.bp > packages/apps/CameraAssistant/Android.bp && \
         if [ -f device/google/coral/device.mk ]; then echo "PRODUCT_PACKAGES += CameraAssistant" >> device/google/coral/device.mk ; fi ; \
         if [ -f device/google/coral/lineage_flame.mk ]; then echo "PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += %/CameraAssistant.apk" >> device/google/coral/lineage_flame.mk ; fi ; \
+        if [ -f device/google/coral/lineage_coral.mk ]; then echo "PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += %/CameraAssistant.apk" >> device/google/coral/lineage_coral.mk ; fi ; \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/fix_telephony.py | python3 ; \
         source build/envsetup.sh && \
 
