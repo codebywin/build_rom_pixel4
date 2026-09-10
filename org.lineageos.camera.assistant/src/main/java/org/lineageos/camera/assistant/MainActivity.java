@@ -484,6 +484,7 @@ public class MainActivity extends Activity {
     }
 
     private void writeStringFile(String path, String val) {
+        boolean success = false;
         try {
             File f = new File(path);
             FileOutputStream fos = new FileOutputStream(f);
@@ -491,7 +492,25 @@ public class MainActivity extends Activity {
             fos.close();
             f.setReadable(true, false);
             f.setWritable(true, false);
+            success = true;
         } catch (Throwable ignored) {}
+
+        if (!success || path.startsWith("/data/local/tmp/")) {
+            try {
+                Process p = Runtime.getRuntime().exec("su");
+                java.io.OutputStream os = p.getOutputStream();
+                String cmd = "echo '" + val + "' > " + path + "\nchmod 666 " + path + "\nexit\n";
+                os.write(cmd.getBytes("UTF-8"));
+                os.flush();
+                os.close();
+                p.waitFor();
+            } catch (Throwable t) {
+                try {
+                    Process p2 = Runtime.getRuntime().exec(new String[]{"/system/bin/sh", "-c", "echo '" + val + "' > " + path + " && chmod 666 " + path});
+                    p2.waitFor();
+                } catch (Throwable ignored2) {}
+            }
+        }
     }
 
     @Override

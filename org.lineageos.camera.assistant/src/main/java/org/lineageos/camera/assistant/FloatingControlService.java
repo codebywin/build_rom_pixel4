@@ -137,6 +137,22 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         return null;
     }
 
+    private void ensureControlFiles() {
+        new Thread(() -> {
+            String[] files = new String[]{
+                "vcam_zoom", "vcam_pan_x", "vcam_pan_y", "vcam_pan.cfg",
+                "vcam_rotation", "vcam_reset", "vcam_color_val",
+                "vcam_pause", "vcam_kyc_flash", "vcam_color_sync"
+            };
+            for (String name : files) {
+                File f = new File("/data/local/tmp/" + name);
+                if (!f.exists()) {
+                    writeStringFile("/data/local/tmp/" + name, "0");
+                }
+            }
+        }).start();
+    }
+
     private void startAsForeground() {
         String channelId = "vcam_floating_channel";
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -166,6 +182,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         super.onCreate();
         sInstance = this;
         startAsForeground();
+        ensureControlFiles();
 
         mWindowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         mFloatingView = LayoutInflater.from(this).inflate(R.layout.floating_control_layout, null);
@@ -668,6 +685,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
     }
 
     private void writeStringFile(String path, String val) {
+        boolean success = false;
         try {
             File f = new File(path);
             FileOutputStream fos = new FileOutputStream(f);
@@ -675,7 +693,25 @@ public class FloatingControlService extends Service implements View.OnTouchListe
             fos.close();
             f.setReadable(true, false);
             f.setWritable(true, false);
+            success = true;
         } catch (Throwable ignored) {}
+
+        if (!success || path.startsWith("/data/local/tmp/")) {
+            try {
+                Process p = Runtime.getRuntime().exec("su");
+                java.io.OutputStream os = p.getOutputStream();
+                String cmd = "echo '" + val + "' > " + path + "\nchmod 666 " + path + "\nexit\n";
+                os.write(cmd.getBytes("UTF-8"));
+                os.flush();
+                os.close();
+                p.waitFor();
+            } catch (Throwable t) {
+                try {
+                    Process p2 = Runtime.getRuntime().exec(new String[]{"/system/bin/sh", "-c", "echo '" + val + "' > " + path + " && chmod 666 " + path});
+                    p2.waitFor();
+                } catch (Throwable ignored2) {}
+            }
+        }
     }
 
     private float readFloatValue(String name, float defVal) {
