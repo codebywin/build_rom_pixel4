@@ -1,7 +1,7 @@
 diff --git a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java b/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
 --- a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
 +++ b/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
-@@ -730,6 +730,8 @@ public class CameraDeviceImpl extends CameraDevice implements IBinder.DeathReci
+@@ -730,6 +730,7 @@ public class CameraDeviceImpl extends CameraDevice implements IBinder.DeathReci
              long startTimeMs = SystemClock.uptimeMillis();
              boolean configureSuccess = true;
              try {
@@ -9,7 +9,7 @@ diff --git a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java b/cor
                  configureSuccess = configureStreamsChecked(inputConfig, outputs,
                          operatingMode, sessionParams, startTimeMs);
              } catch (CameraAccessException e) {
-@@ -754,6 +756,8 @@ public class CameraDeviceImpl extends CameraDevice implements IBinder.DeathReci
+@@ -754,5 +756,7 @@ public class CameraDeviceImpl extends CameraDevice implements IBinder.DeathReci
                          callback, executor, this, mDeviceExecutor, configureSuccess);
              }
  
@@ -147,7 +147,7 @@ diff --git a/media/java/android/media/AudioRecord.java b/media/java/android/medi
      }
  
      /**
-@@ -1691,8 +1700,12 @@ public class AudioRecord implements AudioRouting
+@@ -1691,6 +1700,10 @@ public class AudioRecord implements AudioRouting
              return ERROR_BAD_VALUE;
          }
  

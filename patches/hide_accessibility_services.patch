@@ -1,7 +1,7 @@
 diff --git a/core/java/android/provider/Settings.java b/core/java/android/provider/Settings.java
 --- a/core/java/android/provider/Settings.java
 +++ b/core/java/android/provider/Settings.java
-@@ -6200,6 +6200,24 @@ public final class Settings {
+@@ -6200,5 +6200,23 @@ public final class Settings {
          public static String getStringForUser(ContentResolver resolver, String name,
                  int userHandle) {
 +            if (ACCESSIBILITY_ENABLED.equals(name)) {
@@ -28,7 +28,7 @@ diff --git a/core/java/android/provider/Settings.java b/core/java/android/provid
 diff --git a/core/java/android/view/accessibility/AccessibilityManager.java b/core/java/android/view/accessibility/AccessibilityManager.java
 --- a/core/java/android/view/accessibility/AccessibilityManager.java
 +++ b/core/java/android/view/accessibility/AccessibilityManager.java
-@@ -470,6 +470,14 @@ public final class AccessibilityManager {
+@@ -470,4 +470,11 @@ public final class AccessibilityManager {
      public boolean isEnabled() {
 +        String pkg = null;
 +        try {
@@ -40,7 +40,7 @@ diff --git a/core/java/android/view/accessibility/AccessibilityManager.java b/co
          synchronized (mLock) {
              return mIsEnabled || isPackageEnablingAutoclick();
          }
-@@ -530,6 +538,14 @@ public final class AccessibilityManager {
+@@ -530,3 +538,10 @@ public final class AccessibilityManager {
      public List<AccessibilityServiceInfo> getInstalledAccessibilityServiceList() {
 +        String pkg = null;
 +        try {
@@ -51,7 +51,7 @@ diff --git a/core/java/android/view/accessibility/AccessibilityManager.java b/co
 +        }
          final IAccessibilityManager service;
          final int userId;
-@@ -560,6 +576,14 @@ public final class AccessibilityManager {
+@@ -560,5 +576,12 @@ public final class AccessibilityManager {
      public List<AccessibilityServiceInfo> getEnabledAccessibilityServiceList(
              int feedbackTypeFlags) {
 +        String pkg = null;

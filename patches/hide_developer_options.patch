@@ -1,7 +1,7 @@
 diff --git a/core/java/android/provider/Settings.java b/core/java/android/provider/Settings.java
 --- a/core/java/android/provider/Settings.java
 +++ b/core/java/android/provider/Settings.java
-@@ -6200,6 +6200,16 @@ public final class Settings {
+@@ -6200,5 +6200,14 @@ public final class Settings {
          public static String getStringForUser(ContentResolver resolver, String name,
                  int userHandle) {
 +            if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name) || "mock_location".equals(name)) {
@@ -16,7 +16,7 @@ diff --git a/core/java/android/provider/Settings.java b/core/java/android/provid
              if (MOVED_TO_GLOBAL.contains(name)) {
                  Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Secure"
                          + " to android.provider.Settings.Global.");
-@@ -14500,6 +14510,16 @@ public final class Settings {
+@@ -14500,5 +14510,14 @@ public final class Settings {
          public static String getStringForUser(ContentResolver resolver, String name,
                  int userHandle) {
 +            if (ADB_ENABLED.equals(name) || DEVELOPMENT_SETTINGS_ENABLED.equals(name) || "mock_location".equals(name)) {

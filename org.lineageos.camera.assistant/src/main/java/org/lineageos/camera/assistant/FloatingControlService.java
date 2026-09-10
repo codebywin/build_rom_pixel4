@@ -583,6 +583,14 @@ public class FloatingControlService extends Service implements View.OnTouchListe
                     f.setWritable(true, false);
                     Log.i(TAG, "Created flag file: " + f.getAbsolutePath());
                 } else {
+                    if (f.exists()) {
+                        try {
+                            FileOutputStream fos = new FileOutputStream(f);
+                            fos.write("0\n".getBytes("UTF-8"));
+                            fos.close();
+                            f.setReadable(true, false);
+                        } catch (Throwable ignored) {}
+                    }
                     deleteFileSafely(f);
                 }
             } catch (Throwable t) {

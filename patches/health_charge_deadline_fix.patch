@@ -2,7 +2,7 @@ diff --git a/init.coral.rc b/init.coral.rc
 index 1234567..89abcde 100644
 --- a/init.coral.rc
 +++ b/init.coral.rc
-@@ -100,6 +100,10 @@ on boot
+@@ -100,3 +100,7 @@ on boot
      chown system system /sys/class/backlight/panel0-backlight/brightness
      chmod 0664 /sys/class/backlight/panel0-backlight/brightness
  

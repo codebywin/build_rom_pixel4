@@ -1,7 +1,7 @@
 diff --git a/core/java/android/view/SurfaceControl.java b/core/java/android/view/SurfaceControl.java
 --- a/core/java/android/view/SurfaceControl.java
 +++ b/core/java/android/view/SurfaceControl.java
-@@ -1334,11 +1334,7 @@ public final class SurfaceControl implements Parcelable {
+@@ -1334,9 +1334,5 @@ public final class SurfaceControl implements Parcelable {
           */
          public Builder setSecure(boolean isSecure) {
 -            if (isSecure) {
@@ -12,7 +12,7 @@ diff --git a/core/java/android/view/SurfaceControl.java b/core/java/android/view
 +            mFlags &= ~SECURE;
              return this;
          }
-@@ -3370,11 +3370,7 @@ public final class SurfaceControl implements Parcelable {
+@@ -3370,10 +3370,6 @@ public final class SurfaceControl implements Parcelable {
           */
          public Transaction setSecure(SurfaceControl sc, boolean isSecure) {
              checkPreconditions(sc);
@@ -27,7 +27,7 @@ diff --git a/core/java/android/view/SurfaceControl.java b/core/java/android/view
 diff --git a/services/core/java/com/android/server/wm/WindowState.java b/services/core/java/com/android/server/wm/WindowState.java
 --- a/services/core/java/com/android/server/wm/WindowState.java
 +++ b/services/core/java/com/android/server/wm/WindowState.java
-@@ -2190,10 +2190,7 @@ class WindowState extends WindowContainer<WindowState> implements
+@@ -2190,8 +2190,5 @@ class WindowState extends WindowContainer<WindowState> implements
      }
  
      boolean isSecureLocked() {
@@ -40,7 +40,7 @@ diff --git a/services/core/java/com/android/server/wm/WindowState.java b/service
 diff --git a/services/core/java/com/android/server/wm/WindowManagerService.java b/services/core/java/com/android/server/wm/WindowManagerService.java
 --- a/services/core/java/com/android/server/wm/WindowManagerService.java
 +++ b/services/core/java/com/android/server/wm/WindowManagerService.java
-@@ -1940,10 +1940,7 @@ public class WindowManagerService extends IWindowManager.Stub
+@@ -1940,8 +1940,5 @@ public class WindowManagerService extends IWindowManager.Stub
      }
  
      boolean isSecureLocked(WindowState w) {

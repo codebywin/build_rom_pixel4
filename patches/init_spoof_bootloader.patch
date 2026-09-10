@@ -1,7 +1,7 @@
 diff --git a/init/property_service.cpp b/init/property_service.cpp
 --- a/init/property_service.cpp
 +++ b/init/property_service.cpp
-@@ -1180,6 +1180,21 @@ static void ExportKernelBootProps() {
+@@ -1180,10 +1180,30 @@ static void ExportKernelBootProps() {
      auto fn = [](const std::string& key, const std::string& value) {
          if (key.starts_with(androidboot_prefix)) {
              std::string prop_name = "ro.boot." + key.substr(strlen(androidboot_prefix));

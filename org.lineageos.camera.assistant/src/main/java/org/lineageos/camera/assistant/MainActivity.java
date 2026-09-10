@@ -605,6 +605,14 @@ public class MainActivity extends Activity {
                     f.setWritable(true, false);
                     Log.i("CameraAssistant", "MainActivity created flag: " + f.getAbsolutePath());
                 } else {
+                    if (f.exists()) {
+                        try {
+                            FileOutputStream fos = new FileOutputStream(f);
+                            fos.write("0\n".getBytes("UTF-8"));
+                            fos.close();
+                            f.setReadable(true, false);
+                        } catch (Throwable ignored) {}
+                    }
                     deleteFileSafely(f);
                 }
             } catch (Throwable t) {
