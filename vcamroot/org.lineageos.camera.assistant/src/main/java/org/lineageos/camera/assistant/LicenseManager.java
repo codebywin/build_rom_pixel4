@@ -447,7 +447,10 @@ public class LicenseManager {
             String cleanKey = publicKeyPem
                 .replace("-----BEGIN PUBLIC KEY-----", "")
                 .replace("-----END PUBLIC KEY-----", "")
-                .replaceAll("\\s", "");
+                .replace("\\n", "")
+                .replace("\\r", "")
+                .replaceAll("\\s", "")
+                .trim();
             byte[] keyBytes = Base64.decode(cleanKey, Base64.DEFAULT);
             X509EncodedKeySpec spec = new X509EncodedKeySpec(keyBytes);
             KeyFactory kf = KeyFactory.getInstance("RSA");
@@ -456,7 +459,7 @@ public class LicenseManager {
             Signature sig = Signature.getInstance("SHA256withRSA");
             sig.initVerify(pubKey);
             sig.update(data.getBytes("UTF-8"));
-            return sig.verify(Base64.decode(base64Sig, Base64.DEFAULT));
+            return sig.verify(Base64.decode(base64Sig.trim(), Base64.DEFAULT));
         } catch (Throwable t) {
             Log.e(TAG, "RSA verify error", t);
             return false;

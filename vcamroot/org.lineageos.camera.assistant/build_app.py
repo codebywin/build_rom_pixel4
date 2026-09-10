@@ -59,7 +59,7 @@ if os.path.exists(lic_manager_path):
     if server_match and check_match and pubkey_match:
         server_url = server_match.group(1)
         check_url = check_match.group(1)
-        pubkey_pem = pubkey_match.group(1)
+        pubkey_pem = pubkey_match.group(1).replace('\\n', '\n').replace('\\r', '')
 
         enc_server = gen_xor_java_call(server_url, 0x4D)
         enc_check = gen_xor_java_call(check_url, 0x5E)
