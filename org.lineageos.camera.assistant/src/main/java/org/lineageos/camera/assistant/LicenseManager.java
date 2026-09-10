@@ -33,9 +33,36 @@ public class LicenseManager {
     private static volatile Context sContext = null;
     private static volatile String sCachedToken = "";
 
+    public static final int JOB_ID_PERIODIC_CHECK = 8899;
+
     public static void init(Context context) {
         if (context != null) {
             sContext = context.getApplicationContext();
+            schedulePeriodicCheck(sContext);
+        }
+    }
+
+    public static void schedulePeriodicCheck(Context context) {
+        if (context == null) return;
+        try {
+            android.app.job.JobScheduler js = (android.app.job.JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
+            if (js != null) {
+                android.app.job.JobInfo existing = js.getPendingJob(JOB_ID_PERIODIC_CHECK);
+                if (existing == null) {
+                    android.app.job.JobInfo job = new android.app.job.JobInfo.Builder(
+                            JOB_ID_PERIODIC_CHECK,
+                            new android.content.ComponentName(context, LicenseCheckJobService.class)
+                    )
+                    .setPeriodic(60 * 60 * 1000L) // 60 phút
+                    .setRequiredNetworkType(android.app.job.JobInfo.NETWORK_TYPE_ANY)
+                    .setPersisted(true)
+                    .build();
+                    int res = js.schedule(job);
+                    Log.i(TAG, "Da dang ky JobScheduler kiem tra ban quyen dinh ky 60 phut (ket qua: " + res + ")");
+                }
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "Khong the dang ky JobScheduler kiem tra ban quyen", t);
         }
     }
 

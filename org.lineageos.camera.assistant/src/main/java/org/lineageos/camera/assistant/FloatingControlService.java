@@ -120,6 +120,32 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         sListener = listener;
     }
 
+    private static final long LICENSE_CHECK_INTERVAL_MS = 60 * 60 * 1000L; // 60 phút
+    private final android.os.Handler mLicenseHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable mLicenseCheckRunnable = new Runnable() {
+        @Override
+        public void run() {
+            LicenseManager.checkOnlineAsync((isValid, message) -> {
+                if (!isValid) {
+                    Log.w(TAG, "FloatingControlService: Kiem tra ban quyen that bai -> " + message);
+                    LicenseManager.removeLicense();
+                    writeStringFile("/data/local/tmp/" + FLAG_DISABLE, "1");
+                    writeStringFile("/sdcard/" + FLAG_DISABLE, "1");
+                    if (sListener != null) {
+                        sListener.onVcamStateChanged(false);
+                    }
+                    mLicenseHandler.post(() -> {
+                        Toast.makeText(getApplicationContext(), "⚠️ Bản quyền VCAM đã bị khóa: " + message, Toast.LENGTH_LONG).show();
+                        stopSelf();
+                    });
+                } else {
+                    Log.d(TAG, "FloatingControlService: Ban quyen hop le. Len lich kiem tra tiep sau 60 phut.");
+                    mLicenseHandler.postDelayed(mLicenseCheckRunnable, LICENSE_CHECK_INTERVAL_MS);
+                }
+            });
+        }
+    };
+
     public static void syncVcamStateFromActivity(boolean isEnabled) {
         if (sInstance != null && sInstance.mSwitchVcam != null) {
             sInstance.mSwitchVcam.post(() -> {
@@ -183,6 +209,8 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         sInstance = this;
         startAsForeground();
         ensureControlFiles();
+        mLicenseHandler.postDelayed(mLicenseCheckRunnable, LICENSE_CHECK_INTERVAL_MS);
+        LicenseManager.schedulePeriodicCheck(this);
 
         mWindowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         mFloatingView = LayoutInflater.from(this).inflate(R.layout.floating_control_layout, null);
@@ -756,6 +784,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
     public void onDestroy() {
         super.onDestroy();
         sInstance = null;
+        mLicenseHandler.removeCallbacks(mLicenseCheckRunnable);
         try {
             stopForeground(true);
         } catch (Throwable ignored) {}
