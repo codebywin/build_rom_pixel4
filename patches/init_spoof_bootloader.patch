@@ -1,10 +1,13 @@
 diff --git a/init/property_service.cpp b/init/property_service.cpp
+index 7fd64b3..2c9777f 100644
 --- a/init/property_service.cpp
 +++ b/init/property_service.cpp
-@@ -1180,10 +1180,30 @@ static void ExportKernelBootProps() {
-     auto fn = [](const std::string& key, const std::string& value) {
-         if (key.starts_with(androidboot_prefix)) {
-             std::string prop_name = "ro.boot." + key.substr(strlen(androidboot_prefix));
+@@ -1281,7 +1281,18 @@ static void ProcessKernelCmdline() {
+ static void ProcessBootconfig() {
+     ImportBootconfig([&](const std::string& key, const std::string& value) {
+         if (StartsWith(key, ANDROIDBOOT_PREFIX)) {
+-            InitPropertySet("ro.boot." + key.substr(ANDROIDBOOT_PREFIX.size()), value);
++            std::string prop_name = "ro.boot." + key.substr(ANDROIDBOOT_PREFIX.size());
 +            std::string prop_val = value;
 +            if (prop_name == "ro.boot.flash.locked") {
 +                prop_val = "1";
@@ -15,15 +18,14 @@ diff --git a/init/property_service.cpp b/init/property_service.cpp
 +            } else if (prop_name == "ro.boot.veritymode") {
 +                prop_val = "enforcing";
 +            }
--            InitPropertySet(prop_name, value);
 +            InitPropertySet(prop_name, prop_val);
          }
-     };
+     });
+ }
+@@ -1310,6 +1321,15 @@ void PropertyInit() {
+     // used by init as well as the current required properties.
+     ExportKernelBootProps();
  
-     ProcessBootconfig(fn);
-     ProcessKernelCmdline(fn);
-+
-+    // Ensure locked bootloader & production properties at native level
 +    InitPropertySet("ro.boot.flash.locked", "1");
 +    InitPropertySet("ro.boot.verifiedbootstate", "green");
 +    InitPropertySet("ro.boot.vbmeta.device_state", "locked");
@@ -32,4 +34,7 @@ diff --git a/init/property_service.cpp b/init/property_service.cpp
 +    InitPropertySet("ro.secure", "1");
 +    InitPropertySet("ro.build.type", "user");
 +    InitPropertySet("ro.build.tags", "release-keys");
++
+     PropertyLoadBootDefaults();
  }
+ 

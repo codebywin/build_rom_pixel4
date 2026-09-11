@@ -1,17 +1,18 @@
 diff --git a/sepolicy/private/file_contexts b/sepolicy/private/file_contexts
-index de52bc0..b7d60ef 100644
+index 1e55ebd..6d880da 100644
 --- a/sepolicy/private/file_contexts
 +++ b/sepolicy/private/file_contexts
-@@ -2,3 +2,6 @@
+@@ -1,3 +1,7 @@
+ ####### system file ###############
  /system/bin/bt_logger                           u:object_r:bt_logger_exec:s0
  /system/bin/smcinvoked                          u:object_r:smcinvoke_daemon_exec:s0
- 
++
 +# Virtual Camera & Virtual Mic files
 +/data/local/tmp/vcam.*                          u:object_r:vcam_data_file:s0
 +/data/local/tmp/vcam(/.*)?                      u:object_r:vcam_data_file:s0
 diff --git a/sepolicy/private/vcam.te b/sepolicy/private/vcam.te
 new file mode 100644
-index 0000000..79fbf91
+index 0000000..c20ae0e
 --- /dev/null
 +++ b/sepolicy/private/vcam.te
 @@ -0,0 +1,14 @@
@@ -31,9 +32,8 @@ index 0000000..79fbf91
 +allow shell vcam_data_file:dir { create read write open getattr add_name remove_name search };
 diff --git a/sepolicy/public/vcam.te b/sepolicy/public/vcam.te
 new file mode 100644
-index 0000000..3fa942c
+index 0000000..7db4986
 --- /dev/null
 +++ b/sepolicy/public/vcam.te
-@@ -0,0 +1,2 @@
+@@ -0,0 +1 @@
 +type vcam_data_file, file_type, data_file_type, core_data_file_type;
-+

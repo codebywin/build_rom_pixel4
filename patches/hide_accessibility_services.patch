@@ -1,7 +1,9 @@
 diff --git a/core/java/android/provider/Settings.java b/core/java/android/provider/Settings.java
+index 4578eec..51aff29 100644
 --- a/core/java/android/provider/Settings.java
 +++ b/core/java/android/provider/Settings.java
-@@ -6200,5 +6200,23 @@ public final class Settings {
+@@ -6177,6 +6177,24 @@ public final class Settings {
+         @UnsupportedAppUsage
          public static String getStringForUser(ContentResolver resolver, String name,
                  int userHandle) {
 +            if (ACCESSIBILITY_ENABLED.equals(name)) {
@@ -26,9 +28,12 @@ diff --git a/core/java/android/provider/Settings.java b/core/java/android/provid
                  Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Secure"
                          + " to android.provider.Settings.Global.");
 diff --git a/core/java/android/view/accessibility/AccessibilityManager.java b/core/java/android/view/accessibility/AccessibilityManager.java
+index c6cd2e8..556798b 100644
 --- a/core/java/android/view/accessibility/AccessibilityManager.java
 +++ b/core/java/android/view/accessibility/AccessibilityManager.java
-@@ -470,4 +470,11 @@ public final class AccessibilityManager {
+@@ -587,6 +587,13 @@ public final class AccessibilityManager {
+      * @return True if accessibility is enabled, false otherwise.
+      */
      public boolean isEnabled() {
 +        String pkg = null;
 +        try {
@@ -38,9 +43,11 @@ diff --git a/core/java/android/view/accessibility/AccessibilityManager.java b/co
 +            return false;
 +        }
          synchronized (mLock) {
-             return mIsEnabled || isPackageEnablingAutoclick();
-         }
-@@ -530,3 +538,10 @@ public final class AccessibilityManager {
+             return mIsEnabled || (mAccessibilityPolicy != null
+                     && mAccessibilityPolicy.isEnabled(mIsEnabled));
+@@ -774,6 +781,13 @@ public final class AccessibilityManager {
+      * @return An unmodifiable list with {@link AccessibilityServiceInfo}s.
+      */
      public List<AccessibilityServiceInfo> getInstalledAccessibilityServiceList() {
 +        String pkg = null;
 +        try {
@@ -51,7 +58,9 @@ diff --git a/core/java/android/view/accessibility/AccessibilityManager.java b/co
 +        }
          final IAccessibilityManager service;
          final int userId;
-@@ -560,5 +576,12 @@ public final class AccessibilityManager {
+         synchronized (mLock) {
+@@ -819,6 +833,13 @@ public final class AccessibilityManager {
+      */
      public List<AccessibilityServiceInfo> getEnabledAccessibilityServiceList(
              int feedbackTypeFlags) {
 +        String pkg = null;
@@ -63,4 +72,4 @@ diff --git a/core/java/android/view/accessibility/AccessibilityManager.java b/co
 +        }
          final IAccessibilityManager service;
          final int userId;
-
+         synchronized (mLock) {

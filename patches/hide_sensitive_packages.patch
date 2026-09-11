@@ -1,7 +1,8 @@
 diff --git a/core/java/android/app/ApplicationPackageManager.java b/core/java/android/app/ApplicationPackageManager.java
+index f0293aa..71d0cd1 100644
 --- a/core/java/android/app/ApplicationPackageManager.java
 +++ b/core/java/android/app/ApplicationPackageManager.java
-@@ -200,6 +200,25 @@ public class ApplicationPackageManager extends PackageManager {
+@@ -147,6 +147,25 @@ public class ApplicationPackageManager extends PackageManager {
      private static final String TAG = "ApplicationPackageManager";
      private static final boolean DEBUG_ICONS = false;
  
@@ -24,10 +25,10 @@ diff --git a/core/java/android/app/ApplicationPackageManager.java b/core/java/an
 +                || "com.guoshi.httpcanary".equals(packageName);
 +    }
 +
-     @Override
-     public PackageInfo getPackageInfo(String packageName, int flags)
-             throws NameNotFoundException {
-@@ -208,6 +226,9 @@ public class ApplicationPackageManager extends PackageManager {
+     private static final int DEFAULT_EPHEMERAL_COOKIE_MAX_SIZE_BYTES = 16384; // 16KB
+ 
+     // Default flags to use with PackageManager when no flags are given.
+@@ -213,6 +232,9 @@ public class ApplicationPackageManager extends PackageManager {
      @Override
      public PackageInfo getPackageInfo(String packageName, PackageInfoFlags flags)
              throws NameNotFoundException {
@@ -37,7 +38,7 @@ diff --git a/core/java/android/app/ApplicationPackageManager.java b/core/java/an
          return getPackageInfoAsUser(packageName, flags, getUserId());
      }
  
-@@ -430,6 +451,9 @@ public class ApplicationPackageManager extends PackageManager {
+@@ -496,6 +518,9 @@ public class ApplicationPackageManager extends PackageManager {
      @Override
      public ApplicationInfo getApplicationInfo(String packageName, ApplicationInfoFlags flags)
              throws NameNotFoundException {
@@ -46,4 +47,4 @@ diff --git a/core/java/android/app/ApplicationPackageManager.java b/core/java/an
 +        }
          return getApplicationInfoAsUser(packageName, flags, getUserId());
      }
-
+ 

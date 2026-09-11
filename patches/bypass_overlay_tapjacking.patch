@@ -1,8 +1,9 @@
 diff --git a/core/java/android/view/MotionEvent.java b/core/java/android/view/MotionEvent.java
+index 0bed342..4ee549f 100644
 --- a/core/java/android/view/MotionEvent.java
 +++ b/core/java/android/view/MotionEvent.java
-@@ -2100,7 +2100,7 @@ public final class MotionEvent extends InputEvent implements Parcelable {
-      * @see #FLAG_WINDOW_IS_PARTIALLY_OBSCURED
+@@ -2183,7 +2183,7 @@ public final class MotionEvent extends InputEvent implements Parcelable {
+      * @see #FLAG_WINDOW_IS_OBSCURED
       */
      public final int getFlags() {
 -        return nativeGetFlags(mNativePtr);
@@ -11,19 +12,19 @@ diff --git a/core/java/android/view/MotionEvent.java b/core/java/android/view/Mo
  
      /** @hide */
 diff --git a/core/java/android/view/View.java b/core/java/android/view/View.java
+index 543a22b..6c613a5 100644
 --- a/core/java/android/view/View.java
 +++ b/core/java/android/view/View.java
-@@ -15620,13 +15620,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
-      * @see #FILTER_TOUCHES_WHEN_OBSCURED
+@@ -15092,12 +15092,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
+      * @see #getFilterTouchesWhenObscured
       */
      public boolean onFilterTouchEventForSecurity(MotionEvent event) {
+-        //noinspection RedundantIfStatement
 -        if ((mViewFlags & FILTER_TOUCHES_WHEN_OBSCURED) != 0
--                && (event.getFlags() & (MotionEvent.FLAG_WINDOW_IS_OBSCURED
--                        | MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED)) != 0) {
--            // Window is obscured, drop this touch event
+-                && (event.getFlags() & MotionEvent.FLAG_WINDOW_IS_OBSCURED) != 0) {
+-            // Window is obscured, drop this touch.
 -            return false;
 -        }
          return true;
      }
  
-
