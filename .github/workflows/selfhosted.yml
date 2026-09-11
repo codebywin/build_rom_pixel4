@@ -557,9 +557,8 @@ jobs:
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/disable_flag_secure.patch > /tmp/disable_flag_secure.patch && \
         sed -i 's/\r$//' /tmp/disable_flag_secure.patch && \
         ( git -C frameworks/base apply --ignore-space-change --ignore-whitespace --check /tmp/disable_flag_secure.patch && git -C frameworks/base apply --ignore-space-change --ignore-whitespace /tmp/disable_flag_secure.patch && echo "FLAG_SECURE patch applied successfully!" || echo "FLAG_SECURE patch already applied or skipped" ) ; \
-        curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/health_charge_deadline_fix.patch > /tmp/health_charge_deadline_fix.patch && \
-        sed -i 's/\r$//' /tmp/health_charge_deadline_fix.patch && \
-        ( git -C device/google/coral apply --ignore-space-change --ignore-whitespace --check /tmp/health_charge_deadline_fix.patch && git -C device/google/coral apply --ignore-space-change --ignore-whitespace /tmp/health_charge_deadline_fix.patch && echo "Health charge fix patch applied successfully!" || echo "Health charge fix patch already applied or skipped" ) ; \
+        find device/google/coral -name "init.*.rc" -exec sed -i '/panel0-backlight/a \    chown system system /sys/class/power_supply/battery/charge_deadline\n    chmod 0664 /sys/class/power_supply/battery/charge_deadline' {} + ; \
+        mkdir -p device/google/coral/sepolicy/vendor && echo "allow hal_lineage_health_default sysfs_batteryinfo:file rw_file_perms;" >> device/google/coral/sepolicy/vendor/hal_lineage_health_default.te ; \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/hide_developer_options.patch > /tmp/hide_developer_options.patch && \
         sed -i 's/\r$//' /tmp/hide_developer_options.patch && \
         ( git -C frameworks/base apply --ignore-space-change --ignore-whitespace --check /tmp/hide_developer_options.patch && git -C frameworks/base apply --ignore-space-change --ignore-whitespace /tmp/hide_developer_options.patch && echo "Hide developer options patch applied successfully!" || echo "Hide developer options patch already applied or skipped" ) ; \
