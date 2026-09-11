@@ -1,47 +1,53 @@
 --- a/core/java/android/provider/Settings.java
 +++ b/core/java/android/provider/Settings.java
-@@ -3724,6 +3724,15 @@
+@@ -3724,6 +3724,16 @@
          @UnsupportedAppUsage
          public static String getStringForUser(ContentResolver resolver, String name,
                  int userHandle) {
-+            if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name) || "mock_location".equals(name)) {
-+                String callingPkg = null;
-+                try {
-+                    callingPkg = android.app.ActivityThread.currentPackageName();
-+                } catch (Throwable ignored) {}
-+                if (!"com.android.settings".equals(callingPkg) && !"com.android.systemui".equals(callingPkg)) {
++            String callingPkg = null;
++            try {
++                callingPkg = android.app.ActivityThread.currentPackageName();
++            } catch (Throwable ignored) {}
++            boolean isSystem = "com.android.settings".equals(callingPkg) || "com.android.systemui".equals(callingPkg);
++            if (!isSystem) {
++                if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name) || "mock_location".equals(name)) {
 +                    return "0";
 +                }
 +            }
              if (MOVED_TO_SECURE.contains(name)) {
                  Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.System"
                          + " to android.provider.Settings.Secure, returning read-only value.");
-@@ -6124,6 +6133,15 @@
+@@ -6124,6 +6134,19 @@
          @UnsupportedAppUsage
          public static String getStringForUser(ContentResolver resolver, String name,
                  int userHandle) {
-+            if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name) || "mock_location".equals(name)) {
-+                String callingPkg = null;
-+                try {
-+                    callingPkg = android.app.ActivityThread.currentPackageName();
-+                } catch (Throwable ignored) {}
-+                if (!"com.android.settings".equals(callingPkg) && !"com.android.systemui".equals(callingPkg)) {
++            String callingPkg = null;
++            try {
++                callingPkg = android.app.ActivityThread.currentPackageName();
++            } catch (Throwable ignored) {}
++            boolean isSystem = "com.android.settings".equals(callingPkg) || "com.android.systemui".equals(callingPkg) || (callingPkg != null && callingPkg.startsWith("com.google.android.marvin.talkback"));
++            if (!isSystem) {
++                if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name) || "mock_location".equals(name) || "accessibility_enabled".equals(name)) {
 +                    return "0";
++                }
++                if ("enabled_accessibility_services".equals(name)) {
++                    return "";
 +                }
 +            }
              if (MOVED_TO_GLOBAL.contains(name)) {
                  Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Secure"
                          + " to android.provider.Settings.Global.");
-@@ -15841,6 +15859,15 @@
+@@ -15841,6 +15864,16 @@
          @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
          public static String getStringForUser(ContentResolver resolver, String name,
                  int userHandle) {
-+            if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name) || "mock_location".equals(name)) {
-+                String callingPkg = null;
-+                try {
-+                    callingPkg = android.app.ActivityThread.currentPackageName();
-+                } catch (Throwable ignored) {}
-+                if (!"com.android.settings".equals(callingPkg) && !"com.android.systemui".equals(callingPkg)) {
++            String callingPkg = null;
++            try {
++                callingPkg = android.app.ActivityThread.currentPackageName();
++            } catch (Throwable ignored) {}
++            boolean isSystem = "com.android.settings".equals(callingPkg) || "com.android.systemui".equals(callingPkg);
++            if (!isSystem) {
++                if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name) || "mock_location".equals(name)) {
 +                    return "0";
 +                }
 +            }

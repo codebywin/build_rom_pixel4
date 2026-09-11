@@ -538,6 +538,11 @@ jobs:
         sudo ln -sf /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfo.so.5 || true ; \
         export WITH_DEXPREOPT=false ; \
         export WITH_DEXPREOPT_BOOT_IMG_AND_SYSTEM_SERVER_ONLY=false ; \
+        git -C frameworks/base checkout . 2>/dev/null || true ; \
+        git -C system/core checkout . 2>/dev/null || true ; \
+        git -C device/google/coral checkout . 2>/dev/null || true ; \
+        git -C build/make checkout . 2>/dev/null || true ; \
+        git -C packages/services/Telephony checkout . 2>/dev/null || true ; \
         if [ -f device/google/coral/BoardConfig.mk ]; then \
             echo "WITH_DEXPREOPT := false" >> device/google/coral/BoardConfig.mk ; \
             echo "WITH_DEXPREOPT_BOOT_IMG_AND_SYSTEM_SERVER_ONLY := false" >> device/google/coral/BoardConfig.mk ; \
