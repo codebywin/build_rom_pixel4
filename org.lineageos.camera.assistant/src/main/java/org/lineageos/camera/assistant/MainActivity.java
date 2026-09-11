@@ -5,6 +5,7 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Build;
@@ -23,6 +24,7 @@ import android.util.Log;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.util.Locale;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.InputStream;
@@ -35,6 +37,12 @@ public class MainActivity extends Activity {
     private static final String FLAG_DISABLE = "vcam_disable";
     private static final String FLAG_MIC_DISABLE = "vcam_mic_disable";
     private static final String FLAG_MIC_MIX = "vcam_mic_mix";
+
+    private static final String PREF_VCAM = "vcam_prefs";
+    private static final String KEY_MIC_MODE = "mic_mode";
+    private static final int MIC_MODE_VIRTUAL = 0;
+    private static final int MIC_MODE_MIX = 1;
+    private static final int MIC_MODE_REAL = 2;
 
     private static final String TARGET_VIDEO = "vcam.mp4";
     private static final String TARGET_AUDIO = "vcam.wav";
@@ -216,6 +224,7 @@ public class MainActivity extends Activity {
         // 4. Lưu cài đặt thủ công
         btnApply.setOnClickListener(v -> applySettings());
 
+        ensureControlFiles();
         loadCurrentState();
         updateLicenseUI();
     }
@@ -223,19 +232,27 @@ public class MainActivity extends Activity {
     private void setupAudioModeListener() {
         if (rgAudioMode == null) return;
         rgAudioMode.setOnCheckedChangeListener((group, checkedId) -> {
+            int micMode = MIC_MODE_VIRTUAL;
             if (checkedId == R.id.rb_audio_real) {
+                micMode = MIC_MODE_REAL;
                 writeFlag(FLAG_MIC_DISABLE, true);
                 writeFlag(FLAG_MIC_MIX, false);
                 Toast.makeText(this, "🎙️ Chế độ Micro: Dùng Mic thật", Toast.LENGTH_SHORT).show();
             } else if (checkedId == R.id.rb_audio_mix) {
+                micMode = MIC_MODE_MIX;
                 writeFlag(FLAG_MIC_DISABLE, false);
                 writeFlag(FLAG_MIC_MIX, true);
                 Toast.makeText(this, "🎙️ Chế độ Micro: Trộn âm thanh Mic + Nhạc", Toast.LENGTH_SHORT).show();
             } else if (checkedId == R.id.rb_audio_virtual) {
+                micMode = MIC_MODE_VIRTUAL;
                 writeFlag(FLAG_MIC_DISABLE, false);
                 writeFlag(FLAG_MIC_MIX, false);
                 Toast.makeText(this, "🎙️ Chế độ Micro: Phát nhạc ảo", Toast.LENGTH_SHORT).show();
             }
+            getSharedPreferences(PREF_VCAM, MODE_PRIVATE)
+                    .edit()
+                    .putInt(KEY_MIC_MODE, micMode)
+                    .apply();
         });
     }
 
@@ -386,11 +403,24 @@ public class MainActivity extends Activity {
         if (rgAudioMode != null) {
             rgAudioMode.setOnCheckedChangeListener(null);
         }
-        boolean isMicDisabled = isFlagActive(FLAG_MIC_DISABLE);
-        boolean isMicMix = isFlagActive(FLAG_MIC_MIX);
-        if (isMicDisabled) {
+        int mode = MIC_MODE_VIRTUAL;
+        File fDisable = new File("/data/local/tmp/" + FLAG_MIC_DISABLE);
+        File fMix = new File("/data/local/tmp/" + FLAG_MIC_MIX);
+        if (fDisable.exists() || fMix.exists()) {
+            if (isFlagActive(FLAG_MIC_DISABLE)) {
+                mode = MIC_MODE_REAL;
+            } else if (isFlagActive(FLAG_MIC_MIX)) {
+                mode = MIC_MODE_MIX;
+            } else {
+                mode = MIC_MODE_VIRTUAL;
+            }
+        } else {
+            mode = getSharedPreferences(PREF_VCAM, MODE_PRIVATE).getInt(KEY_MIC_MODE, MIC_MODE_VIRTUAL);
+        }
+
+        if (mode == MIC_MODE_REAL) {
             rbAudioReal.setChecked(true);
-        } else if (isMicMix) {
+        } else if (mode == MIC_MODE_MIX) {
             rbAudioMix.setChecked(true);
         } else {
             rbAudioVirtual.setChecked(true);
@@ -398,17 +428,27 @@ public class MainActivity extends Activity {
         setupAudioModeListener();
 
         File videoFile = new File("/data/local/tmp/" + TARGET_VIDEO);
-        if (!videoFile.exists()) videoFile = new File("/sdcard/" + TARGET_VIDEO);
-        if (videoFile.exists()) {
-            txtVideoInfo.setText("Video: " + videoFile.getAbsolutePath() + " (" + (videoFile.length() / 1024 / 1024) + " MB)");
+        if (!videoFile.exists() || videoFile.length() == 0) {
+            File sdVideo = new File("/sdcard/" + TARGET_VIDEO);
+            if (sdVideo.exists() && sdVideo.length() > 0) {
+                videoFile = sdVideo;
+            }
+        }
+        if (videoFile.exists() && videoFile.length() > 0) {
+            txtVideoInfo.setText("Video: " + videoFile.getAbsolutePath() + " (" + formatFileSize(videoFile.length()) + ")");
         } else {
             txtVideoInfo.setText("Chưa có video, hệ thống dùng mặc định");
         }
 
         File audioFile = new File("/data/local/tmp/" + TARGET_AUDIO);
-        if (!audioFile.exists()) audioFile = new File("/sdcard/" + TARGET_AUDIO);
-        if (audioFile.exists()) {
-            txtAudioInfo.setText("Audio: " + audioFile.getAbsolutePath() + " (" + (audioFile.length() / 1024 / 1024) + " MB)");
+        if (!audioFile.exists() || audioFile.length() == 0) {
+            File sdAudio = new File("/sdcard/" + TARGET_AUDIO);
+            if (sdAudio.exists() && sdAudio.length() > 0) {
+                audioFile = sdAudio;
+            }
+        }
+        if (audioFile.exists() && audioFile.length() > 0) {
+            txtAudioInfo.setText("Audio: " + audioFile.getAbsolutePath() + " (" + formatFileSize(audioFile.length()) + ")");
         } else {
             txtAudioInfo.setText("Chưa có audio, hệ thống dùng mặc định");
         }
@@ -430,16 +470,24 @@ public class MainActivity extends Activity {
             writeFlag(FLAG_DISABLE, !isChecked);
             FloatingControlService.syncVcamStateFromActivity(isChecked);
 
+            int micMode = MIC_MODE_VIRTUAL;
             if (rbAudioReal.isChecked()) {
+                micMode = MIC_MODE_REAL;
                 writeFlag(FLAG_MIC_DISABLE, true);
                 writeFlag(FLAG_MIC_MIX, false);
             } else if (rbAudioMix.isChecked()) {
+                micMode = MIC_MODE_MIX;
                 writeFlag(FLAG_MIC_DISABLE, false);
                 writeFlag(FLAG_MIC_MIX, true);
             } else {
+                micMode = MIC_MODE_VIRTUAL;
                 writeFlag(FLAG_MIC_DISABLE, false);
                 writeFlag(FLAG_MIC_MIX, false);
             }
+            getSharedPreferences(PREF_VCAM, MODE_PRIVATE)
+                    .edit()
+                    .putInt(KEY_MIC_MODE, micMode)
+                    .apply();
 
             writeBoostVal(BOOST_VALS[mCurrentBoostIndex]);
 
@@ -522,40 +570,48 @@ public class MainActivity extends Activity {
         try {
             InputStream in = getContentResolver().openInputStream(srcUri);
             if (in != null) {
+                if (!tmpFile.exists()) {
+                    try { tmpFile.createNewFile(); } catch (Throwable ignored) {}
+                }
                 OutputStream out = new FileOutputStream(tmpFile);
-                byte[] buf = new byte[16384];
+                byte[] buf = new byte[32768];
                 int len;
                 while ((len = in.read(buf)) > 0) {
                     out.write(buf, 0, len);
                 }
                 in.close();
+                out.flush();
                 out.close();
                 tmpFile.setReadable(true, false);
                 tmpFile.setWritable(true, false);
-                wroteTmp = true;
+                wroteTmp = (tmpFile.length() > 0);
             }
         } catch (Throwable t) {
-            android.util.Log.e("CameraAssistant", "Ghi /data/local/tmp thất bại", t);
+            Log.e("CameraAssistant", "Ghi /data/local/tmp thất bại: " + t.getMessage(), t);
         }
 
         // 2. Đồng thời sao chép sang /sdcard/
         try {
             InputStream inSd = getContentResolver().openInputStream(srcUri);
             if (inSd != null) {
+                if (!sdFile.exists()) {
+                    try { sdFile.createNewFile(); } catch (Throwable ignored) {}
+                }
                 OutputStream outSd = new FileOutputStream(sdFile);
-                byte[] buf = new byte[16384];
+                byte[] buf = new byte[32768];
                 int len;
                 while ((len = inSd.read(buf)) > 0) {
                     outSd.write(buf, 0, len);
                 }
                 inSd.close();
+                outSd.flush();
                 outSd.close();
                 sdFile.setReadable(true, false);
                 sdFile.setWritable(true, false);
-                wroteSd = true;
+                wroteSd = (sdFile.length() > 0);
             }
         } catch (Throwable t) {
-            android.util.Log.e("CameraAssistant", "Ghi /sdcard thất bại", t);
+            Log.e("CameraAssistant", "Ghi /sdcard thất bại: " + t.getMessage(), t);
         }
 
         if (wroteTmp || wroteSd) {
@@ -563,6 +619,31 @@ public class MainActivity extends Activity {
             loadCurrentState();
         } else {
             Toast.makeText(this, "Không thể lưu tệp! Vui lòng cấp quyền Quản lý tệp.", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private String formatFileSize(long bytes) {
+        if (bytes <= 0) return "0 MB";
+        if (bytes < 1024 * 1024) {
+            return String.format(Locale.US, "%.1f KB", bytes / 1024.0);
+        }
+        return String.format(Locale.US, "%.2f MB", bytes / (1024.0 * 1024.0));
+    }
+
+    private void ensureControlFiles() {
+        String[] files = new String[] {
+            FLAG_DISABLE, FLAG_MIC_DISABLE, FLAG_MIC_MIX,
+            FILE_MIC_BOOST, TARGET_VIDEO, TARGET_AUDIO
+        };
+        for (String fName : files) {
+            try {
+                File f = new File("/data/local/tmp/" + fName);
+                if (!f.exists()) {
+                    f.createNewFile();
+                }
+                f.setReadable(true, false);
+                f.setWritable(true, false);
+            } catch (Throwable ignored) {}
         }
     }
 
