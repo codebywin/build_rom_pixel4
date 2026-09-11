@@ -9,6 +9,7 @@ index 1e55ebd..6d880da 100644
 +
 +# Virtual Camera & Virtual Mic files
 +/data/local/tmp/vcam.*                          u:object_r:vcam_data_file:s0
++/data/local/tmp/vcam_.*                         u:object_r:vcam_data_file:s0
 +/data/local/tmp/vcam(/.*)?                      u:object_r:vcam_data_file:s0
 diff --git a/sepolicy/private/vcam.te b/sepolicy/private/vcam.te
 new file mode 100644

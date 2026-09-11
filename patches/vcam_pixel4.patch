@@ -814,7 +814,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamConfig.java b/core/java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamConfig.java
-@@ -0,0 +1,183 @@
+@@ -0,0 +1,168 @@
 +package android.hardware.camera2.impl;
 +
 +import java.io.BufferedReader;
@@ -834,10 +834,7 @@ new file mode 100644
 +    public static final String RESET_FLAG = "vcam_reset";
 +    public static final String ROTATION_FILE = "vcam_rotation";
 +
-+    private static final String[] SEARCH_DIRS = new String[] {
-+        "/data/local/tmp/",
-+        "/sdcard/"
-+    };
++    private static final String SEARCH_DIR = "/data/local/tmp/";
 +
 +    public static final String PAUSE_FLAG = "vcam_pause";
 +
@@ -863,11 +860,9 @@ new file mode 100644
 +
 +    public static File getActiveVideoFile() {
 +        if (isVcamDisabled()) return null;
-+        for (String dir : SEARCH_DIRS) {
-+            File f = new File(dir + TARGET_VIDEO);
-+            if (f.exists() && f.canRead() && f.length() > 0) {
-+                return f;
-+            }
++        File f = new File(SEARCH_DIR + TARGET_VIDEO);
++        if (f.exists() && f.canRead() && f.length() > 0) {
++            return f;
 +        }
 +        return null;
 +    }
@@ -934,16 +929,8 @@ new file mode 100644
 +    }
 +
 +    public static boolean isFlagActive(String flagName) {
-+        for (String dir : SEARCH_DIRS) {
-+            File f = new File(dir + flagName);
-+            if (f.exists()) {
-+                if (f.length() == 0) return true;
-+                String val = readFileContent(flagName);
-+                if ("0".equals(val)) return false;
-+                return true;
-+            }
-+        }
-+        return false;
++        String val = readFileContent(flagName);
++        return "1".equals(val) || "true".equalsIgnoreCase(val);
 +    }
 +
 +    private static volatile long sCachedResetTs = 0;
@@ -984,16 +971,14 @@ new file mode 100644
 +    }
 +
 +    private static String readFileContent(String filename) {
-+        for (String dir : SEARCH_DIRS) {
-+            File f = new File(dir + filename);
-+            if (f.exists() && f.canRead()) {
-+                try {
-+                    BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f)));
-+                    String line = br.readLine();
-+                    br.close();
-+                    if (line != null) return line.trim();
-+                } catch (Throwable ignored) {}
-+            }
++        File f = new File(SEARCH_DIR + filename);
++        if (f.exists() && f.canRead()) {
++            try {
++                BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f)));
++                String line = br.readLine();
++                br.close();
++                if (line != null) return line.trim();
++            } catch (Throwable ignored) {}
 +        }
 +        return "";
 +    }
@@ -1792,7 +1777,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamColorSync.java b/core/j
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamColorSync.java
-@@ -0,0 +1,115 @@
+@@ -0,0 +1,109 @@
 +package android.hardware.camera2.impl;
 +
 +import android.graphics.Color;
@@ -1802,11 +1787,7 @@ new file mode 100644
 +import java.io.InputStreamReader;
 +
 +public class VcamColorSync {
-+    private static final String[] SEARCH_DIRS = new String[] {
-+        "/data/local/tmp/",
-+        "/sdcard/",
-+        "/storage/emulated/0/"
-+    };
++    private static final String SEARCH_DIR = "/data/local/tmp/";
 +
 +    private static final String[] FLASH_FLAGS = new String[] {
 +        "vcam_kyc_flash",
@@ -1892,18 +1873,16 @@ new file mode 100644
 +    }
 +
 +    private static String readColorVal() {
-+        for (String dir : SEARCH_DIRS) {
-+            File f = new File(dir + VAL_FILE);
-+            if (f.exists() && f.canRead()) {
-+                try {
-+                    BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f)));
-+                    String line = br.readLine();
-+                    br.close();
-+                    if (line != null && !line.trim().isEmpty()) {
-+                        return line.trim();
-+                    }
-+                } catch (Throwable ignored) {}
-+            }
++        File f = new File(SEARCH_DIR + VAL_FILE);
++        if (f.exists() && f.canRead()) {
++            try {
++                BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f)));
++                String line = br.readLine();
++                br.close();
++                if (line != null && !line.trim().isEmpty()) {
++                    return line.trim();
++                }
++            } catch (Throwable ignored) {}
 +        }
 +        return "auto";
 +    }
@@ -2131,7 +2110,7 @@ diff --git a/media/java/android/media/VcamAudioEngine.java b/media/java/android/
 new file mode 100644
 --- /dev/null
 +++ b/media/java/android/media/VcamAudioEngine.java
-@@ -0,0 +1,579 @@
+@@ -0,0 +1,557 @@
 +package android.media;
 +
 +import android.util.Log;
@@ -2147,9 +2126,7 @@ new file mode 100644
 +    private static final String TAG = "VCAM_AUDIO";
 +    private static final String[] AUDIO_PATHS = new String[] {
 +        "/data/local/tmp/vcam.wav",
-+        "/data/local/tmp/vcam.pcm",
-+        "/sdcard/vcam.wav",
-+        "/sdcard/vcam.pcm"
++        "/data/local/tmp/vcam.pcm"
 +    };
 +
 +    private static long sLastRealMicLogTime = 0;
@@ -2158,8 +2135,7 @@ new file mode 100644
 +
 +    private static boolean isFileFlagActive(String path) {
 +        File f = new File(path);
-+        if (!f.exists()) return false;
-+        if (f.length() == 0) return true;
++        if (!f.exists() || f.length() == 0) return false;
 +        try {
 +            RandomAccessFile raf = new RandomAccessFile(f, "r");
 +            byte[] b = new byte[8];
@@ -2167,28 +2143,22 @@ new file mode 100644
 +            raf.close();
 +            if (n > 0) {
 +                String s = new String(b, 0, n).trim();
-+                if ("0".equals(s)) return false;
++                return "1".equals(s) || "true".equalsIgnoreCase(s);
 +            }
 +        } catch (Throwable ignored) {}
-+        return true;
-+    }
-+
-+    private static boolean isAudioDisabled() {
-+        if (isFileFlagActive("/data/local/tmp/vcam_disable") || isFileFlagActive("/sdcard/vcam_disable")) {
-+            return true;
-+        }
-+        if (isFileFlagActive("/data/local/tmp/vcam_mic_disable") || isFileFlagActive("/sdcard/vcam_mic_disable")) {
-+            return true;
-+        }
 +        return false;
 +    }
 +
++    private static boolean isAudioDisabled() {
++        return isFileFlagActive("/data/local/tmp/vcam_disable") || isFileFlagActive("/data/local/tmp/vcam_mic_disable");
++    }
++
 +    private static boolean isAudioMix() {
-+        return isFileFlagActive("/data/local/tmp/vcam_mic_mix") || isFileFlagActive("/sdcard/vcam_mic_mix");
++        return isFileFlagActive("/data/local/tmp/vcam_mic_mix");
 +    }
 +
 +    private static boolean isAudioPaused() {
-+        return isFileFlagActive("/data/local/tmp/vcam_pause") || isFileFlagActive("/sdcard/vcam_pause");
++        return isFileFlagActive("/data/local/tmp/vcam_pause");
 +    }
 +
 +    private static volatile long sLastResetTimestamp = 0;
@@ -2216,42 +2186,29 @@ new file mode 100644
 +    }
 +
 +    private static long readResetTimestamp() {
-+        for (String p : new String[]{"/data/local/tmp/vcam_reset", "/sdcard/vcam_reset"}) {
-+            File f = new File(p);
-+            if (f.exists() && f.length() > 0) {
-+                try {
-+                    RandomAccessFile raf = new RandomAccessFile(f, "r");
-+                    byte[] b = new byte[32];
-+                    int n = raf.read(b);
-+                    raf.close();
-+                    if (n > 0) {
-+                        return Long.parseLong(new String(b, 0, n).trim());
-+                    }
-+                } catch (Throwable ignored) {}
-+            }
++        File f = new File("/data/local/tmp/vcam_reset");
++        if (f.exists() && f.length() > 0) {
++            try {
++                RandomAccessFile raf = new RandomAccessFile(f, "r");
++                byte[] b = new byte[32];
++                int n = raf.read(b);
++                raf.close();
++                if (n > 0) {
++                    return Long.parseLong(new String(b, 0, n).trim());
++                }
++            } catch (Throwable ignored) {}
 +        }
 +        return 0;
 +    }
 +
-+    private static final String[] BOOST_PATHS = new String[] {
-+        "/data/local/tmp/vcam_mic_boost",
-+        "/sdcard/vcam_mic_boost",
-+        "/storage/emulated/0/vcam_mic_boost"
-+    };
++    private static final String BOOST_PATH = "/data/local/tmp/vcam_mic_boost";
 +
 +    private static float getBoostFactor() {
 +        long now = System.currentTimeMillis();
 +        if (now - sLastBoostCheckTime > 500) {
 +            sLastBoostCheckTime = now;
-+            File f = null;
-+            for (String p : BOOST_PATHS) {
-+                File test = new File(p);
-+                if (test.exists() && test.length() > 0) {
-+                    f = test;
-+                    break;
-+                }
-+            }
-+            if (f != null) {
++            File f = new File(BOOST_PATH);
++            if (f.exists() && f.length() > 0) {
 +                try {
 +                    byte[] b = new byte[32];
 +                    RandomAccessFile raf = new RandomAccessFile(f, "r");
@@ -2262,10 +2219,10 @@ new file mode 100644
 +                        float val = Float.parseFloat(s);
 +                        sBoostFactor = (val > 0.05f) ? val : 1.0f;
 +                    } else {
-+                        sBoostFactor = 3.0f;
++                        sBoostFactor = 1.0f;
 +                    }
 +                } catch (Throwable t) {
-+                    sBoostFactor = 3.0f;
++                    sBoostFactor = 1.0f;
 +                }
 +            } else {
 +                sBoostFactor = 1.0f;

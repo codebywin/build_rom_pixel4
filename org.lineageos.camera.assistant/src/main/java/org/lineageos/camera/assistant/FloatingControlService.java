@@ -165,16 +165,34 @@ public class FloatingControlService extends Service implements View.OnTouchListe
 
     private void ensureControlFiles() {
         new Thread(() -> {
-            String[] files = new String[]{
-                "vcam_zoom", "vcam_pan_x", "vcam_pan_y", "vcam_pan.cfg",
-                "vcam_rotation", "vcam_reset", "vcam_color_val",
-                "vcam_pause", "vcam_kyc_flash", "vcam_color_sync"
+            String[] zeroFlags = new String[]{
+                FLAG_PAUSE, FLAG_DISABLE, FLAG_KYC_FLASH, "vcam_color_sync",
+                "vcam_rotation", FLAG_RESET
             };
-            for (String name : files) {
+            for (String name : zeroFlags) {
                 File f = new File("/data/local/tmp/" + name);
-                if (!f.exists()) {
+                if (!f.exists() || f.length() == 0) {
                     writeStringFile("/data/local/tmp/" + name, "0");
                 }
+            }
+            File fZoom = new File("/data/local/tmp/" + FILE_ZOOM);
+            if (!fZoom.exists() || fZoom.length() == 0) {
+                writeStringFile("/data/local/tmp/" + FILE_ZOOM, "1.0");
+                writeStringFile("/data/local/tmp/vcam_zoom.cfg", "1.0");
+            }
+            File fPan = new File("/data/local/tmp/vcam_pan.cfg");
+            if (!fPan.exists() || fPan.length() == 0) {
+                writeStringFile("/data/local/tmp/vcam_pan.cfg", "0.0,0.0");
+                writeStringFile("/data/local/tmp/vcam_pan_x", "0.0");
+                writeStringFile("/data/local/tmp/vcam_pan_y", "0.0");
+            }
+            File fColor = new File("/data/local/tmp/" + FILE_COLOR_VAL);
+            if (!fColor.exists() || fColor.length() == 0) {
+                writeStringFile("/data/local/tmp/" + FILE_COLOR_VAL, "normal");
+            }
+            File fMic = new File("/data/local/tmp/" + FILE_MIC_BOOST);
+            if (!fMic.exists() || fMic.length() == 0) {
+                writeStringFile("/data/local/tmp/" + FILE_MIC_BOOST, "1.0");
             }
         }).start();
     }
@@ -429,8 +447,6 @@ public class FloatingControlService extends Service implements View.OnTouchListe
     private void cycleRotation() {
         mCurrentRotation = (mCurrentRotation + 90) % 360;
         writeStringFile("/data/local/tmp/" + FILE_ROTATION, String.valueOf(mCurrentRotation));
-        writeStringFile("/sdcard/" + FILE_ROTATION, String.valueOf(mCurrentRotation));
-        writeStringFile("/storage/emulated/0/" + FILE_ROTATION, String.valueOf(mCurrentRotation));
         updateRotationUi();
         Toast.makeText(this, "🔄 Góc xoay: " + mCurrentRotation + "°", Toast.LENGTH_SHORT).show();
     }
@@ -460,8 +476,6 @@ public class FloatingControlService extends Service implements View.OnTouchListe
 
     private void writeColorVal(String val) {
         writeStringFile("/data/local/tmp/" + FILE_COLOR_VAL, val);
-        writeStringFile("/sdcard/" + FILE_COLOR_VAL, val);
-        writeStringFile("/storage/emulated/0/" + FILE_COLOR_VAL, val);
     }
 
     private void cycleMicBoost() {
@@ -484,8 +498,6 @@ public class FloatingControlService extends Service implements View.OnTouchListe
 
     private void writeBoostVal(String val) {
         writeStringFile("/data/local/tmp/" + FILE_MIC_BOOST, val);
-        writeStringFile("/sdcard/" + FILE_MIC_BOOST, val);
-        writeStringFile("/storage/emulated/0/" + FILE_MIC_BOOST, val);
     }
 
     private void setupVcamSwitchListener() {
@@ -543,7 +555,6 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         writeFloatValue("vcam_pan_y", mCurrentPanY);
         String panCfg = mCurrentPanX + "," + mCurrentPanY;
         writeStringFile("/data/local/tmp/vcam_pan.cfg", panCfg);
-        writeStringFile("/sdcard/vcam_pan.cfg", panCfg);
     }
 
     private void resetTransform() {
@@ -555,14 +566,11 @@ public class FloatingControlService extends Service implements View.OnTouchListe
 
         writeFlag(FLAG_PAUSE, false);
         writeStringFile("/data/local/tmp/" + FILE_ROTATION, "0");
-        writeStringFile("/sdcard/" + FILE_ROTATION, "0");
-        writeStringFile("/storage/emulated/0/" + FILE_ROTATION, "0");
         writeFloatValue("vcam_zoom", 1.0f);
         writeFloatValue("vcam_zoom.cfg", 1.0f);
         writeFloatValue("vcam_pan_x", 0.0f);
         writeFloatValue("vcam_pan_y", 0.0f);
         writeStringFile("/data/local/tmp/vcam_pan.cfg", "0.0,0.0");
-        writeStringFile("/sdcard/vcam_pan.cfg", "0.0,0.0");
 
         mTxtZoom.setText("1.00x");
         if (mSwitchKyc != null) mSwitchKyc.setChecked(false);
@@ -579,166 +587,39 @@ public class FloatingControlService extends Service implements View.OnTouchListe
     private void triggerRewind() {
         String ts = String.valueOf(System.currentTimeMillis());
         writeStringFile("/data/local/tmp/" + FLAG_RESET, ts);
-        writeStringFile("/sdcard/" + FLAG_RESET, ts);
-        writeStringFile("/storage/emulated/0/" + FLAG_RESET, ts);
         Toast.makeText(this, "⏮ Đã tua về 00:00 (Đồng bộ Video & Âm thanh)", Toast.LENGTH_SHORT).show();
         Log.i(TAG, "triggerRewind: reset timestamp " + ts);
     }
 
     private boolean isFlagActive(String name) {
-        File[] targets = new File[] {
-            new File("/data/local/tmp/" + name),
-            new File("/sdcard/" + name),
-            new File("/storage/emulated/0/" + name),
-            new File(Environment.getExternalStorageDirectory(), name)
-        };
-        for (File f : targets) {
-            if (f.exists()) {
-                if (f.length() == 0) return true; // File created by touch from adb shell
-                try (BufferedReader reader = new BufferedReader(new FileReader(f))) {
-                    String line = reader.readLine();
-                    if (line != null && "0".equals(line.trim())) {
-                        return false;
-                    }
-                } catch (Throwable ignored) {}
-                return true;
-            }
-        }
-        return false;
+        String val = readStringFile("/data/local/tmp/" + name);
+        return "1".equals(val) || "true".equalsIgnoreCase(val);
     }
 
     private void writeFlag(String name, boolean active) {
         Log.i(TAG, "writeFlag: " + name + " -> " + active);
-        File[] targets = new File[] {
-            new File("/data/local/tmp/" + name),
-            new File("/sdcard/" + name),
-            new File("/storage/emulated/0/" + name),
-            new File(Environment.getExternalStorageDirectory(), name)
-        };
-        for (File f : targets) {
-            try {
-                if (active) {
-                    if (!f.exists()) {
-                        f.createNewFile();
-                    }
-                    FileOutputStream fos = new FileOutputStream(f);
-                    fos.write("1\n".getBytes("UTF-8"));
-                    fos.close();
-                    f.setReadable(true, false);
-                    f.setWritable(true, false);
-                    Log.i(TAG, "Created flag file: " + f.getAbsolutePath());
-                } else {
-                    if (f.exists()) {
-                        try {
-                            FileOutputStream fos = new FileOutputStream(f);
-                            fos.write("0\n".getBytes("UTF-8"));
-                            fos.close();
-                            f.setReadable(true, false);
-                        } catch (Throwable ignored) {}
-                    }
-                    deleteFileSafely(f);
-                }
-            } catch (Throwable t) {
-                Log.w(TAG, "writeFlag error for " + f.getAbsolutePath() + ": " + t.getMessage());
-            }
-        }
-    }
-
-    private void deleteFileSafely(File file) {
-        if (file == null || !file.exists()) return;
-
-        // 1. Standard File.delete
-        boolean deleted = file.delete();
-        if (deleted) {
-            Log.i(TAG, "deleteFileSafely: File.delete succeeded for " + file.getAbsolutePath());
-            return;
-        }
-
-        // 2. Canonical delete
-        try {
-            if (file.getCanonicalFile().delete()) {
-                Log.i(TAG, "deleteFileSafely: CanonicalFile.delete succeeded for " + file.getAbsolutePath());
-                return;
-            }
-        } catch (Throwable ignored) {}
-
-        // 3. Java NIO deleteIfExists
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try {
-                if (java.nio.file.Files.deleteIfExists(file.toPath())) {
-                    Log.i(TAG, "deleteFileSafely: NIO delete succeeded for " + file.getAbsolutePath());
-                    return;
-                }
-            } catch (Throwable ignored) {}
-        }
-
-        // 4. MediaStore delete
-        try {
-            Uri contentUri = MediaStore.Files.getContentUri("external");
-            int count = getContentResolver().delete(contentUri,
-                    MediaStore.MediaColumns.DATA + "=?",
-                    new String[]{file.getAbsolutePath()});
-            if (count > 0) {
-                Log.i(TAG, "deleteFileSafely: MediaStore delete succeeded for " + file.getAbsolutePath());
-                return;
-            }
-        } catch (Throwable ignored) {}
-
-        // 5. Shell rm
-        try {
-            Process p = Runtime.getRuntime().exec(new String[]{"/system/bin/rm", "-f", file.getAbsolutePath()});
-            p.waitFor();
-            if (!file.exists()) {
-                Log.i(TAG, "deleteFileSafely: /system/bin/rm succeeded for " + file.getAbsolutePath());
-                return;
-            }
-        } catch (Throwable ignored) {}
-
-        // 6. Overwrite with 0 if delete failed
-        try {
-            FileOutputStream fos = new FileOutputStream(file);
-            fos.write("0\n".getBytes("UTF-8"));
-            fos.close();
-            Log.i(TAG, "deleteFileSafely: Overwritten with 0 for " + file.getAbsolutePath());
-            return;
-        } catch (Throwable ignored) {}
-
-        Log.w(TAG, "deleteFileSafely: Could NOT delete " + file.getAbsolutePath() + ", still exists=" + file.exists());
+        writeStringFile("/data/local/tmp/" + name, active ? "1" : "0");
     }
 
     private void writeFloatValue(String name, float val) {
         String s = String.valueOf(val);
         writeStringFile("/data/local/tmp/" + name, s);
-        writeStringFile("/sdcard/" + name, s);
     }
 
     private void writeStringFile(String path, String val) {
-        boolean success = false;
         try {
             File f = new File(path);
+            if (!f.exists()) {
+                f.createNewFile();
+            }
             FileOutputStream fos = new FileOutputStream(f);
-            fos.write(val.getBytes("UTF-8"));
+            fos.write(val.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            fos.flush();
             fos.close();
             f.setReadable(true, false);
             f.setWritable(true, false);
-            success = true;
-        } catch (Throwable ignored) {}
-
-        if (!success || path.startsWith("/data/local/tmp/")) {
-            try {
-                Process p = Runtime.getRuntime().exec("su");
-                java.io.OutputStream os = p.getOutputStream();
-                String cmd = "echo '" + val + "' > " + path + "\nchmod 666 " + path + "\nexit\n";
-                os.write(cmd.getBytes("UTF-8"));
-                os.flush();
-                os.close();
-                p.waitFor();
-            } catch (Throwable t) {
-                try {
-                    Process p2 = Runtime.getRuntime().exec(new String[]{"/system/bin/sh", "-c", "echo '" + val + "' > " + path + " && chmod 666 " + path});
-                    p2.waitFor();
-                } catch (Throwable ignored2) {}
-            }
+        } catch (Throwable t) {
+            Log.w(TAG, "writeStringFile error for " + path + ": " + t.getMessage());
         }
     }
 
@@ -747,10 +628,6 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         if (!s1.isEmpty()) {
             try { return Float.parseFloat(s1); } catch (Throwable ignored) {}
         }
-        String s2 = readStringFile("/sdcard/" + name);
-        if (!s2.isEmpty()) {
-            try { return Float.parseFloat(s2); } catch (Throwable ignored) {}
-        }
         return defVal;
     }
 
@@ -758,10 +635,6 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         String s1 = readStringFile("/data/local/tmp/" + name);
         if (!s1.isEmpty()) {
             try { return Integer.parseInt(s1); } catch (Throwable ignored) {}
-        }
-        String s2 = readStringFile("/sdcard/" + name);
-        if (!s2.isEmpty()) {
-            try { return Integer.parseInt(s2); } catch (Throwable ignored) {}
         }
         return defVal;
     }

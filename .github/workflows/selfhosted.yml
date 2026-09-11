@@ -584,6 +584,36 @@ jobs:
         if [ -f device/google/coral/lineage_flame.mk ]; then echo "PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += %/CameraAssistant.apk" >> device/google/coral/lineage_flame.mk ; fi ; \
         if [ -f device/google/coral/lineage_coral.mk ]; then echo "PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += %/CameraAssistant.apk" >> device/google/coral/lineage_coral.mk ; fi ; \
         curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/fix_telephony.py | python3 ; \
+        if [ -f device/google/coral/init.coral.rc ]; then \
+          echo "" >> device/google/coral/init.coral.rc && \
+          echo "on post-fs-data" >> device/google/coral/init.coral.rc && \
+          echo "    mkdir /data/local/tmp/vcam 0777 shell shell" >> device/google/coral/init.coral.rc && \
+          echo "    chmod 0777 /data/local/tmp" >> device/google/coral/init.coral.rc && \
+          echo "    write /data/local/tmp/vcam_pause 0" >> device/google/coral/init.coral.rc && \
+          echo "    write /data/local/tmp/vcam_disable 0" >> device/google/coral/init.coral.rc && \
+          echo "    write /data/local/tmp/vcam_kyc_flash 0" >> device/google/coral/init.coral.rc && \
+          echo "    write /data/local/tmp/vcam_color_sync 0" >> device/google/coral/init.coral.rc && \
+          echo "    write /data/local/tmp/vcam_rotation 0" >> device/google/coral/init.coral.rc && \
+          echo "    write /data/local/tmp/vcam_zoom 1.0" >> device/google/coral/init.coral.rc && \
+          echo "    write /data/local/tmp/vcam_pan_x 0.0" >> device/google/coral/init.coral.rc && \
+          echo "    write /data/local/tmp/vcam_pan_y 0.0" >> device/google/coral/init.coral.rc && \
+          echo "    write /data/local/tmp/vcam_pan.cfg 0.0,0.0" >> device/google/coral/init.coral.rc && \
+          echo "    write /data/local/tmp/vcam_mic_boost 1.0" >> device/google/coral/init.coral.rc && \
+          echo "    write /data/local/tmp/vcam_color_val normal" >> device/google/coral/init.coral.rc && \
+          echo "    write /data/local/tmp/vcam_reset 0" >> device/google/coral/init.coral.rc && \
+          echo "    chmod 0666 /data/local/tmp/vcam_pause" >> device/google/coral/init.coral.rc && \
+          echo "    chmod 0666 /data/local/tmp/vcam_disable" >> device/google/coral/init.coral.rc && \
+          echo "    chmod 0666 /data/local/tmp/vcam_kyc_flash" >> device/google/coral/init.coral.rc && \
+          echo "    chmod 0666 /data/local/tmp/vcam_color_sync" >> device/google/coral/init.coral.rc && \
+          echo "    chmod 0666 /data/local/tmp/vcam_rotation" >> device/google/coral/init.coral.rc && \
+          echo "    chmod 0666 /data/local/tmp/vcam_zoom" >> device/google/coral/init.coral.rc && \
+          echo "    chmod 0666 /data/local/tmp/vcam_pan_x" >> device/google/coral/init.coral.rc && \
+          echo "    chmod 0666 /data/local/tmp/vcam_pan_y" >> device/google/coral/init.coral.rc && \
+          echo "    chmod 0666 /data/local/tmp/vcam_pan.cfg" >> device/google/coral/init.coral.rc && \
+          echo "    chmod 0666 /data/local/tmp/vcam_mic_boost" >> device/google/coral/init.coral.rc && \
+          echo "    chmod 0666 /data/local/tmp/vcam_color_val" >> device/google/coral/init.coral.rc && \
+          echo "    chmod 0666 /data/local/tmp/vcam_reset" >> device/google/coral/init.coral.rc ; \
+        fi ; \
         source build/envsetup.sh && \
 
         echo "Repository: ${{ github.repository }}"; \
