@@ -1,7 +1,7 @@
-diff --git a/core/java/android/provider/Settings.java b/core/java/android/provider/Settings.java
 --- a/core/java/android/provider/Settings.java
 +++ b/core/java/android/provider/Settings.java
-@@ -6200,5 +6200,14 @@ public final class Settings {
+@@ -3724,6 +3724,15 @@
+         @UnsupportedAppUsage
          public static String getStringForUser(ContentResolver resolver, String name,
                  int userHandle) {
 +            if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name) || "mock_location".equals(name)) {
@@ -9,22 +9,39 @@ diff --git a/core/java/android/provider/Settings.java b/core/java/android/provid
 +                try {
 +                    callingPkg = android.app.ActivityThread.currentPackageName();
 +                } catch (Throwable ignored) {}
-+                if (callingPkg != null && !callingPkg.equals("com.android.settings") && !callingPkg.equals("com.android.systemui")) {
++                if (!"com.android.settings".equals(callingPkg) && !"com.android.systemui".equals(callingPkg)) {
++                    return "0";
++                }
++            }
+             if (MOVED_TO_SECURE.contains(name)) {
+                 Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.System"
+                         + " to android.provider.Settings.Secure, returning read-only value.");
+@@ -6124,6 +6133,15 @@
+         @UnsupportedAppUsage
+         public static String getStringForUser(ContentResolver resolver, String name,
+                 int userHandle) {
++            if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name) || "mock_location".equals(name)) {
++                String callingPkg = null;
++                try {
++                    callingPkg = android.app.ActivityThread.currentPackageName();
++                } catch (Throwable ignored) {}
++                if (!"com.android.settings".equals(callingPkg) && !"com.android.systemui".equals(callingPkg)) {
 +                    return "0";
 +                }
 +            }
              if (MOVED_TO_GLOBAL.contains(name)) {
                  Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Secure"
                          + " to android.provider.Settings.Global.");
-@@ -14500,5 +14510,14 @@ public final class Settings {
+@@ -15841,6 +15859,15 @@
+         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
          public static String getStringForUser(ContentResolver resolver, String name,
                  int userHandle) {
-+            if (ADB_ENABLED.equals(name) || DEVELOPMENT_SETTINGS_ENABLED.equals(name) || "mock_location".equals(name)) {
++            if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name) || "mock_location".equals(name)) {
 +                String callingPkg = null;
 +                try {
 +                    callingPkg = android.app.ActivityThread.currentPackageName();
 +                } catch (Throwable ignored) {}
-+                if (callingPkg != null && !callingPkg.equals("com.android.settings") && !callingPkg.equals("com.android.systemui")) {
++                if (!"com.android.settings".equals(callingPkg) && !"com.android.systemui".equals(callingPkg)) {
 +                    return "0";
 +                }
 +            }

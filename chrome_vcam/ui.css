@@ -1,0 +1,221 @@
+
+#chrome-vcam-hud {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 290px;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #f8fafc;
+  z-index: 2147483647;
+  user-select: none;
+  font-size: 13px;
+  overflow: hidden;
+  transition: box-shadow 0.2s;
+}
+
+#chrome-vcam-hud:hover {
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 0 15px rgba(56, 189, 248, 0.25);
+}
+
+.vcam-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgba(30, 41, 59, 0.85);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: move;
+}
+
+.vcam-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #38bdf8;
+}
+
+.vcam-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+}
+
+.vcam-btn-icon {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.vcam-btn-icon:hover {
+  color: #fff;
+}
+
+.vcam-body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vcam-hidden {
+  display: none !important;
+}
+
+.vcam-status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.vcam-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: #22c55e;
+}
+
+.vcam-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.vcam-preview-box {
+  width: 100%;
+  height: 140px;
+  background: #020617;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.vcam-preview-text {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.vcam-file-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vcam-file-info b {
+  color: #f1f5f9;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vcam-btn {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.vcam-btn-primary {
+  background: #0284c7;
+  color: #fff;
+}
+
+.vcam-btn-primary:hover {
+  background: #0369a1;
+}
+
+.vcam-btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.vcam-btn-secondary:hover {
+  background: rgba(56, 189, 248, 0.15);
+}
+
+.vcam-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.vcam-setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.vcam-setting-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.vcam-slider-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.vcam-range {
+  width: 100%;
+  height: 4px;
+  background: #334155;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  accent-color: #38bdf8;
+}
+
+.vcam-select {
+  background: #1e293b;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 11px;
+  outline: none;
+  max-width: 160px;
+}
+
+.vcam-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}

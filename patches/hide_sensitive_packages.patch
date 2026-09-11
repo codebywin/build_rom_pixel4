@@ -1,8 +1,6 @@
-diff --git a/core/java/android/app/ApplicationPackageManager.java b/core/java/android/app/ApplicationPackageManager.java
-index f0293aa..71d0cd1 100644
 --- a/core/java/android/app/ApplicationPackageManager.java
 +++ b/core/java/android/app/ApplicationPackageManager.java
-@@ -147,6 +147,25 @@ public class ApplicationPackageManager extends PackageManager {
+@@ -145,6 +145,41 @@
      private static final String TAG = "ApplicationPackageManager";
      private static final boolean DEBUG_ICONS = false;
  
@@ -18,17 +16,33 @@ index f0293aa..71d0cd1 100644
 +        }
 +        return "com.topjohnwu.magisk".equals(packageName)
 +                || "io.github.vvb2060.magisk".equals(packageName)
++                || "com.topjohnwu.magisk.canary".equals(packageName)
++                || "me.weishu.kernelsu".equals(packageName)
++                || "me.bmax.apatch".equals(packageName)
 +                || "org.lsposed.manager".equals(packageName)
++                || "org.lsposed.manager.core".equals(packageName)
++                || "com.solohsu.android.edxf.manager".equals(packageName)
++                || "org.meowcat.edxposed.manager".equals(packageName)
 +                || "de.robv.android.xposed.installer".equals(packageName)
 +                || "com.chelpus.lackypatch".equals(packageName)
++                || "com.chelpus.luckypatcher".equals(packageName)
++                || "com.dimonvideo.luckypatcher".equals(packageName)
 +                || "catch_.me_.if_.you_.can_".equals(packageName)
-+                || "com.guoshi.httpcanary".equals(packageName);
++                || "com.guoshi.httpcanary".equals(packageName)
++                || "app.greyshirts.sslcapture".equals(packageName)
++                || "com.noshufou.android.su".equals(packageName)
++                || "com.thirdparty.superuser".equals(packageName)
++                || "eu.chainfire.supersu".equals(packageName)
++                || "com.koushikdutta.superuser".equals(packageName)
++                || "com.zachspong.temprootremovejb".equals(packageName)
++                || "com.ramdroid.appquarantine".equals(packageName)
++                || "re.frida.server".equals(packageName);
 +    }
 +
      private static final int DEFAULT_EPHEMERAL_COOKIE_MAX_SIZE_BYTES = 16384; // 16KB
  
      // Default flags to use with PackageManager when no flags are given.
-@@ -213,6 +232,9 @@ public class ApplicationPackageManager extends PackageManager {
+@@ -210,6 +245,9 @@
      @Override
      public PackageInfo getPackageInfo(String packageName, PackageInfoFlags flags)
              throws NameNotFoundException {
@@ -38,7 +52,7 @@ index f0293aa..71d0cd1 100644
          return getPackageInfoAsUser(packageName, flags, getUserId());
      }
  
-@@ -496,6 +518,9 @@ public class ApplicationPackageManager extends PackageManager {
+@@ -484,6 +522,9 @@
      @Override
      public ApplicationInfo getApplicationInfo(String packageName, ApplicationInfoFlags flags)
              throws NameNotFoundException {

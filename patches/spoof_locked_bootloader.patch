@@ -1,8 +1,6 @@
-diff --git a/core/java/android/os/Build.java b/core/java/android/os/Build.java
-index 0b956f8..6930807 100644
 --- a/core/java/android/os/Build.java
 +++ b/core/java/android/os/Build.java
-@@ -1170,10 +1170,10 @@ public class Build {
+@@ -1170,10 +1170,10 @@
      }
  
      /** The type of build, like "user" or "eng". */
@@ -15,7 +13,7 @@ index 0b956f8..6930807 100644
  
      /** A string that uniquely identifies this build.  Do not attempt to parse this value. */
      public static final String FINGERPRINT = deriveFingerprint();
-@@ -1422,8 +1422,7 @@ public class Build {
+@@ -1422,8 +1422,7 @@
       * @hide
       */
      @UnsupportedAppUsage
@@ -25,11 +23,9 @@ index 0b956f8..6930807 100644
  
      /**
       * Returns true if the device is running a debuggable build such as "userdebug" or "eng".
-diff --git a/core/java/android/os/SystemProperties.java b/core/java/android/os/SystemProperties.java
-index aa283a2..03e49bc 100644
 --- a/core/java/android/os/SystemProperties.java
 +++ b/core/java/android/os/SystemProperties.java
-@@ -146,6 +146,8 @@ public class SystemProperties {
+@@ -146,6 +146,8 @@
      @SystemApi
      public static String get(@NonNull String key) {
          if (TRACK_KEY_ACCESS) onKeyAccess(key);
@@ -38,7 +34,7 @@ index aa283a2..03e49bc 100644
          return native_get(key);
      }
  
-@@ -162,6 +164,8 @@ public class SystemProperties {
+@@ -162,6 +164,8 @@
      @SystemApi
      public static String get(@NonNull String key, @Nullable String def) {
          if (TRACK_KEY_ACCESS) onKeyAccess(key);
@@ -47,7 +43,7 @@ index aa283a2..03e49bc 100644
          return native_get(key, def);
      }
  
-@@ -177,6 +181,9 @@ public class SystemProperties {
+@@ -177,6 +181,9 @@
      @SystemApi
      public static int getInt(@NonNull String key, int def) {
          if (TRACK_KEY_ACCESS) onKeyAccess(key);
@@ -57,7 +53,7 @@ index aa283a2..03e49bc 100644
          return native_get_int(key, def);
      }
  
-@@ -212,6 +219,9 @@ public class SystemProperties {
+@@ -212,6 +219,9 @@
      @SystemApi
      public static boolean getBoolean(@NonNull String key, boolean def) {
          if (TRACK_KEY_ACCESS) onKeyAccess(key);
@@ -67,7 +63,7 @@ index aa283a2..03e49bc 100644
          return native_get_boolean(key, def);
      }
  
-@@ -382,4 +392,35 @@ public class SystemProperties {
+@@ -382,4 +392,39 @@
              mNativeHandle = nativeHandle;
          }
      }
@@ -81,6 +77,10 @@ index aa283a2..03e49bc 100644
 +        if ("ro.build.type".equals(key)) return "user";
 +        if ("ro.debuggable".equals(key)) return "0";
 +        if ("ro.secure".equals(key)) return "1";
++
++        if (key != null && (key.startsWith("ro.lineage.") || key.startsWith("ro.modversion") || key.startsWith("ro.cm."))) {
++            return "";
++        }
 +
 +        boolean isCoral = "coral".equals(native_get("ro.product.device")) || "coral".equals(native_get("ro.build.product"));
 +        if ("ro.build.fingerprint".equals(key) || "ro.bootimage.build.fingerprint".equals(key)
