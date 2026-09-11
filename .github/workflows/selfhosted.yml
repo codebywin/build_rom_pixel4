@@ -603,8 +603,6 @@ jobs:
           echo "    write /data/local/tmp/vcam_mic_boost 1.0" >> device/google/coral/init.coral.rc && \
           echo "    write /data/local/tmp/vcam_color_val normal" >> device/google/coral/init.coral.rc && \
           echo "    write /data/local/tmp/vcam_reset 0" >> device/google/coral/init.coral.rc && \
-          echo "    touch /data/local/tmp/vcam.mp4" >> device/google/coral/init.coral.rc && \
-          echo "    touch /data/local/tmp/vcam.wav" >> device/google/coral/init.coral.rc && \
           echo "    chmod 0666 /data/local/tmp/vcam_pause" >> device/google/coral/init.coral.rc && \
           echo "    chmod 0666 /data/local/tmp/vcam_disable" >> device/google/coral/init.coral.rc && \
           echo "    chmod 0666 /data/local/tmp/vcam_mic_disable" >> device/google/coral/init.coral.rc && \
