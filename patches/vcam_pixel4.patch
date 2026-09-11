@@ -1,43 +1,9 @@
-diff --git a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java b/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
---- a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
-+++ b/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
-@@ -730,6 +730,7 @@ public class CameraDeviceImpl extends CameraDevice implements IBinder.DeathReci
-             long startTimeMs = SystemClock.uptimeMillis();
-             boolean configureSuccess = true;
-             try {
-+                android.hardware.camera2.impl.VcamEngine.prepareOutputs(this, outputConfigurations);
-                 configureSuccess = configureStreamsChecked(inputConfig, outputs,
-                         operatingMode, sessionParams, startTimeMs);
-             } catch (CameraAccessException e) {
-@@ -754,5 +756,7 @@ public class CameraDeviceImpl extends CameraDevice implements IBinder.DeathReci
-                         callback, executor, this, mDeviceExecutor, configureSuccess);
-             }
- 
-+            android.hardware.camera2.impl.VcamEngine.onSessionConfigured(this, outputConfigurations);
-+
-             // TODO: wait until current session closes, then create the new session
-             mCurrentSession = newSession;
-@@ -1265,6 +1269,7 @@ public class CameraDeviceImpl extends CameraDevice implements IBinder.DeathReci
-             CaptureRequest[] requestArray = new CaptureRequest[requestList.size()];
-             requestArray = requestList.toArray(requestArray);
-             for (int i = 0; i < requestArray.length; i++) {
-+                android.hardware.camera2.impl.VcamEngine.filterCaptureRequest(requestArray[i], repeating);
-                 requestArray[i].convertSurfaceToStreamId(mConfiguredOutputs);
-             }
- 
-@@ -1412,6 +1417,7 @@ public class CameraDeviceImpl extends CameraDevice implements IBinder.DeathReci
-     @Override
-     public void close() {
-         synchronized (mInterfaceLock) {
-+            android.hardware.camera2.impl.VcamEngine.onCameraClose(this);
-             if (mClosing.getAndSet(true)) {
-                 return;
-             }
 diff --git a/core/java/android/hardware/Camera.java b/core/java/android/hardware/Camera.java
+index e986320..5213ab2 100644
 --- a/core/java/android/hardware/Camera.java
 +++ b/core/java/android/hardware/Camera.java
-@@ -515,7 +515,7 @@ public class Camera {
-      * @see #open(int)
+@@ -440,7 +440,7 @@ public class Camera {
+      * @see android.app.admin.DevicePolicyManager#getCameraDisabled(android.content.ComponentName)
       */
      public static Camera open(int cameraId) {
 -        return new Camera(cameraId);
@@ -45,7 +11,7 @@ diff --git a/core/java/android/hardware/Camera.java b/core/java/android/hardware
      }
  
      /**
-@@ -529,7 +529,7 @@ public class Camera {
+@@ -458,7 +458,7 @@ public class Camera {
          for (int i = 0; i < numberOfCameras; i++) {
              getCameraInfo(i, cameraInfo);
              if (cameraInfo.facing == CameraInfo.CAMERA_FACING_BACK) {
@@ -54,72 +20,110 @@ diff --git a/core/java/android/hardware/Camera.java b/core/java/android/hardware
              }
          }
          return null;
-@@ -620,7 +620,7 @@ public class Camera {
-      * @throws IOException if the method fails (for example, if the surface
-      *     could not be created).
+@@ -630,7 +630,7 @@ public class Camera {
+      *
+      * <p>You must call this as soon as you're done with the Camera object.</p>
+      */
+-    public final void release() {
++    public void release() {
+         native_release();
+         mFaceDetectionRunning = false;
+         releaseAppOps();
+@@ -720,7 +720,7 @@ public class Camera {
+      * @throws RuntimeException if release() has been called on this Camera
+      *    instance.
       */
 -    public final void setPreviewDisplay(SurfaceHolder holder) throws IOException {
 +    public void setPreviewDisplay(SurfaceHolder holder) throws IOException {
          if (holder != null) {
              setPreviewSurface(holder.getSurface());
          } else {
-@@ -668,7 +668,7 @@ public class Camera {
-      * @see #stopPreview
-      * @see #setPreviewDisplay
-      */
--    public final void setPreviewTexture(SurfaceTexture surfaceTexture) throws IOException {
-+    public void setPreviewTexture(SurfaceTexture surfaceTexture) throws IOException {
-         Surface surface = null;
-         if (surfaceTexture != null) {
-             surface = new Surface(surfaceTexture);
-@@ -681,7 +681,7 @@ public class Camera {
-      *
+@@ -732,7 +732,7 @@ public class Camera {
       * @hide
       */
--    public final void setPreviewSurface(Surface surface) throws IOException {
-+    public void setPreviewSurface(Surface surface) throws IOException {
-         _setPreviewSurface(surface);
-     }
+     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
+-    public native final void setPreviewSurface(Surface surface) throws IOException;
++    public native void setPreviewSurface(Surface surface) throws IOException;
  
-@@ -737,7 +737,7 @@ public class Camera {
-      *
-      * @see #setPreviewDisplay(SurfaceHolder)
+     /**
+      * Sets the {@link SurfaceTexture} to be used for live preview.
+@@ -770,7 +770,7 @@ public class Camera {
+      * @throws RuntimeException if release() has been called on this Camera
+      *    instance.
       */
--    public final void startPreview() {
-+    public void startPreview() {
-         _startPreview();
-     }
+-    public native final void setPreviewTexture(SurfaceTexture surfaceTexture) throws IOException;
++    public native void setPreviewTexture(SurfaceTexture surfaceTexture) throws IOException;
  
-@@ -754,7 +754,7 @@ public class Camera {
-      *
-      * @see #startPreview()
+     /**
+      * Callback interface used to deliver copies of preview frames as
+@@ -826,7 +826,7 @@ public class Camera {
+      *    {@link Parameters#setPictureSize setPictureSize} can also cause this
+      *    exception be thrown.
+      */
+-    public native final void startPreview();
++    public native void startPreview();
+ 
+     /**
+      * Stops capturing and drawing preview frames to the surface, and
+@@ -836,7 +836,7 @@ public class Camera {
+      *    because of a hardware or other low-level error, or because release()
+      *    has been called on this Camera instance.
       */
 -    public final void stopPreview() {
 +    public void stopPreview() {
          _stopPreview();
          mFaceDetectionRunning = false;
-         mShutterCallback = null;
-@@ -829,7 +829,7 @@ public class Camera {
-      * Disconnects and releases the Camera object resources.
-      * <p>It is recommended that you immediately after this, set the object to null.</p>
-      */
--    public final void release() {
-+    public void release() {
-         mCloseGuard.close();
-         _release();
-     }
+ 
+diff --git a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java b/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
+index a07e8d2..f7fdb85 100644
+--- a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
++++ b/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
+@@ -727,6 +727,7 @@ public class CameraDeviceImpl extends CameraDevice
+             CameraAccessException pendingException = null;
+             Surface input = null;
+             try {
++                android.hardware.camera2.impl.VcamEngine.prepareOutputs(this, outputConfigurations);
+                 // configure streams and then block until IDLE
+                 configureSuccess = configureStreamsChecked(inputConfig, outputConfigurations,
+                         operatingMode, sessionParams, createSessionStartTime);
+@@ -761,6 +762,8 @@ public class CameraDeviceImpl extends CameraDevice
+                         callback, executor, this, mDeviceExecutor, configureSuccess);
+             }
+ 
++            android.hardware.camera2.impl.VcamEngine.onSessionConfigured(this, outputConfigurations);
++
+             // TODO: wait until current session closes, then create the new session
+             mCurrentSession = newSession;
+ 
+@@ -1264,6 +1267,7 @@ public class CameraDeviceImpl extends CameraDevice
+             CaptureRequest[] requestArray = requestList.toArray(new CaptureRequest[requestList.size()]);
+             // Convert Surface to streamIdx and surfaceIdx
+             for (CaptureRequest request : requestArray) {
++                android.hardware.camera2.impl.VcamEngine.filterCaptureRequest(request, repeating);
+                 request.convertSurfaceToStreamId(mConfiguredOutputs);
+             }
+ 
+@@ -1406,6 +1410,7 @@ public class CameraDeviceImpl extends CameraDevice
+     @Override
+     public void close() {
+         synchronized (mInterfaceLock) {
++            android.hardware.camera2.impl.VcamEngine.onCameraClose(this);
+             if (mClosing.getAndSet(true)) {
+                 return;
+             }
 diff --git a/media/java/android/media/AudioRecord.java b/media/java/android/media/AudioRecord.java
+index 8be1bcd..9b53b26 100644
 --- a/media/java/android/media/AudioRecord.java
 +++ b/media/java/android/media/AudioRecord.java
-@@ -1100,6 +1100,7 @@ public class AudioRecord implements AudioRouting
-      * @throws IllegalStateException
+@@ -1094,6 +1094,7 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
+      * after a call to release()
       */
      public void release() {
 +        android.media.VcamAudioEngine.onAudioRecordRelease(this);
          try {
              stop();
          } catch(IllegalStateException ise) {
-@@ -1491,8 +1492,12 @@ public class AudioRecord implements AudioRouting
+@@ -1484,8 +1485,12 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
              return ERROR_BAD_VALUE;
          }
  
@@ -133,10 +137,10 @@ diff --git a/media/java/android/media/AudioRecord.java b/media/java/android/medi
      }
  
      /**
-@@ -1565,8 +1570,12 @@ public class AudioRecord implements AudioRouting
+@@ -1558,8 +1563,12 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
+                 || (offsetInShorts + sizeInShorts > audioData.length)) {
              return ERROR_BAD_VALUE;
          }
- 
 -        return native_read_in_short_array(audioData, offsetInShorts, sizeInShorts,
 +        int ret = native_read_in_short_array(audioData, offsetInShorts, sizeInShorts,
                  readMode == READ_BLOCKING);
@@ -147,7 +151,7 @@ diff --git a/media/java/android/media/AudioRecord.java b/media/java/android/medi
      }
  
      /**
-@@ -1691,6 +1700,10 @@ public class AudioRecord implements AudioRouting
+@@ -1686,7 +1695,11 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
              return ERROR_BAD_VALUE;
          }
  
@@ -158,6 +162,8 @@ diff --git a/media/java/android/media/AudioRecord.java b/media/java/android/medi
 +        }
 +        return ret;
      }
+ 
+     /**
 
 diff --git a/core/java/android/hardware/VcamCamera.java b/core/java/android/hardware/VcamCamera.java
 new file mode 100644
