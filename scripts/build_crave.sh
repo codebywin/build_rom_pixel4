@@ -71,13 +71,22 @@ sudo ln -sf /usr/lib/x86_64-linux-gnu/libtinfo.so.6 /usr/lib/x86_64-linux-gnu/li
 sudo ln -sf /lib/x86_64-linux-gnu/libncurses.so.6 /lib/x86_64-linux-gnu/libncurses.so.5 2>/dev/null || true
 sudo ln -sf /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfo.so.5 2>/dev/null || true
 
-# 5. Clean git repositories to prevent patch conflicts from cached devspace
+# 5. Clean git repositories thoroughly (reset tracked and remove untracked files) to prevent patch conflicts
 echo ">> Cleaning git repos before patching..."
-git -C frameworks/base checkout . 2>/dev/null || true
-git -C system/core checkout . 2>/dev/null || true
-git -C device/google/coral checkout . 2>/dev/null || true
-git -C build/make checkout . 2>/dev/null || true
-git -C packages/services/Telephony checkout . 2>/dev/null || true
+git -C frameworks/base reset --hard HEAD 2>/dev/null || true
+git -C frameworks/base clean -fd 2>/dev/null || true
+
+git -C system/core reset --hard HEAD 2>/dev/null || true
+git -C system/core clean -fd 2>/dev/null || true
+
+git -C device/google/coral reset --hard HEAD 2>/dev/null || true
+git -C device/google/coral clean -fd 2>/dev/null || true
+
+git -C build/make reset --hard HEAD 2>/dev/null || true
+git -C build/make clean -fd 2>/dev/null || true
+
+git -C packages/services/Telephony reset --hard HEAD 2>/dev/null || true
+git -C packages/services/Telephony clean -fd 2>/dev/null || true
 
 # 6. Configure BoardConfig.mk
 if [ -f device/google/coral/BoardConfig.mk ]; then
@@ -202,6 +211,11 @@ eval "$LUNCH_COMMAND"
 
 echo ">> Cleaning install artifacts: make installclean..."
 make installclean || true
+
+echo ">> Cleaning stale kernel obj to prevent Ninja restat timestamp conflicts..."
+rm -rf out/target/product/*/obj/KERNEL_OBJ
+rm -rf out/target/product/*/obj/DTBO_OBJ
+rm -rf out/target/product/*/obj/PACKAGING/depmod*
 
 echo ">> Starting compilation: $BUILD_COMMAND"
 eval "$BUILD_COMMAND"
