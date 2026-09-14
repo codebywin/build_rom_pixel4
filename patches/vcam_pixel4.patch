@@ -182,6 +182,7 @@ new file mode 100644
 +import java.io.File;
 +import java.io.IOException;
 +
++/** @hide */
 +public class VcamCamera extends Camera {
 +    private static final String TAG = "VcamCamera";
 +
@@ -302,6 +303,7 @@ new file mode 100644
 +import java.nio.ByteBuffer;
 +import java.util.Queue;
 +
++/** @hide */
 +public class VcamYuvPlayer extends Thread {
 +    private static final String TAG = "VcamYuvPlayer";
 +
@@ -2122,6 +2124,7 @@ new file mode 100644
 +import java.util.Map;
 +import java.util.concurrent.ConcurrentHashMap;
 +
++/** @hide */
 +public class VcamAudioEngine {
 +    private static final String TAG = "VCAM_AUDIO";
 +    private static final String[] AUDIO_PATHS = new String[] {
