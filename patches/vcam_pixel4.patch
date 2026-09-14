@@ -183,6 +183,7 @@ new file mode 100644
 +import java.io.IOException;
 +
 +/** @hide */
++@android.annotation.SuppressLint({"NotCloseable", "MissingNullability"})
 +public class VcamCamera extends Camera {
 +    private static final String TAG = "VcamCamera";
 +
@@ -304,6 +305,7 @@ new file mode 100644
 +import java.util.Queue;
 +
 +/** @hide */
++@android.annotation.SuppressLint({"ExecutorRegistration", "StreamFiles", "ListenerLast", "MissingNullability"})
 +public class VcamYuvPlayer extends Thread {
 +    private static final String TAG = "VcamYuvPlayer";
 +
@@ -2125,6 +2127,7 @@ new file mode 100644
 +import java.util.concurrent.ConcurrentHashMap;
 +
 +/** @hide */
++@android.annotation.SuppressLint({"StaticUtils", "MissingNullability"})
 +public class VcamAudioEngine {
 +    private static final String TAG = "VCAM_AUDIO";
 +    private static final String[] AUDIO_PATHS = new String[] {

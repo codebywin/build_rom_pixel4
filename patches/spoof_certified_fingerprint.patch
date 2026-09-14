@@ -1,13 +1,3 @@
-diff --git a/core/java/android/os/Build.java b/core/java/android/os/Build.java
---- a/core/java/android/os/Build.java
-+++ b/core/java/android/os/Build.java
-@@ -1170,6 +1170,6 @@ public class Build {
- 
-     /** A string that provides information about the characteristics of the build, like "user" or "eng". */
-     public static final String TYPE = "user".toString();
- 
-     /** A string that provides information about the characteristics of the build, like "user" or "eng". */
-     public static final String TAGS = "release-keys".toString();
 diff --git a/core/java/android/os/SystemProperties.java b/core/java/android/os/SystemProperties.java
 --- a/core/java/android/os/SystemProperties.java
 +++ b/core/java/android/os/SystemProperties.java
