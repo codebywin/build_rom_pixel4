@@ -8,7 +8,8 @@ echo "=========================================================="
 
 LUNCH_COMMAND="${1:-lunch lineage_flame-userdebug}"
 BUILD_COMMAND="${2:-mka bacon}"
-LOCAL_MANIFEST_URL="${3:-https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/manifests/flame_los20.xml}"
+REPO_REF="${8:-main}"
+LOCAL_MANIFEST_URL="${3:-https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/manifests/flame_los20.xml}"
 LOCAL_MANIFEST_BRANCH="${4:-lineage-20}"
 BUILD_USERNAME="${5:-codebywin}"
 REMOVALS="${6:-}"
@@ -16,6 +17,7 @@ BUILD_DIFFERENT_ROM="${7:-echo 'Build Starting!'}"
 
 echo ">> Configuration:"
 echo "   User:                  $BUILD_USERNAME"
+echo "   Repository ref:        $REPO_REF"
 echo "   Lunch:                 $LUNCH_COMMAND"
 echo "   Build Command:         $BUILD_COMMAND"
 echo "   Local Manifest URL:    $LOCAL_MANIFEST_URL"
@@ -98,7 +100,7 @@ fi
 apply_patch() {
     local target_dir="$1"
     local patch_name="$2"
-    local patch_url="https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/${patch_name}"
+    local patch_url="https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/${patch_name}"
     local tmp_patch="/tmp/${patch_name}"
 
     echo ">> Fetching patch: ${patch_name} -> ${target_dir}"
@@ -144,8 +146,8 @@ find build/make -name "Makefile" -exec sed -i 's/BUILD_KEYS := test-keys/BUILD_K
 # 10. Install CameraAssistant system app
 echo ">> Setting up CameraAssistant app..."
 mkdir -p packages/apps/CameraAssistant
-curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/org.lineageos.camera.assistant/CameraAssistant.apk > packages/apps/CameraAssistant/CameraAssistant.apk
-curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/CameraAssistant_Android.bp > packages/apps/CameraAssistant/Android.bp
+curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/org.lineageos.camera.assistant/CameraAssistant.apk > packages/apps/CameraAssistant/CameraAssistant.apk
+curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/CameraAssistant_Android.bp > packages/apps/CameraAssistant/Android.bp
 if [ -f device/google/coral/device.mk ]; then
     echo "PRODUCT_PACKAGES += CameraAssistant" >> device/google/coral/device.mk
 fi
@@ -158,7 +160,7 @@ fi
 
 # 11. Fix telephony permissions
 echo ">> Fixing telephony permissions..."
-(curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/patches/fix_telephony.py | python3) 2>/dev/null || true
+(curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/fix_telephony.py | python3) 2>/dev/null || true
 
 # 12. Setup VCAM runtime control nodes in init.coral.rc
 echo ">> Setting up VCAM control nodes in init.coral.rc..."

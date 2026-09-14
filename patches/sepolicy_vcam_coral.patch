@@ -23,7 +23,6 @@ index 0000000..c20ae0e
 +
 +# Allow media framework services to access VCAM files
 +allow mediaserver vcam_data_file:file { read open getattr map };
-+allow mediacodec vcam_data_file:file { read open getattr map };
 +allow mediaextractor vcam_data_file:file { read open getattr map };
 +allow audioserver vcam_data_file:file { read open getattr map };
 +allow hal_camera_default vcam_data_file:file { read open getattr map };

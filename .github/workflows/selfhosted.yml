@@ -517,7 +517,7 @@ jobs:
 
 
         crave ${{ secrets.CRAVE_FLAGS }} run --no-patch ${PAID} ${CLEAN} -- \
-          "curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/scripts/build_crave.sh -o /tmp/build_crave.sh && bash /tmp/build_crave.sh \"$LUNCH\" \"${{ github.event.inputs.BUILD_COMMAND }}\" \"${{ github.event.inputs.LOCAL_MANIFEST }}\" \"${{ github.event.inputs.LOCAL_MANIFEST_BRANCH }}\" \"${{ github.actor }}\" \"${{ github.event.inputs.REMOVALS }}\""
+          "curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${{ github.sha }}/scripts/build_crave.sh -o /tmp/build_crave.sh && bash /tmp/build_crave.sh \"$LUNCH\" \"${{ github.event.inputs.BUILD_COMMAND }}\" \"${{ github.event.inputs.LOCAL_MANIFEST }}\" \"${{ github.event.inputs.LOCAL_MANIFEST_BRANCH }}\" \"${{ github.actor }}\" \"${{ github.event.inputs.REMOVALS }}\" \"$BUILD_DIFFERENT_ROM\" \"${{ github.sha }}\""
       timeout-minutes: 1440
 
       # Send Build 'status' notification (Success)
