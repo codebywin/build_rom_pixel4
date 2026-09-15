@@ -169,7 +169,7 @@ diff --git a/core/java/android/hardware/VcamCamera.java b/core/java/android/hard
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/VcamCamera.java
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,115 @@
 +package android.hardware;
 +
 +import android.graphics.SurfaceTexture;
@@ -183,7 +183,8 @@ new file mode 100644
 +import java.io.IOException;
 +
 +/** @hide */
-+class VcamCamera extends Camera {
++@android.annotation.SuppressLint("all")
++public class VcamCamera extends Camera {
 +    private static final String TAG = "VcamCamera";
 +
 +    private final int mCameraId;
@@ -290,7 +291,7 @@ diff --git a/core/java/android/hardware/VcamYuvPlayer.java b/core/java/android/h
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/VcamYuvPlayer.java
-@@ -0,0 +1,185 @@
+@@ -0,0 +1,186 @@
 +package android.hardware;
 +
 +import android.graphics.Rect;
@@ -304,7 +305,8 @@ new file mode 100644
 +import java.util.Queue;
 +
 +/** @hide */
-+class VcamYuvPlayer extends Thread {
++@android.annotation.SuppressLint("all")
++public class VcamYuvPlayer extends Thread {
 +    private static final String TAG = "VcamYuvPlayer";
 +
 +    private final File file;
@@ -2112,7 +2114,7 @@ diff --git a/media/java/android/media/VcamAudioEngine.java b/media/java/android/
 new file mode 100644
 --- /dev/null
 +++ b/media/java/android/media/VcamAudioEngine.java
-@@ -0,0 +1,556 @@
+@@ -0,0 +1,557 @@
 +package android.media;
 +
 +import android.util.Log;
@@ -2125,7 +2127,8 @@ new file mode 100644
 +import java.util.concurrent.ConcurrentHashMap;
 +
 +/** @hide */
-+class VcamAudioEngine {
++@android.annotation.SuppressLint("all")
++public class VcamAudioEngine {
 +    private static final String TAG = "VCAM_AUDIO";
 +    private static final String[] AUDIO_PATHS = new String[] {
 +        "/data/local/tmp/vcam.wav",
