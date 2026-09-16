@@ -6,7 +6,7 @@ echo " Starting Pixel 4 Build Script on Crave Devspace"
 echo " Date: $(date)"
 echo "=========================================================="
 
-LUNCH_COMMAND="${1:-lunch lineage_flame-user}"
+LUNCH_COMMAND="${1:-lunch lineage_flame-userdebug}"
 BUILD_COMMAND="${2:-mka bacon}"
 REPO_REF="${8:-main}"
 LOCAL_MANIFEST_URL="${3:-https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/manifests/flame_los20.xml}"
