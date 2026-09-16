@@ -105,8 +105,9 @@ jobs:
         CRAVE_TOKEN: ${{  secrets.CRAVE_TOKEN  }}
 
     - name: Run crave devspace
+      continue-on-error: true
       run: |
-        crave ${{ secrets.CRAVE_FLAGS }} devspace -- "echo "Looking for runner..."
+        crave ${{ secrets.CRAVE_FLAGS }} devspace -- "echo 'Looking for runner...'
           # Look for whether there's a runner folder set up
           if [ -f actions-runner/run.sh ] ; then
             echo "Runner found! Restarting it..."
@@ -417,16 +418,28 @@ jobs:
         else
           echo "We are already running in devspace... Skipping Symlinks"
         fi
-        if grep -q "$PROJECTFOLDER" <(crave clone list --json | jq -r '.clones[]."Cloned At"') || [[ "${DCDEVSPACE}" == "1" ]]; then
-          crave clone destroy -y $PROJECTFOLDER || echo "Error removing $PROJECTFOLDER"
-        else          
-        echo "Skipping removal"
-        fi
-
-        if [[ $DCDEVSPACE == *1* ]]; then
-          crave clone create --projectID $PROJECTID $PROJECTFOLDER || echo "Crave clone create failed!"
+        if [ "${{ github.event.inputs.CLEAN_BUILD }}" == "yes" ]; then
+          echo "Clean build requested: removing existing clone..."
+          if grep -q "$PROJECTFOLDER" <(crave clone list --json 2>/dev/null | jq -r '.clones[]."Cloned At" 2>/dev/null') || [ -d "$PROJECTFOLDER" ]; then
+            crave clone destroy -y $PROJECTFOLDER || echo "Error removing $PROJECTFOLDER"
+          fi
+          if [[ $DCDEVSPACE == *1* ]]; then
+            crave clone create --projectID $PROJECTID $PROJECTFOLDER || echo "Crave clone create failed!"
+          else
+            mkdir -p $PROJECTFOLDER
+          fi
         else
-          mkdir -p $PROJECTFOLDER
+          echo "Non-clean build: checking if clone/folder exists..."
+          if grep -q "$PROJECTFOLDER" <(crave clone list --json 2>/dev/null | jq -r '.clones[]."Cloned At" 2>/dev/null') || [ -d "$PROJECTFOLDER" ]; then
+            echo "Clone $PROJECTFOLDER already exists, reusing existing clone!"
+          else
+            echo "Clone $PROJECTFOLDER not found, creating clone..."
+            if [[ $DCDEVSPACE == *1* ]]; then
+              crave clone create --projectID $PROJECTID $PROJECTFOLDER || echo "Crave clone create failed!"
+            else
+              mkdir -p $PROJECTFOLDER
+            fi
+          fi
         fi
         
       # Check-out in order to access the repository's files.
@@ -603,11 +616,11 @@ jobs:
         crave ssh -- "export TG_UPLOAD_LIMIT="${{ secrets.TG_UPLOAD_LIMIT }}"; bash /opt/crave/telegram/upload.sh '${{ github.event.inputs.DEVICE_NAME }}' '${{ secrets.EXTRA_FILES }}'"
       continue-on-error: true
 
-      # Remove 'crave' clone
+      # Remove 'crave' clone only if clean build was requested
     - name: Destroy Crave Clone
-      if: ${{ always() }}
+      if: ${{ always() && github.event.inputs.CLEAN_BUILD == 'yes' }}
       run: |
-        if grep -q "$PROJECTFOLDER" <(crave clone list --json | jq -r '.clones[]."Cloned At"') || [[ "${DCDEVSPACE}" == "1" ]]; then
+        if grep -q "$PROJECTFOLDER" <(crave clone list --json 2>/dev/null | jq -r '.clones[]."Cloned At" 2>/dev/null') || [ -d "$PROJECTFOLDER" ]; then
           crave clone destroy -y $PROJECTFOLDER || echo "Error removing $PROJECTFOLDER"
         else          
           echo "Skipping removal"
