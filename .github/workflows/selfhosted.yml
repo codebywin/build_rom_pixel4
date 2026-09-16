@@ -467,18 +467,7 @@ jobs:
         mkdir -p $PROJECTFOLDER/.repo/manifests
         
         # Always update crave.conf with fresh credentials from Secrets
-        cat << 'EOF' > ${HOME}/crave.conf
-{
-  "username": "${{ secrets.CRAVE_USERNAME }}",
-  "headers": {
-    "Content-Type": "application/json",
-    "Authorization": "${{ secrets.CRAVE_TOKEN }}",
-    "User-Agent": "Crave"
-  },
-  "projects": [],
-  "server": "https://foss.crave.io/api"
-}
-EOF
+        envsubst < ${PWD}/crave.conf.sample > ${HOME}/crave.conf
         cp ${HOME}/crave.conf $PROJECTFOLDER/crave.conf
         
         if [[ $DCDEVSPACE != *1* ]]; then
