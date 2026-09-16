@@ -465,15 +465,27 @@ jobs:
       run: |
         echo "DCDEVSPACE status: ${DCDEVSPACE}"
         mkdir -p $PROJECTFOLDER/.repo/manifests
-        if [[ $DCDEVSPACE == *1* ]]; then
-        echo 'No need to set up crave, we are already running in devspace!'
-        else
+        
+        # Always update crave.conf with fresh credentials from Secrets
+        cat << 'EOF' > ${HOME}/crave.conf
+{
+  "username": "${{ secrets.CRAVE_USERNAME }}",
+  "headers": {
+    "Content-Type": "application/json",
+    "Authorization": "${{ secrets.CRAVE_TOKEN }}",
+    "User-Agent": "Crave"
+  },
+  "projects": [],
+  "server": "https://foss.crave.io/api"
+}
+EOF
+        cp ${HOME}/crave.conf $PROJECTFOLDER/crave.conf
+        
+        if [[ $DCDEVSPACE != *1* ]]; then
           curl -s https://raw.githubusercontent.com/accupara/crave/master/get_crave.sh | bash -s --
+          mkdir -p ${HOME}/bin/
           mv ${PWD}/crave ${HOME}/bin/
           sudo ln -sf /home/${USER}/bin/crave /usr/bin/crave
-          envsubst < ${PWD}/crave.conf.sample >> ${PWD}/crave.conf
-          rm -rf ${PWD}/crave.conf.sample       
-          cp crave.conf $PROJECTFOLDER 
         fi
         if [[ -z "${{ secrets.CUSTOM_YAML }}" ]]; then
           cp configs/crave/crave.yaml.aosp $PROJECTFOLDER/.repo/manifests/crave.yaml
