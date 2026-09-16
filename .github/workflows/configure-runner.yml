@@ -47,16 +47,26 @@ jobs:
       # Configure 'runner'
     - name: Run crave devspace
       run: |
-        crave ${{ secrets.CRAVE_FLAGS }} devspace -- "rm -rf actions-runner || true
-        curl https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/scripts/runner-setup.sh | bash
-        if [[ "${{ inputs.RUNNER_TOKEN }}" == "github_pat_*" ]]; then
+        if [[ -n "${{ secrets.PAID }}" ]]; then
+          echo "Using paid Crave platform for runner setup."
+          export PAID="--platform aosp-silver"
+        fi
+
+        remote_command=$(cat <<'EOF'
+        rm -rf actions-runner || true
+        curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/scripts/runner-setup.sh | bash
+        if [[ "${{ inputs.RUNNER_TOKEN }}" == github_pat_* ]]; then
           echo "PAT does not work!"
         else
-            echo "Runner token found"
+          echo "Runner token found"
         fi
         cd actions-runner
         ./config.sh --unattended --url "https://github.com/${{ github.repository }}" --token "${{ inputs.RUNNER_TOKEN }}"
         tmux kill-session -t ghactions || true
         tmux new-session -d -s ghactions
         tmux send-keys -t ghactions './actions-runner/run.sh' Enter
-        echo "Runner Configured and Started!""
+        echo "Runner Configured and Started!"
+        EOF
+        )
+
+        crave ${{ secrets.CRAVE_FLAGS }} devspace ${PAID} -- "$remote_command"
