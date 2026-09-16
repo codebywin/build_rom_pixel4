@@ -491,7 +491,7 @@ jobs:
     - name: Set the 'crave' project
       run: |
         cd $PROJECTFOLDER
-        if grep -q "$PROJECTFOLDER" <(crave clone list --json | jq -r '.clones[]."Cloned At"') || [[ "${DCDEVSPACE}" == "1" ]]; then
+        if [ -d "$PROJECTFOLDER/.repo/manifests" ]; then
           echo "Using Crave Clone... skipping"
         else
           echo "Running $REPO_INIT"
