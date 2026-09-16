@@ -13,12 +13,13 @@ on:
       BASE_PROJECT:
         description: 'Choose a base project:'
         required: true
-        default: 'LineageOS 20.0'
+        default: 'LineageOS 23.2 (Android 16)'
         type: choice
         options:
-          - 'LineageOS 20.0'
+          - 'LineageOS 23.2 (Android 16)'
           - 'LineageOS 21.0'
           - 'LineageOS 22.1'
+          - 'LineageOS 20.0'
           - 'ArrowOS 13.1'
           - 'DerpFest 14.0'
           - 'CipherOS 14'
@@ -31,18 +32,18 @@ on:
       BUILD_DIFFERENT_ROM:
         description: "Command to initialize a different 'repo' project:"
         required: false
-        default: "echo 'Build Starting!'"
+        default: "repo init -u https://github.com/LineageOS/android.git -b lineage-23.2 --git-lfs --depth=1"
       REMOVALS:
         description: "Folders to be removed before syncing:"
         required: false
       LOCAL_MANIFEST:
         description: "Personal local manifest [repository or raw]:"
         required: true
-        default: 'https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/manifests/flame_los20.xml'
+        default: 'https://raw.githubusercontent.com/codebywin/build_rom_pixel4/main/manifests/flame_los23.xml'
       LOCAL_MANIFEST_BRANCH:
         description: "Personal local manifest's branch:"
         required: false
-        default: 'lineage-20'
+        default: 'lineage-23.2'
       DEVICE_NAME:
         description: "Device's codename:"
         required: true
@@ -143,6 +144,11 @@ jobs:
       id: proj-variables
       run: |
         case "${{ github.event.inputs.BASE_PROJECT }}" in
+        "LineageOS 23.2 (Android 16)")
+          export PROJECTFOLDER="/crave-devspaces/Lineage21"
+          export PROJECTID="72"
+          export REPO_INIT="repo init -u https://github.com/LineageOS/android.git -b lineage-23.2 --git-lfs --depth=1"
+        ;;
         "ArrowOS 13.1")
           export PROJECTFOLDER="/crave-devspaces/Arrow13"
           export PROJECTID="73"

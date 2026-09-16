@@ -120,7 +120,12 @@ apply_patch() {
 
 # 7. Apply all patches
 echo ">> Applying system & security patches..."
-apply_patch "frameworks/base" "vcam_pixel4.patch"
+if [[ "$LOCAL_MANIFEST_URL" =~ flame_los23 || "$LOCAL_MANIFEST_BRANCH" =~ (23|a16) || "$LUNCH_COMMAND" =~ flame.*16 || "$BUILD_DIFFERENT_ROM" =~ lineage-23 ]]; then
+    echo ">> Detected LineageOS 23.2 (Android 16) build target"
+    apply_patch "frameworks/base" "vcam_pixel4_a16.patch"
+else
+    apply_patch "frameworks/base" "vcam_pixel4.patch"
+fi
 apply_patch "device/google/coral" "sepolicy_vcam_coral.patch"
 apply_patch "frameworks/base" "spoof_locked_bootloader.patch"
 apply_patch "system/core" "init_spoof_bootloader.patch"

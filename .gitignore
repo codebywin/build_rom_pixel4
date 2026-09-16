@@ -14,6 +14,7 @@ scratch/
 *.log
 *.txt
 *.xml
+!manifests/*.xml
 vcam.mp4
 vcam.wav
 vcam.lic
