@@ -169,7 +169,7 @@ diff --git a/core/java/android/hardware/VcamCamera.java b/core/java/android/hard
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/VcamCamera.java
-@@ -0,0 +1,115 @@
+@@ -0,0 +1,117 @@
 +package android.hardware;
 +
 +import android.graphics.SurfaceTexture;
@@ -291,7 +291,7 @@ diff --git a/core/java/android/hardware/VcamYuvPlayer.java b/core/java/android/h
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/VcamYuvPlayer.java
-@@ -0,0 +1,186 @@
+@@ -0,0 +1,188 @@
 +package android.hardware;
 +
 +import android.graphics.Rect;
@@ -2114,7 +2114,7 @@ diff --git a/media/java/android/media/VcamAudioEngine.java b/media/java/android/
 new file mode 100644
 --- /dev/null
 +++ b/media/java/android/media/VcamAudioEngine.java
-@@ -0,0 +1,557 @@
+@@ -0,0 +1,559 @@
 +package android.media;
 +
 +import android.util.Log;

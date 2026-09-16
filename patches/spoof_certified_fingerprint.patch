@@ -1,7 +1,7 @@
 diff --git a/core/java/android/os/SystemProperties.java b/core/java/android/os/SystemProperties.java
 --- a/core/java/android/os/SystemProperties.java
 +++ b/core/java/android/os/SystemProperties.java
-@@ -230,10 +230,28 @@ public class SystemProperties {
+@@ -230,9 +230,27 @@ public class SystemProperties {
      private static String spoofProperty(String key) {
          if ("ro.boot.flash.locked".equals(key)) return "1";
          if ("ro.boot.verifiedbootstate".equals(key)) return "green";
