@@ -5,7 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
-name: Crave Builder(self-hosted)
+name: Crave Builder
 on:
   workflow_dispatch:
     # Various inputs to simplify usage of workflow.
@@ -75,56 +75,6 @@ on:
         - 'no'
 
 jobs:
-  Start-Runner:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up environment
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y tmux
-
-      # Download and configure 'crave'.
-    - name: Configure the 'crave' environment
-      run: |
-        echo "DCDEVSPACE status: ${DCDEVSPACE}"
-        if [[ $DCDEVSPACE == *1* ]]; then
-        echo 'No need to set up crave, we are already running in devspace!'
-        else
-          mkdir ${HOME}/bin/
-          curl -s https://raw.githubusercontent.com/accupara/crave/master/get_crave.sh | bash -s --
-          mv ${PWD}/crave ${HOME}/bin/
-          sudo ln -sf /home/${USER}/bin/crave /usr/bin/crave
-          envsubst < ${PWD}/crave.conf.sample >> ${PWD}/crave.conf
-          rm -rf ${PWD}/crave.conf.sample          
-        fi
-      env:
-        CRAVE_USERNAME: ${{  secrets.CRAVE_USERNAME  }}
-        CRAVE_TOKEN: ${{  secrets.CRAVE_TOKEN  }}
-
-    - name: Run crave devspace
-      continue-on-error: true
-      run: |
-        crave ${{ secrets.CRAVE_FLAGS }} devspace -- "echo 'Looking for runner...'
-          # Look for whether there's a runner folder set up
-          if [ -f actions-runner/run.sh ] ; then
-            echo "Runner found! Restarting it..."
-          else
-            echo "Error! Runner not found!"
-            exit 1
-          fi
-
-        if tmux has-session -t ghactions; then 
-          echo "Runner is already Running" 
-        else 
-          tmux kill-session -t ghactions;
-          tmux new-session -d -s ghactions 
-          tmux send-keys -t ghactions './actions-runner/run.sh' Enter 
-          echo "Runner Started"
-        fi "
   prepare:
     name: Prepare for Building
     runs-on: ubuntu-latest
@@ -337,10 +287,10 @@ jobs:
       LOCAL_MANIFEST: "${{ needs.prepare.outputs.LOCAL_MANIFEST }}"
 
   build:
-    timeout-minutes: 1440
+    timeout-minutes: 360
     name: Build using foss.crave.io
     needs: test
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.repository_owner }}
     steps:
@@ -358,6 +308,68 @@ jobs:
         echo "REPO_INIT=$REPO_INIT" >> "$GITHUB_ENV"
         echo "LUNCH=$LUNCH" >> "$GITHUB_ENV"
         echo "LOCAL_MANIFEST=$LOCAL_MANIFEST" >> "$GITHUB_ENV"
+
+      # Check-out in order to access the repository's files.
+    - name: Check-out to repository
+      uses: actions/checkout@v4
+
+      # Download, install and configure 'crave' CLI and environment.
+    - name: Configure the 'crave' environment
+      run: |
+        # 1. Install Crave CLI
+        curl -s https://raw.githubusercontent.com/accupara/crave/master/get_crave.sh | bash -s --
+        mkdir -p ${HOME}/bin/
+        mv ${PWD}/crave ${HOME}/bin/
+        sudo ln -sf /home/${USER}/bin/crave /usr/bin/crave
+        sudo chmod +x /usr/bin/crave
+
+        # 2. Setup Crave credentials from secrets
+        envsubst < ${PWD}/crave.conf.sample > ${HOME}/crave.conf
+        chmod 600 ${HOME}/crave.conf
+
+        # 3. Setup devspace symlink
+        mkdir -p devspace
+        sudo mkdir -p /crave-devspaces
+        sudo ln -sf ${PWD}/devspace /crave-devspaces
+        sudo chmod 777 /crave-devspaces
+
+        # 4. Prepare project folder and manifests
+        mkdir -p $PROJECTFOLDER/.repo/manifests
+        cp ${HOME}/crave.conf $PROJECTFOLDER/crave.conf
+        if [[ -z "${{ secrets.CUSTOM_YAML }}" ]]; then
+          cp configs/crave/crave.yaml.aosp $PROJECTFOLDER/.repo/manifests/crave.yaml
+          echo "No Custom Configuration Found, Using Template!"
+        else
+          echo "${{ secrets.CUSTOM_YAML }}" > $PROJECTFOLDER/.repo/manifests/crave.yaml
+          echo "Custom Configuration Found!"
+        fi
+
+        # 5. Manage Crave clone on server
+        cd $PROJECTFOLDER
+        if [ "${{ github.event.inputs.CLEAN_BUILD }}" == "yes" ]; then
+          echo "Clean build requested: removing existing clone..."
+          if grep -q "$PROJECTFOLDER" <(crave clone list --json 2>/dev/null | jq -r '.clones[]."Cloned At" 2>/dev/null') || [ -d "$PROJECTFOLDER" ]; then
+            crave clone destroy -y $PROJECTFOLDER || echo "Error removing $PROJECTFOLDER"
+          fi
+          crave clone create --projectID $PROJECTID $PROJECTFOLDER || echo "Crave clone create failed!"
+        else
+          echo "Non-clean build: checking if clone/folder exists..."
+          if grep -q "$PROJECTFOLDER" <(crave clone list --json 2>/dev/null | jq -r '.clones[]."Cloned At" 2>/dev/null'); then
+            echo "Clone $PROJECTFOLDER already exists, reusing existing clone!"
+          else
+            echo "Clone $PROJECTFOLDER not found, creating clone..."
+            crave clone create --projectID $PROJECTID $PROJECTFOLDER || echo "Crave clone create failed!"
+          fi
+        fi
+      env:
+        CRAVE_USERNAME: ${{  secrets.CRAVE_USERNAME  }}
+        CRAVE_TOKEN: ${{  secrets.CRAVE_TOKEN  }}
+
+      # Generate 'git' credential
+    - name: Set-up 'git' credential(s)
+      run: |
+        git config --global user.name "${{ github.actor }}"
+        git config --global user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
 
       # Send Build 'start' notification
     - name: Telegram Notification
@@ -379,122 +391,7 @@ jobs:
         jobStatus: "Build Started"
         skipSuccess: false
 
-    - name: Cleanup
-      run: rm -rf * # This cleans github actions workspace
-
-    - name: Check for a broken .bashrc
-      continue-on-error: true
-      run: |
-        (
-          set +e
-          output=$(source ~/.bashrc 2>&1)
-          status=$?
-          echo "$output"
-          if [[ $status -ne 0 ]]; then
-            echo "You have a broken .bashrc, please contact a Crave.io Administrator"
-            exit 1
-          else
-            echo ".bashrc looks okay, no explicit errors"
-          fi
-
-          # Double check to be sure
-          if echo "$output" | grep -q "cannot execute"; then
-            echo "You have a broken .bashrc, please contact a Crave.io Administrator"
-            exit 1
-          fi
-        )
-
-        # Create a project folder
-    - name: Create Project Folders
-      run: |
-        echo "DCDEVSPACE status: ${DCDEVSPACE}"
-        if [[ $DCDEVSPACE != *1* ]]; then
-
-          #curl -s https://raw.githubusercontent.com/accupara/crave/master/get_crave.sh | bash -s -- 
-
-          #mkdir -p ${HOME}/bin/
-          #mv ${PWD}/crave ${HOME}/bin/ 
-          #sudo ln -sf /home/${USER}/bin/crave /usr/bin/crave; sudo chmod +x /usr/bin/crave 
-
-          echo "Symlinking devspace folder"
-          mkdir -p devspace
-          sudo mkdir -p /crave-devspaces
-          sudo ln -sf ${pwd}/devspace /crave-devspaces
-          sudo chmod 777 /crave-devspaces
-        else
-          echo "We are already running in devspace... Skipping Symlinks"
-        fi
-        if [ "${{ github.event.inputs.CLEAN_BUILD }}" == "yes" ]; then
-          echo "Clean build requested: removing existing clone..."
-          if grep -q "$PROJECTFOLDER" <(crave clone list --json 2>/dev/null | jq -r '.clones[]."Cloned At" 2>/dev/null') || [ -d "$PROJECTFOLDER" ]; then
-            crave clone destroy -y $PROJECTFOLDER || echo "Error removing $PROJECTFOLDER"
-          fi
-          if [[ $DCDEVSPACE == *1* ]]; then
-            crave clone create --projectID $PROJECTID $PROJECTFOLDER || echo "Crave clone create failed!"
-          else
-            mkdir -p $PROJECTFOLDER
-          fi
-        else
-          echo "Non-clean build: checking if clone/folder exists..."
-          if grep -q "$PROJECTFOLDER" <(crave clone list --json 2>/dev/null | jq -r '.clones[]."Cloned At" 2>/dev/null') || [ -d "$PROJECTFOLDER" ]; then
-            echo "Clone $PROJECTFOLDER already exists, reusing existing clone!"
-          else
-            echo "Clone $PROJECTFOLDER not found, creating clone..."
-            if [[ $DCDEVSPACE == *1* ]]; then
-              crave clone create --projectID $PROJECTID $PROJECTFOLDER || echo "Crave clone create failed!"
-            else
-              mkdir -p $PROJECTFOLDER
-            fi
-          fi
-        fi
-        
-      # Check-out in order to access the repository's files.
-    - name: Check-out to repository
-      uses: actions/checkout@v4
-
-      # Set-up a spearate directory for the device.
-    - name: Set-up workspace environment
-      run: |
-        cd $PROJECTFOLDER
-        mkdir ${{ github.event.inputs.DEVICE_NAME }}
-        cd ${{ github.event.inputs.DEVICE_NAME }}
-      continue-on-error: true
-      
-      # Generate 'git' credential in base of the workflow's author.
-    - name: Set-up 'git' credential(s)
-      run: |
-        git config --global user.name "${{ github.actor }}"
-        git config --global user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
-      
-      # Download and configure 'crave'.
-    - name: Configure the 'crave' environment
-      run: |
-        echo "DCDEVSPACE status: ${DCDEVSPACE}"
-        mkdir -p $PROJECTFOLDER/.repo/manifests
-        
-        # Always update crave.conf with fresh credentials from Secrets
-        envsubst < ${PWD}/crave.conf.sample > ${HOME}/crave.conf
-        cp ${HOME}/crave.conf $PROJECTFOLDER/crave.conf
-        
-        if [[ $DCDEVSPACE != *1* ]]; then
-          curl -s https://raw.githubusercontent.com/accupara/crave/master/get_crave.sh | bash -s --
-          mkdir -p ${HOME}/bin/
-          mv ${PWD}/crave ${HOME}/bin/
-          sudo ln -sf /home/${USER}/bin/crave /usr/bin/crave
-        fi
-        if [[ -z "${{ secrets.CUSTOM_YAML }}" ]]; then
-          cp configs/crave/crave.yaml.aosp $PROJECTFOLDER/.repo/manifests/crave.yaml
-          echo "No Custom Configuration Found, Using Template!"
-        else
-          touch $PROJECTFOLDER/.repo/manifests/crave.yaml || true
-          echo "${{ secrets.CUSTOM_YAML }}" > $PROJECTFOLDER/.repo/manifests/crave.yaml
-          echo "Custom Configuration Found!"
-        fi
-      env:
-        CRAVE_USERNAME: ${{  secrets.CRAVE_USERNAME  }}
-        CRAVE_TOKEN: ${{  secrets.CRAVE_TOKEN  }}
-
-      # Initialize the previously choosen 'repo' project.
+      # Initialize the previously chosen 'repo' project.
     - name: Set the 'crave' project
       run: |
         cd $PROJECTFOLDER
@@ -538,7 +435,7 @@ jobs:
 
         crave ${{ secrets.CRAVE_FLAGS }} run --no-patch ${PAID} ${CLEAN} -- \
           "curl -sL https://raw.githubusercontent.com/codebywin/build_lineageOS_pixel4_a16/${{ github.sha }}/scripts/build_crave.sh -o /tmp/build_crave.sh && bash /tmp/build_crave.sh \"$LUNCH\" \"${{ github.event.inputs.BUILD_COMMAND }}\" \"${{ github.event.inputs.LOCAL_MANIFEST }}\" \"${{ github.event.inputs.LOCAL_MANIFEST_BRANCH }}\" \"${{ github.actor }}\" \"${{ github.event.inputs.REMOVALS }}\" \"$BUILD_DIFFERENT_ROM\" \"${{ github.sha }}\""
-      timeout-minutes: 1440
+      timeout-minutes: 350
 
       # Send Build 'status' notification (Success)
     - name: Telegram Notification
