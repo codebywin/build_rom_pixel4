@@ -17,7 +17,7 @@ REPO_REF="${8:-main}"
 REPO_NAME="${9:-appbywin/lineageOS_pixel4_a16}"
 
 if [ -z "$LOCAL_MANIFEST_URL" ]; then
-    LOCAL_MANIFEST_URL="https://raw.githubusercontent.com/${REPO_NAME}/${REPO_REF}/manifests/build-manifest.xml"
+    LOCAL_MANIFEST_URL="https://raw.githubusercontent.com/${REPO_NAME}/${REPO_REF}/manifests/flame_los23.xml"
 fi
 
 echo ">> Configuration:"
