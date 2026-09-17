@@ -39,7 +39,7 @@ on:
       LOCAL_MANIFEST:
         description: "Personal local manifest [repository or raw]:"
         required: true
-        default: 'https://raw.githubusercontent.com/codebywin/build_lineageOS_pixel4_a16/main/manifests/flame_los23.xml'
+        default: 'https://raw.githubusercontent.com/appbywin/lineageOS_pixel4_a16/main/manifests/build-manifest.xml'
       LOCAL_MANIFEST_BRANCH:
         description: "Personal local manifest's branch:"
         required: false
@@ -452,7 +452,7 @@ jobs:
 
 
         crave ${{ secrets.CRAVE_FLAGS }} run --projectID ${PROJECTID} --no-patch ${PAID} ${CLEAN} -- \
-          "curl -sL https://raw.githubusercontent.com/codebywin/build_lineageOS_pixel4_a16/${{ github.sha }}/scripts/build_crave.sh -o /tmp/build_crave.sh && bash /tmp/build_crave.sh \"$LUNCH\" \"${{ github.event.inputs.BUILD_COMMAND }}\" \"${{ github.event.inputs.LOCAL_MANIFEST }}\" \"${{ github.event.inputs.LOCAL_MANIFEST_BRANCH }}\" \"${{ github.actor }}\" \"${{ github.event.inputs.REMOVALS }}\" \"$BUILD_DIFFERENT_ROM\" \"${{ github.sha }}\""
+          "curl -sL https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/scripts/build_crave.sh -o /tmp/build_crave.sh && bash /tmp/build_crave.sh \"$LUNCH\" \"${{ github.event.inputs.BUILD_COMMAND }}\" \"${{ github.event.inputs.LOCAL_MANIFEST }}\" \"${{ github.event.inputs.LOCAL_MANIFEST_BRANCH }}\" \"${{ github.actor }}\" \"${{ github.event.inputs.REMOVALS }}\" \"$BUILD_DIFFERENT_ROM\" \"${{ github.sha }}\" \"${{ github.repository }}\""
       timeout-minutes: 350
 
       # Send Build 'status' notification (Success)

@@ -8,20 +8,26 @@ echo "=========================================================="
 
 LUNCH_COMMAND="${1:-lunch lineage_flame-userdebug}"
 BUILD_COMMAND="${2:-mka bacon}"
-REPO_REF="${8:-main}"
-LOCAL_MANIFEST_URL="${3:-https://raw.githubusercontent.com/codebywin/build_lineageOS_pixel4_a16/${REPO_REF}/manifests/flame_los23.xml}"
+LOCAL_MANIFEST_URL="${3:-}"
 LOCAL_MANIFEST_BRANCH="${4:-lineage-23.2}"
-BUILD_USERNAME="${5:-codebywin}"
+BUILD_USERNAME="${5:-appbywin}"
 REMOVALS="${6:-}"
 BUILD_DIFFERENT_ROM="${7:-echo 'Build Starting!'}"
+REPO_REF="${8:-main}"
+REPO_NAME="${9:-appbywin/lineageOS_pixel4_a16}"
+
+if [ -z "$LOCAL_MANIFEST_URL" ]; then
+    LOCAL_MANIFEST_URL="https://raw.githubusercontent.com/${REPO_NAME}/${REPO_REF}/manifests/build-manifest.xml"
+fi
 
 echo ">> Configuration:"
 echo "   User:                  $BUILD_USERNAME"
+echo "   Repository:            $REPO_NAME"
 echo "   Repository ref:        $REPO_REF"
 echo "   Lunch:                 $LUNCH_COMMAND"
 echo "   Build Command:         $BUILD_COMMAND"
-echo "   Local Manifest URL:    $LOCAL_MANIFEST_URL"
-echo "   Local Manifest Branch: $LOCAL_MANIFEST_BRANCH"
+echo "   Manifest URL:          $LOCAL_MANIFEST_URL"
+echo "   Manifest Branch:       $LOCAL_MANIFEST_BRANCH"
 echo "   Removals:              $REMOVALS"
 
 # 1. Clean manifests and removals if specified
@@ -42,8 +48,23 @@ fi
 mkdir -p .repo/local_manifests
 if [[ "$LOCAL_MANIFEST_URL" =~ \.xml(/)?$ ]]; then
     url="${LOCAL_MANIFEST_URL%/}"
-    echo ">> Downloading local manifest from $url..."
-    curl -sL "$url" -o .repo/local_manifests/local_manifest.xml
+    echo ">> Downloading manifest from $url..."
+    tmp_manifest="/tmp/manifest_download.xml"
+    curl -sL "$url" -o "$tmp_manifest"
+
+    # Check if this is a full manifest (contains <default) or a local manifest
+    if grep -q "<default" "$tmp_manifest"; then
+        echo ">> Detected FULL manifest (contains <default). Replacing .repo/manifests/default.xml..."
+        mkdir -p .repo/manifests
+        cp "$tmp_manifest" .repo/manifests/default.xml
+        # Clear local_manifests to avoid duplicate project errors
+        rm -rf .repo/local_manifests/*
+        # Ensure .repo/manifest.xml links to manifests/default.xml
+        (cd .repo && ln -sf manifests/default.xml manifest.xml 2>/dev/null || true)
+    else
+        echo ">> Detected LOCAL manifest. Installing to .repo/local_manifests/local_manifest.xml..."
+        cp "$tmp_manifest" .repo/local_manifests/local_manifest.xml
+    fi
 elif [[ "$LOCAL_MANIFEST_URL" =~ ^http || "$LOCAL_MANIFEST_URL" =~ ^git@ ]]; then
     echo ">> Cloning local manifest from $LOCAL_MANIFEST_URL (branch: $LOCAL_MANIFEST_BRANCH)..."
     git clone "$LOCAL_MANIFEST_URL" --depth 1 -b "$LOCAL_MANIFEST_BRANCH" .repo/local_manifests
@@ -97,7 +118,7 @@ fi
 apply_patch() {
     local target_dir="$1"
     local patch_name="$2"
-    local patch_url="https://raw.githubusercontent.com/codebywin/build_lineageOS_pixel4_a16/${REPO_REF}/patches/${patch_name}"
+    local patch_url="https://raw.githubusercontent.com/${REPO_NAME}/${REPO_REF}/patches/${patch_name}"
     local tmp_patch="/tmp/${patch_name}"
 
     echo ">> Fetching patch: ${patch_name} -> ${target_dir}"
@@ -138,8 +159,8 @@ find build/make -name "Makefile" -exec sed -i 's/BUILD_KEYS := test-keys/BUILD_K
 # 9. Install CameraAssistant system app
 echo ">> Setting up CameraAssistant app..."
 mkdir -p packages/apps/CameraAssistant
-curl -sL https://raw.githubusercontent.com/codebywin/build_lineageOS_pixel4_a16/${REPO_REF}/org.lineageos.camera.assistant/CameraAssistant.apk > packages/apps/CameraAssistant/CameraAssistant.apk
-curl -sL https://raw.githubusercontent.com/codebywin/build_lineageOS_pixel4_a16/${REPO_REF}/patches/CameraAssistant_Android.bp > packages/apps/CameraAssistant/Android.bp
+curl -sL "https://raw.githubusercontent.com/${REPO_NAME}/${REPO_REF}/org.lineageos.camera.assistant/CameraAssistant.apk" > packages/apps/CameraAssistant/CameraAssistant.apk
+curl -sL "https://raw.githubusercontent.com/${REPO_NAME}/${REPO_REF}/patches/CameraAssistant_Android.bp" > packages/apps/CameraAssistant/Android.bp
 if [ -f device/google/coral/device.mk ]; then
     echo "PRODUCT_PACKAGES += CameraAssistant" >> device/google/coral/device.mk
 fi
@@ -218,4 +239,3 @@ echo "=========================================================="
 echo " Compilation Finished Successfully!"
 echo " Date: $(date)"
 echo "=========================================================="
-

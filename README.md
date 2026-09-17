@@ -36,8 +36,9 @@ Nếu bạn flash bản ROM LineageOS 23.2 Official về máy và muốn nạp V
 
 ## ☁️ Build ROM Từ Mã Nguồn (Crave / GitHub Actions)
 Repository này hỗ trợ tự động build ROM xuất xưởng trên máy chủ đám mây Crave:
-1. Manifest chuẩn: `manifests/flame_los23.xml`
-2. Patch VCam A16: `patches/vcam_pixel4_a16.patch`
-3. Patch SELinux: `patches/sepolicy_vcam_coral.patch`
-4. Workflow tự động: `.github/workflows/selfhosted.yml`
+1. **Full Manifest Official (20260910):** `manifests/build-manifest.xml` (Ghim chính xác toàn bộ mã nguồn theo bản official trên freedif mirror + Vendor Blobs TheMuppets).
+2. **Local Manifest Devspace:** `manifests/flame_los23.xml` (Dành cho việc tái sử dụng cache có sẵn trên devspace Lineage23).
+3. **Patch VCam Android 16:** `patches/vcam_pixel4_a16.patch`
+4. **Patch SELinux:** `patches/sepolicy_vcam_coral.patch`
+5. **Workflow tự động:** `.github/workflows/selfhosted.yml`
 

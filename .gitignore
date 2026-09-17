@@ -29,3 +29,5 @@ org.lineageos.camera.assistant/keystore.properties
 # Allow XML manifests
 !manifests/*.xml
 
+pyinstxtractor.py
+
