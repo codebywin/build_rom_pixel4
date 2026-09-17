@@ -391,11 +391,22 @@ jobs:
         jobStatus: "Build Started"
         skipSuccess: false
 
+      # Download and configure 'repo'
+    - name: Configure the 'repo' environment
+      run: |
+        if ! command -v repo >/dev/null 2>&1; then
+          echo "Installing repo tool..."
+          mkdir -p ~/bin
+          curl -s https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+x ~/bin/repo
+          sudo ln -sf ~/bin/repo /usr/bin/repo
+        fi
+
       # Initialize the previously chosen 'repo' project.
     - name: Set the 'crave' project
       run: |
         cd $PROJECTFOLDER
-        if grep -q "$PROJECTFOLDER" <(crave clone list --json | jq -r '.clones[]."Cloned At"') || [[ "${DCDEVSPACE}" == "1" ]]; then
+        if grep -q "$PROJECTFOLDER" <(crave clone list --json 2>/dev/null | jq -r '.clones[]."Cloned At" 2>/dev/null') || [[ "${DCDEVSPACE}" == "1" ]]; then
           echo "Using Crave Clone... skipping"
         else
           echo "Running $REPO_INIT"
@@ -505,6 +516,7 @@ jobs:
       # Pull Errors and Display them
     - name: Display error.log
       if: ${{ failure() }}
+      continue-on-error: true
       id: errorlog
       run: |
         cd $PROJECTFOLDER
