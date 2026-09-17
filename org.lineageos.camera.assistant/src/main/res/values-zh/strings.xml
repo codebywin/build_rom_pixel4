@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Camera Assistant</string>
+    <string name="header_title">Camera Assistant</string>
+    <string name="header_badge">Pixel 4 ROM</string>
+    <string name="btn_settings">⚙️ 设置</string>
+    <string name="dialog_settings_title">语言设置 / Language</string>
+    <string name="lang_vi">🇻🇳 Tiếng Việt (越南语)</string>
+    <string name="lang_en">🇬🇧 English (英语)</string>
+    <string name="lang_zh">🇨🇳 中文 (简体)</string>
+
+    <string name="license_title">🛡️ 软件授权管理</string>
+    <string name="license_active">🟢 已激活</string>
+    <string name="license_inactive">🔴 未激活</string>
+    <string name="device_serial_label">设备码: </string>
+    <string name="btn_copy">复制</string>
+    <string name="btn_reset_key">注销</string>
+    <string name="license_status_default">请输入激活码以激活虚拟相机</string>
+    <string name="edt_key_hint">输入激活码 (例如: XXXX-XXXX-XXXX)</string>
+    <string name="btn_activate_online">⚡ 在线激活</string>
+
+    <string name="vcam_master_switch">启用虚拟相机</string>
+    <string name="vcam_master_desc">自动拦截所有应用的相机画面</string>
+    <string name="btn_open_floating">✨ 打开悬浮窗</string>
+    <string name="floating_desc">* 悬浮窗支持在应用/直播中直接缩放、移动、暂停画面。</string>
+
+    <string name="video_title">🎬 视频源文件 (.mp4)</string>
+    <string name="btn_pick_video">从设备选择新视频</string>
+
+    <string name="audio_title">🎙️ 音频管理 (Audio Hook)</string>
+    <string name="btn_pick_audio">选择新音频 (.wav / .mp3)</string>
+    <string name="audio_mode_label">麦克风模式:</string>
+    <string name="audio_mode_virtual">仅虚拟音频 (100%纯音，静音外部麦克风)</string>
+    <string name="audio_mode_mix">音频混合 (播放虚拟音频 + 真实麦克风)</string>
+    <string name="audio_mode_real">仅真实麦克风 (关闭音频拦截)</string>
+
+    <string name="btn_apply">保存设置</string>
+
+    <string name="toast_vcam_on">🟢 已开启虚拟相机！\n(切换前后摄像头或重启应用以生效)</string>
+    <string name="toast_vcam_off">🔴 已关闭虚拟相机 (使用真实相机)！\n(切换前后摄像头或重启应用以生效)</string>
+    <string name="toast_saved">设置已保存！</string>
+    <string name="toast_copied">已复制设备码: </string>
+    <string name="toast_key_removed">已注销设备上的授权！</string>
+    <string name="toast_floating_opened">已打开悬浮窗！</string>
+    <string name="toast_overlay_perm">"请开启'显示在其他应用之上'权限！"</string>
+    <string name="toast_storage_perm">"请开启'所有文件访问'权限！"</string>
+    <string name="toast_enter_key">请输入激活码！</string>
+    <string name="toast_video_updated">已更新新视频！</string>
+    <string name="toast_audio_updated">已更新新音频！</string>
+    <string name="toast_lang_changed">已切换为中文语言！</string>
+</resources>

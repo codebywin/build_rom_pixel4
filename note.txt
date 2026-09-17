@@ -1,0 +1,54 @@
+😋⚠️ Lưu ý CỰC KỲ QUAN TRỌNG trước khi làm:
+Máy Android 16 của bạn hiện tại là bản Official, phân vùng /system được bảo vệ bằng cơ chế Read-Only / dm-verity / AVB (Android Verified Boot).
+Để ghi đè được framework.jar mà không bị brick hay bootloop:
+Cách 1 (An toàn nhất 100%): Làm thành một Magisk Module dạng systemless overlay (/data/adb/modules/vcam_system/system/framework/framework.jar). Nếu máy bị lỗi treo logo, chỉ cần vào Recovery xóa module là máy sống lại ngay.
+Cách 2 (Ghi đè trực tiếp): Yêu cầu disable-verity và remount rw. (Rủi ro cao nếu lỗi dex là phải flash lại ROM).
+
+VcamLicenseVerifier.java: Hàm isLicenseActive() kiểm tra file /data/local/tmp/vcam.lic hoặc /sdcard/vcam.lic. Nếu bạn muốn VCam LUÔN LUÔN BẬT (Active vĩnh viễn không cần file license), ta chỉ cần sửa đúng 1 dòng:
+
+java
+
+
+public static boolean isLicenseActive() {
+    return true;
+}
+Khi sửa thành return true;, VCam sẽ luôn luôn kích hoạt,
+
+Không được để return false; cứng bạn nhé! Vì nếu để return false; cứng thì sau khi build ROM xong, VCam sẽ vĩnh viễn bị tắt (kể cả khi bạn nạp file bản quyền vcam.lic thì máy cũng không kích hoạt được).
+
+Tùy theo mục đích bạn build bản ROM này, sẽ có 2 cách để như sau:
+
+👉 Cách 1: Nếu bạn build ROM để BÁN hoặc CẤP BẢN QUYỀN cho người khác (Khuyên dùng)
+Bạn hãy khôi phục lại hàm kiểm tra bản quyền gốc của bạn:
+
+java
+
+
+public static boolean isLicenseActive() {
+    long now = System.currentTimeMillis();
+    if (sCachedValid != null && (now - sLastCheckTime) < CACHE_DURATION_MS) {
+        return sCachedValid;
+    }
+    boolean valid = verifyLicenseInternal();
+    sCachedValid = valid;
+    sLastCheckTime = now;
+    return valid;
+}
+Cơ chế hoạt động:
+Người dùng mới flash ROM: Chưa có file vcam.lic (hoặc có file nhưng không đúng số Serial của máy) ➔ verifyLicenseInternal() sẽ trả về false (VCam tắt, camera thật hoạt động bình thường).
+Khi khách mua key: Bạn dùng Private Key của bạn ký ra file vcam.lic theo đúng số Serial của máy họ, copy vào máy ➔ verifyLicenseInternal() trả về true (VCam bật).
+👉 Cách 2: Nếu bạn build ROM này cho CHÍNH BẠN dùng (Không cần khóa bản quyền)
+Bạn giữ nguyên như lúc nãy ta test:
+
+java
+
+
+public static boolean isLicenseActive() {
+    return true;
+}
+Cứ flash ROM vào là VCam tự động kích hoạt luôn, không cần phải tạo file vcam.lic hay check serial gì cả.
+📌 Tóm lại:
+
+Muốn khoá bản quyền (cần file vcam.lic mới chạy): Dùng Cách 1 (gọi verifyLicenseInternal()).
+Muốn dùng tự do (mặc định bật): Dùng Cách 2 (return true;).
+Không bao giờ để return false;.

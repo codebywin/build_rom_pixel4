@@ -1,0 +1,619 @@
+package org.lineageos.camera.assistant;
+
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
+import android.graphics.PixelFormat;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Environment;
+import android.os.IBinder;
+import android.provider.MediaStore;
+import android.util.Log;
+import android.view.Gravity;
+import android.view.LayoutInflater;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.Switch;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.util.Locale;
+
+public class FloatingControlService extends Service implements View.OnTouchListener {
+    private static final String TAG = "CameraAssistant";
+
+    private WindowManager mWindowManager;
+    private View mFloatingView;
+    private WindowManager.LayoutParams mParams;
+
+    private View mLayoutBubble;
+    private View mLayoutExpanded;
+
+    private TextView mTxtZoom;
+    private Button mBtnPause;
+    private Button mBtnRotate;
+    private Button mBtnColorMode;
+    private Switch mSwitchKyc;
+    private Switch mSwitchVcam;
+
+    private float mCurrentZoom = 1.0f;
+    private float mCurrentPanX = 0.0f;
+    private float mCurrentPanY = 0.0f;
+    private int mCurrentRotation = 0;
+    private int mCurrentColorMode = 0;
+    private boolean mIsPaused = false;
+
+    private static final String[] COLOR_MODE_NAMES = new String[] {
+        "🎨 MÀU: TỰ ĐỘNG CHỚP",
+        "⚪ MÀU: TRẮNG",
+        "🔵 MÀU: XANH DƯƠNG",
+        "🟢 MÀU: XANH LÁ",
+        "🔴 MÀU: ĐỎ",
+        "🟡 MÀU: VÀNG"
+    };
+
+    private static final String[] COLOR_MODE_VALS = new String[] {
+        "auto",
+        "#FFFFFF,0.40",
+        "#00E5FF,0.40",
+        "#00E676,0.40",
+        "#FF1744,0.40",
+        "#FFEA00,0.40"
+    };
+
+    // Drag touch state
+    private int mDragInitialX, mDragInitialY;
+    private float mDragInitialTouchX, mDragInitialTouchY;
+
+    // Bubble touch state
+    private int mBubbleInitialX, mBubbleInitialY;
+    private float mBubbleInitialTouchX, mBubbleInitialTouchY;
+    private boolean mBubbleIsMoving = false;
+
+    private static final String FLAG_DISABLE = "vcam_disable";
+    private static final String FLAG_PAUSE = "vcam_pause";
+    private static final String FLAG_KYC_FLASH = "vcam_kyc_flash";
+    private static final String FLAG_RESET = "vcam_reset";
+    private static final String FILE_ROTATION = "vcam_rotation";
+    private static final String FILE_COLOR_VAL = "vcam_color_val";
+    private static final String FILE_ZOOM = "vcam_zoom";
+    private static final String FILE_PAN_X = "vcam_pan_x";
+    private static final String FILE_PAN_Y = "vcam_pan_y";
+
+    public interface VcamStateListener {
+        void onVcamStateChanged(boolean isEnabled);
+    }
+    private static volatile VcamStateListener sListener;
+    private static volatile FloatingControlService sInstance;
+
+    public static void setVcamStateListener(VcamStateListener listener) {
+        sListener = listener;
+    }
+
+    private static final long LICENSE_CHECK_INTERVAL_MS = 60 * 60 * 1000L; // 60 phút
+    private final android.os.Handler mLicenseHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable mLicenseCheckRunnable = new Runnable() {
+        @Override
+        public void run() {
+            LicenseManager.checkOnlineAsync((isValid, message) -> {
+                if (!isValid) {
+                    Log.w(TAG, "FloatingControlService: Kiem tra ban quyen that bai -> " + message);
+                    LicenseManager.removeLicense();
+                    writeStringFile("/data/local/tmp/" + FLAG_DISABLE, "1");
+                    writeStringFile("/sdcard/" + FLAG_DISABLE, "1");
+                    if (sListener != null) {
+                        sListener.onVcamStateChanged(false);
+                    }
+                    mLicenseHandler.post(() -> {
+                        Toast.makeText(getApplicationContext(), "⚠️ Bản quyền VCAM đã bị khóa: " + message, Toast.LENGTH_LONG).show();
+                        stopSelf();
+                    });
+                } else {
+                    Log.d(TAG, "FloatingControlService: Ban quyen hop le. Len lich kiem tra tiep sau 60 phut.");
+                    mLicenseHandler.postDelayed(mLicenseCheckRunnable, LICENSE_CHECK_INTERVAL_MS);
+                }
+            });
+        }
+    };
+
+    public static void syncVcamStateFromActivity(boolean isEnabled) {
+        if (sInstance != null && sInstance.mSwitchVcam != null) {
+            sInstance.mSwitchVcam.post(() -> {
+                if (sInstance != null && sInstance.mSwitchVcam != null) {
+                    sInstance.mSwitchVcam.setOnCheckedChangeListener(null);
+                    sInstance.mSwitchVcam.setChecked(isEnabled);
+                    sInstance.setupVcamSwitchListener();
+                }
+            });
+        }
+    }
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
+    }
+
+    private void ensureControlFiles() {
+        new Thread(() -> {
+            String[] zeroFlags = new String[]{
+                FLAG_PAUSE, FLAG_DISABLE, FLAG_KYC_FLASH, "vcam_color_sync",
+                "vcam_rotation", FLAG_RESET
+            };
+            for (String name : zeroFlags) {
+                File f = new File("/data/local/tmp/" + name);
+                if (!f.exists() || f.length() == 0) {
+                    writeStringFile("/data/local/tmp/" + name, "0");
+                }
+            }
+            File fZoom = new File("/data/local/tmp/" + FILE_ZOOM);
+            if (!fZoom.exists() || fZoom.length() == 0) {
+                writeStringFile("/data/local/tmp/" + FILE_ZOOM, "1.0");
+                writeStringFile("/data/local/tmp/vcam_zoom.cfg", "1.0");
+            }
+            File fPan = new File("/data/local/tmp/vcam_pan.cfg");
+            if (!fPan.exists() || fPan.length() == 0) {
+                writeStringFile("/data/local/tmp/vcam_pan.cfg", "0.0,0.0");
+                writeStringFile("/data/local/tmp/vcam_pan_x", "0.0");
+                writeStringFile("/data/local/tmp/vcam_pan_y", "0.0");
+            }
+            File fColor = new File("/data/local/tmp/" + FILE_COLOR_VAL);
+            if (!fColor.exists() || fColor.length() == 0) {
+                writeStringFile("/data/local/tmp/" + FILE_COLOR_VAL, "normal");
+            }
+        }).start();
+    }
+
+    private void startAsForeground() {
+        String channelId = "vcam_floating_channel";
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && nm != null) {
+            NotificationChannel channel = new NotificationChannel(
+                    channelId,
+                    "VCAM Floating Controller",
+                    NotificationManager.IMPORTANCE_LOW
+            );
+            channel.setDescription("Duy trì cửa sổ nổi VCAM Controller");
+            nm.createNotificationChannel(channel);
+
+            Notification notification = new Notification.Builder(this, channelId)
+                    .setSmallIcon(R.drawable.ic_launcher)
+                    .setContentTitle("VCAM Controller đang chạy")
+                    .setContentText("Cửa sổ nổi điều khiển camera ảo đang hiển thị")
+                    .setOngoing(true)
+                    .build();
+
+            startForeground(1001, notification);
+            Log.i(TAG, "FloatingControlService startForeground successful");
+        }
+    }
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        sInstance = this;
+        startAsForeground();
+        ensureControlFiles();
+        mLicenseHandler.postDelayed(mLicenseCheckRunnable, LICENSE_CHECK_INTERVAL_MS);
+        LicenseManager.schedulePeriodicCheck(this);
+
+        mWindowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+        mFloatingView = LayoutInflater.from(this).inflate(R.layout.floating_control_layout, null);
+
+        mParams = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+        );
+
+        mParams.gravity = Gravity.TOP | Gravity.START;
+        mParams.x = 40;
+        mParams.y = 300;
+
+        mLayoutBubble = mFloatingView.findViewById(R.id.layout_bubble);
+        mLayoutExpanded = mFloatingView.findViewById(R.id.layout_expanded);
+
+        View headerDrag = mFloatingView.findViewById(R.id.header_drag);
+        View btnMinimize = mFloatingView.findViewById(R.id.btn_float_minimize);
+        View btnClose = mFloatingView.findViewById(R.id.btn_float_close);
+
+        mBtnPause = mFloatingView.findViewById(R.id.btn_float_pause);
+        mTxtZoom = mFloatingView.findViewById(R.id.txt_float_zoom);
+        Button btnZoomOut = mFloatingView.findViewById(R.id.btn_float_zoom_out);
+        Button btnZoomIn = mFloatingView.findViewById(R.id.btn_float_zoom_in);
+
+        Button btnUp = mFloatingView.findViewById(R.id.btn_float_up);
+        Button btnDown = mFloatingView.findViewById(R.id.btn_float_down);
+        Button btnLeft = mFloatingView.findViewById(R.id.btn_float_left);
+        Button btnRight = mFloatingView.findViewById(R.id.btn_float_right);
+        Button btnReset = mFloatingView.findViewById(R.id.btn_float_reset);
+        mSwitchKyc = mFloatingView.findViewById(R.id.switch_float_kyc);
+        mSwitchVcam = mFloatingView.findViewById(R.id.switch_float_vcam);
+
+        // Load trạng thái ban đầu (đã khởi tạo mSwitchVcam)
+        loadState();
+
+        View txtDragHandle = mFloatingView.findViewById(R.id.txt_drag_handle);
+
+        // 1 & 2. Gán OnTouchListener trực tiếp
+        txtDragHandle.setOnTouchListener(this);
+        mLayoutBubble.setOnTouchListener(this);
+
+        // 3. Thu nhỏ & Đóng
+        btnMinimize.setOnClickListener(v -> {
+            mLayoutExpanded.setVisibility(View.GONE);
+            mLayoutBubble.setVisibility(View.VISIBLE);
+        });
+
+        btnClose.setOnClickListener(v -> stopSelf());
+
+        Button btnRewind = mFloatingView.findViewById(R.id.btn_float_rewind);
+        if (btnRewind != null) {
+            btnRewind.setOnClickListener(v -> {
+                triggerRewind();
+                Toast.makeText(this, "⏮ Đã tua lại từ đầu (00:00)", Toast.LENGTH_SHORT).show();
+            });
+        }
+
+        mBtnRotate = mFloatingView.findViewById(R.id.btn_float_rotate);
+        if (mBtnRotate != null) {
+            mBtnRotate.setOnClickListener(v -> cycleRotation());
+        }
+
+        // 4. Pause / Play
+        mBtnPause.setOnClickListener(v -> {
+            mIsPaused = !mIsPaused;
+            writeFlag(FLAG_PAUSE, mIsPaused);
+            updatePauseUi();
+            Toast.makeText(this, mIsPaused ? "⏸ Đã tạm dừng video" : "▶ Đang phát video", Toast.LENGTH_SHORT).show();
+        });
+
+        // 5. Zoom In / Zoom Out
+        btnZoomOut.setOnClickListener(v -> setZoom(mCurrentZoom - 0.1f));
+        btnZoomIn.setOnClickListener(v -> setZoom(mCurrentZoom + 0.1f));
+
+        // 6. D-Pad Pan
+        final float STEP = 0.05f;
+        btnUp.setOnClickListener(v -> applyPan(0.0f, STEP));
+        btnDown.setOnClickListener(v -> applyPan(0.0f, -STEP));
+        btnLeft.setOnClickListener(v -> applyPan(-STEP, 0.0f));
+        btnRight.setOnClickListener(v -> applyPan(STEP, 0.0f));
+
+        // 7. Reset
+        btnReset.setOnClickListener(v -> resetTransform());
+
+        // 8. KYC Flash & Color Mode
+        mBtnColorMode = mFloatingView.findViewById(R.id.btn_float_color_mode);
+        if (mBtnColorMode != null) {
+            mBtnColorMode.setOnClickListener(v -> cycleColorMode());
+        }
+
+        mSwitchKyc.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            writeFlag(FLAG_KYC_FLASH, isChecked);
+            writeFlag("vcam_color_sync", isChecked);
+            if (isChecked) {
+                writeColorVal(COLOR_MODE_VALS[mCurrentColorMode]);
+                Toast.makeText(this, "🎨 Đã BẬT: " + COLOR_MODE_NAMES[mCurrentColorMode], Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "⚪ Đã TẮT Đổi màu", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        mWindowManager.addView(mFloatingView, mParams);
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        startAsForeground();
+        return START_STICKY;
+    }
+
+    @Override
+    public boolean onTouch(View v, MotionEvent event) {
+        int id = v.getId();
+        if (id == R.id.txt_drag_handle) {
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    mDragInitialX = mParams.x;
+                    mDragInitialY = mParams.y;
+                    mDragInitialTouchX = event.getRawX();
+                    mDragInitialTouchY = event.getRawY();
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    mParams.x = mDragInitialX + (int) (event.getRawX() - mDragInitialTouchX);
+                    mParams.y = mDragInitialY + (int) (event.getRawY() - mDragInitialTouchY);
+                    mWindowManager.updateViewLayout(mFloatingView, mParams);
+                    return true;
+            }
+        } else if (id == R.id.layout_bubble) {
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    mBubbleInitialX = mParams.x;
+                    mBubbleInitialY = mParams.y;
+                    mBubbleInitialTouchX = event.getRawX();
+                    mBubbleInitialTouchY = event.getRawY();
+                    mBubbleIsMoving = false;
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    int dx = (int) (event.getRawX() - mBubbleInitialTouchX);
+                    int dy = (int) (event.getRawY() - mBubbleInitialTouchY);
+                    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+                        mBubbleIsMoving = true;
+                        mParams.x = mBubbleInitialX + dx;
+                        mParams.y = mBubbleInitialY + dy;
+                        mWindowManager.updateViewLayout(mFloatingView, mParams);
+                    }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                    if (!mBubbleIsMoving) {
+                        loadState();
+                        mLayoutBubble.setVisibility(View.GONE);
+                        mLayoutExpanded.setVisibility(View.VISIBLE);
+                    }
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    private void loadState() {
+        mIsPaused = isFlagActive(FLAG_PAUSE);
+        updatePauseUi();
+
+        mCurrentRotation = readIntValue(FILE_ROTATION, 0);
+        updateRotationUi();
+
+        mCurrentZoom = readFloatValue(FILE_ZOOM, 1.0f);
+        if (mCurrentZoom < 1.0f) mCurrentZoom = 1.0f;
+        if (mCurrentZoom > 3.0f) mCurrentZoom = 3.0f;
+        mTxtZoom.setText(String.format(Locale.US, "%.2fx", mCurrentZoom));
+
+        mCurrentPanX = readFloatValue(FILE_PAN_X, 0.0f);
+        mCurrentPanY = readFloatValue(FILE_PAN_Y, 0.0f);
+
+        boolean kycActive = isFlagActive(FLAG_KYC_FLASH) || isFlagActive("vcam_color_sync");
+        mSwitchKyc.setChecked(kycActive);
+
+        String savedVal = readStringFile("/data/local/tmp/" + FILE_COLOR_VAL);
+        if (savedVal.isEmpty()) savedVal = readStringFile("/sdcard/" + FILE_COLOR_VAL);
+        for (int i = 0; i < COLOR_MODE_VALS.length; i++) {
+            if (COLOR_MODE_VALS[i].equalsIgnoreCase(savedVal)) {
+                mCurrentColorMode = i;
+                break;
+            }
+        }
+        updateColorModeUi();
+
+        if (mSwitchVcam != null) {
+            mSwitchVcam.setOnCheckedChangeListener(null);
+            boolean isVcamOn = !isFlagActive(FLAG_DISABLE);
+            mSwitchVcam.setChecked(isVcamOn);
+            Log.i(TAG, "Floating HUD loadState: VCAM is " + (isVcamOn ? "ON" : "OFF"));
+            setupVcamSwitchListener();
+        }
+    }
+
+    private void cycleRotation() {
+        mCurrentRotation = (mCurrentRotation + 90) % 360;
+        writeStringFileDual(FILE_ROTATION, String.valueOf(mCurrentRotation));
+        updateRotationUi();
+        Toast.makeText(this, "🔄 Góc xoay: " + mCurrentRotation + "°", Toast.LENGTH_SHORT).show();
+    }
+
+    private void updateRotationUi() {
+        if (mBtnRotate != null) {
+            mBtnRotate.setText("🔄");
+        }
+    }
+
+    private void cycleColorMode() {
+        mCurrentColorMode = (mCurrentColorMode + 1) % COLOR_MODE_NAMES.length;
+        updateColorModeUi();
+        writeColorVal(COLOR_MODE_VALS[mCurrentColorMode]);
+        if (mSwitchKyc != null && !mSwitchKyc.isChecked()) {
+            mSwitchKyc.setChecked(true);
+        } else {
+            Toast.makeText(this, COLOR_MODE_NAMES[mCurrentColorMode], Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void updateColorModeUi() {
+        if (mBtnColorMode != null) {
+            mBtnColorMode.setText(COLOR_MODE_NAMES[mCurrentColorMode]);
+        }
+    }
+
+    private void setupVcamSwitchListener() {
+        if (mSwitchVcam == null) return;
+        mSwitchVcam.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            Log.i(TAG, "Floating HUD Switch VCAM toggled to: " + isChecked);
+            writeFlag(FLAG_DISABLE, !isChecked);
+            if (sListener != null) {
+                try {
+                    sListener.onVcamStateChanged(isChecked);
+                } catch (Throwable ignored) {}
+            }
+            if (isChecked) {
+                Toast.makeText(this, "🟢 Đã BẬT Camera ảo!\n(Đổi camera trước/sau hoặc mở lại app để nhận video)", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "🔴 Đã TẮT Camera ảo (Dùng Camera thật)!\n(Đổi camera trước/sau hoặc mở lại app để nhận camera thật)", Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void updatePauseUi() {
+        if (mBtnPause != null) {
+            if (mIsPaused) {
+                mBtnPause.setText("▶");
+                mBtnPause.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFFE65100));
+            } else {
+                mBtnPause.setText("⏸");
+                mBtnPause.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF455A64));
+            }
+        }
+    }
+
+    private void setZoom(float zoom) {
+        if (zoom < 1.0f) zoom = 1.0f;
+        if (zoom > 3.0f) zoom = 3.0f;
+        mCurrentZoom = zoom;
+
+        mTxtZoom.setText(String.format(Locale.US, "%.2fx", mCurrentZoom));
+        writeFloatValue("vcam_zoom", mCurrentZoom);
+        writeFloatValue("vcam_zoom.cfg", mCurrentZoom);
+        applyPan(0.0f, 0.0f);
+    }
+
+    private void applyPan(float dx, float dy) {
+        mCurrentPanX += dx;
+        mCurrentPanY += dy;
+
+        float maxPan = (mCurrentZoom - 1.0f) / (2.0f * mCurrentZoom);
+        if (mCurrentPanX > maxPan) mCurrentPanX = maxPan;
+        if (mCurrentPanX < -maxPan) mCurrentPanX = -maxPan;
+        if (mCurrentPanY > maxPan) mCurrentPanY = maxPan;
+        if (mCurrentPanY < -maxPan) mCurrentPanY = -maxPan;
+
+        writeFloatValue("vcam_pan_x", mCurrentPanX);
+        writeFloatValue("vcam_pan_y", mCurrentPanY);
+        String panCfg = mCurrentPanX + "," + mCurrentPanY;
+        writeStringFileDual("vcam_pan.cfg", panCfg);
+    }
+
+    private void resetTransform() {
+        mCurrentZoom = 1.0f;
+        mCurrentPanX = 0.0f;
+        mCurrentPanY = 0.0f;
+        mCurrentRotation = 0;
+        mIsPaused = false;
+
+        writeFlag(FLAG_PAUSE, false);
+        writeStringFileDual(FILE_ROTATION, "0");
+        writeFloatValue("vcam_zoom", 1.0f);
+        writeFloatValue("vcam_zoom.cfg", 1.0f);
+        writeFloatValue("vcam_pan_x", 0.0f);
+        writeFloatValue("vcam_pan_y", 0.0f);
+        writeStringFileDual("vcam_pan.cfg", "0.0,0.0");
+
+        mTxtZoom.setText("1.00x");
+        if (mSwitchKyc != null) mSwitchKyc.setChecked(false);
+        writeFlag(FLAG_KYC_FLASH, false);
+        writeFlag("vcam_color_sync", false);
+        mCurrentColorMode = 0;
+        writeColorVal("auto");
+        updateColorModeUi();
+        updatePauseUi();
+        updateRotationUi();
+        Toast.makeText(this, "Đã đặt lại gốc!", Toast.LENGTH_SHORT).show();
+    }
+
+    private void triggerRewind() {
+        String ts = String.valueOf(System.currentTimeMillis());
+        writeStringFileDual(FLAG_RESET, ts);
+        Toast.makeText(this, "⏮ Đã tua về 00:00", Toast.LENGTH_SHORT).show();
+        Log.i(TAG, "triggerRewind: reset timestamp " + ts);
+    }
+
+    private boolean isFlagActive(String name) {
+        String val = readStringFileDual(name);
+        return "1".equals(val) || "true".equalsIgnoreCase(val);
+    }
+
+    private void writeFlag(String name, boolean active) {
+        Log.i(TAG, "writeFlag: " + name + " -> " + active);
+        writeStringFileDual(name, active ? "1" : "0");
+    }
+
+    private void writeFloatValue(String name, float val) {
+        String s = String.valueOf(val);
+        writeStringFileDual(name, s);
+    }
+
+    private void writeColorVal(String val) {
+        writeStringFileDual(FILE_COLOR_VAL, val);
+    }
+
+    private void writeStringFileDual(String filename, String val) {
+        writeStringFile("/sdcard/" + filename, val);
+        writeStringFile("/data/local/tmp/" + filename, val);
+    }
+
+    private String readStringFileDual(String filename) {
+        String s = readStringFile("/sdcard/" + filename);
+        if (!s.isEmpty()) return s;
+        return readStringFile("/data/local/tmp/" + filename);
+    }
+
+    private void writeStringFile(String path, String val) {
+        try {
+            File f = new File(path);
+            if (!f.exists()) {
+                try { f.createNewFile(); } catch (Throwable ignored) {}
+            }
+            FileOutputStream fos = new FileOutputStream(f);
+            fos.write(val.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            fos.flush();
+            fos.close();
+            try {
+                f.setReadable(true, false);
+                f.setWritable(true, false);
+            } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            Log.w(TAG, "writeStringFile error for " + path + ": " + t.getMessage());
+        }
+    }
+
+    private float readFloatValue(String name, float defVal) {
+        String s1 = readStringFileDual(name);
+        if (!s1.isEmpty()) {
+            try { return Float.parseFloat(s1); } catch (Throwable ignored) {}
+        }
+        return defVal;
+    }
+
+    private int readIntValue(String name, int defVal) {
+        String s1 = readStringFileDual(name);
+        if (!s1.isEmpty()) {
+            try { return Integer.parseInt(s1); } catch (Throwable ignored) {}
+        }
+        return defVal;
+    }
+
+    private String readStringFile(String path) {
+        File f = new File(path);
+        if (!f.exists() || f.length() == 0) return "";
+        try {
+            java.io.FileInputStream fis = new java.io.FileInputStream(f);
+            byte[] b = new byte[(int) f.length()];
+            int r = fis.read(b);
+            fis.close();
+            return new String(b, 0, r, "UTF-8").trim();
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        sInstance = null;
+        mLicenseHandler.removeCallbacks(mLicenseCheckRunnable);
+        try {
+            stopForeground(true);
+        } catch (Throwable ignored) {}
+        if (mFloatingView != null && mWindowManager != null) {
+            mWindowManager.removeView(mFloatingView);
+        }
+    }
+}

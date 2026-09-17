@@ -1,0 +1,29 @@
+# Git ignore for LineageOS 23.2 (Android 16) Pixel 4
+
+# Ignore heavy decompiled and temporary folders
+dump_device/*
+!dump_device/framework_vcam.jar
+!dump_device/vcam_test.lic
+
+# Android Studio and IDE files
+.idea/
+build/
+*.bak
+*.tmp
+*.log
+
+# Keystores and private credentials
+*.keystore
+keystore.properties
+crave.conf
+*.pem
+*.key
+
+# App temporary files
+org.lineageos.camera.assistant/.idea/
+org.lineageos.camera.assistant/build/
+org.lineageos.camera.assistant/release.keystore
+org.lineageos.camera.assistant/keystore.properties
+
+# Allow XML manifests
+!manifests/*.xml

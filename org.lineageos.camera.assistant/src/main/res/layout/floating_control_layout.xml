@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root_floating"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content">
+
+    <!-- 1. BONG BÓNG THU NHỎ (MINIMIZED BUBBLE) -->
+    <LinearLayout
+        android:id="@+id/layout_bubble"
+        android:layout_width="54dp"
+        android:layout_height="54dp"
+        android:background="@drawable/bg_floating_bubble"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:elevation="8dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- 2. CỬA SỔ ĐIỀU KHIỂN NỔI (EXPANDED HUD CARD) -->
+    <LinearLayout
+        android:id="@+id/layout_expanded"
+        android:layout_width="220dp"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_floating_card"
+        android:orientation="vertical"
+        android:padding="10dp"
+        android:elevation="8dp">
+
+        <!-- Header: Drag bar, Title, Minimize & Close -->
+        <LinearLayout
+            android:id="@+id/header_drag"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/txt_drag_handle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Controller ✥"
+                android:textColor="#00BFA5"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:padding="0dp" />
+
+            <!-- Nút Thu Nhỏ thành Bong Bóng -->
+            <TextView
+                android:id="@+id/btn_float_minimize"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:text="—"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold"
+                android:textSize="14sp"
+                android:gravity="center"
+                android:background="?android:attr/selectableItemBackgroundBorderless" />
+
+            <!-- Nút Đóng -->
+            <TextView
+                android:id="@+id/btn_float_close"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:text="✕"
+                android:textColor="#FF5252"
+                android:textStyle="bold"
+                android:textSize="14sp"
+                android:gravity="center"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:layout_marginStart="4dp" />
+        </LinearLayout>
+
+        <!-- Switch Bật / Tắt Camera Ảo Nổi -->
+        <Switch
+            android:id="@+id/switch_float_vcam"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Kích hoạt Camera Ảo"
+            android:textColor="#00E5FF"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:checked="true"
+            android:layout_marginTop="6dp" />
+            
+        <!-- Hàng 4 nút: Tạm dừng, Tua lại, Xoay video, Khuếch đại Mic -->
+        <LinearLayout
+            android:id="@+id/layout_4_buttons"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="6dp">
+
+            <!-- 1. Nút Pause / Play -->
+            <Button
+                android:id="@+id/btn_float_pause"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1.0"
+                android:text="⏸"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:backgroundTint="#455A64"
+                android:textColor="#FFFFFF"
+                android:padding="0dp"
+                android:layout_marginEnd="4dp" />
+
+            <!-- 2. Nút Tua lại từ đầu (00:00) -->
+            <Button
+                android:id="@+id/btn_float_rewind"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1.0"
+                android:text="⏮"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:backgroundTint="#00897B"
+                android:textColor="#FFFFFF"
+                android:padding="0dp"
+                android:layout_marginEnd="4dp" />
+
+            <!-- 3. Nút Xoay video (0° -> 90° -> 180° -> 270°) -->
+            <Button
+                android:id="@+id/btn_float_rotate"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1.0"
+                android:text="🔄"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:backgroundTint="#5C6BC0"
+                android:textColor="#FFFFFF"
+                android:padding="0dp" />
+        </LinearLayout>
+
+        
+
+        <!-- Zoom Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="6dp">
+
+            <Button
+                android:id="@+id/btn_float_zoom_out"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:text="-"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:padding="0dp" />
+
+            <TextView
+                android:id="@+id/txt_float_zoom"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="1.00x"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:gravity="center" />
+
+            <Button
+                android:id="@+id/btn_float_zoom_in"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:text="+"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:padding="0dp" />
+        </LinearLayout>
+
+        <!-- D-Pad Pan -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:layout_marginTop="6dp">
+
+            <Button
+                android:id="@+id/btn_float_up"
+                android:layout_width="60dp"
+                android:layout_height="32dp"
+                android:text="▲"
+                android:textSize="11sp"
+                android:padding="0dp" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <Button
+                    android:id="@+id/btn_float_left"
+                    android:layout_width="54dp"
+                    android:layout_height="32dp"
+                    android:text="◀"
+                    android:textSize="11sp"
+                    android:padding="0dp"
+                    android:layout_marginEnd="4dp" />
+
+                <Button
+                    android:id="@+id/btn_float_reset"
+                    android:layout_width="60dp"
+                    android:layout_height="32dp"
+                    android:text="↺ RESET"
+                    android:backgroundTint="#FF6F00"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold"
+                    android:textSize="9sp"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_float_right"
+                    android:layout_width="54dp"
+                    android:layout_height="32dp"
+                    android:text="▶"
+                    android:textSize="11sp"
+                    android:padding="0dp"
+                    android:layout_marginStart="4dp" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/btn_float_down"
+                android:layout_width="60dp"
+                android:layout_height="32dp"
+                android:text="▼"
+                android:textSize="11sp"
+                android:padding="0dp" />
+        </LinearLayout>
+
+        <!-- KYC Flash / Color Switch -->
+        <Switch
+            android:id="@+id/switch_float_kyc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Chớp màu / Đổi màu"
+            android:textColor="#FF4081"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:layout_marginTop="4dp"
+            android:padding="2dp" />
+
+        <!-- Nút Đổi chế độ màu (Tự động chớp / Trắng / Xanh / Đỏ / Vàng) -->
+        <Button
+            android:id="@+id/btn_float_color_mode"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:text="🎨 CHẾ ĐỘ: TỰ ĐỘNG CHỚP"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:backgroundTint="#AD1457"
+            android:textColor="#FFFFFF"
+            android:padding="0dp"
+            android:layout_marginTop="2dp" />
+
+    </LinearLayout>
+</FrameLayout>

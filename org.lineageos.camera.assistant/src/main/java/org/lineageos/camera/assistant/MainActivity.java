@@ -1,0 +1,524 @@
+package org.lineageos.camera.assistant;
+
+import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Build;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.Switch;
+import android.widget.TextView;
+import android.widget.Toast;
+import android.view.View;
+
+import android.os.Environment;
+import android.provider.MediaStore;
+import android.util.Log;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.util.Locale;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.InputStream;
+import java.io.OutputStream;
+
+public class MainActivity extends Activity {
+    private static final int REQ_PICK_VIDEO = 101;
+
+    private static final String FLAG_DISABLE = "vcam_disable";
+
+    private static final String PREF_VCAM = "vcam_prefs";
+
+    private static final String TARGET_VIDEO = "vcam.mp4";
+
+    private TextView txtLicenseBadge;
+    private TextView txtDeviceSerial;
+    private TextView txtLicenseStatus;
+    private EditText edtActiveKey;
+    private Button btnActivateOnline;
+    private View layoutActivationInput;
+    private Button btnResetLicense;
+
+    private Switch switchVcam;
+    private Button btnOpenFloating;
+    private TextView txtVideoInfo;
+
+    @Override
+    protected void attachBaseContext(Context newBase) {
+        super.attachBaseContext(LocaleManager.applyLocale(newBase));
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        LocaleManager.applyLocale(this);
+        super.onCreate(savedInstanceState);
+        LicenseManager.init(this);
+        requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        setContentView(R.layout.activity_main);
+
+        txtLicenseBadge = findViewById(R.id.txt_license_badge);
+        txtDeviceSerial = findViewById(R.id.txt_device_serial);
+        txtLicenseStatus = findViewById(R.id.txt_license_status);
+        edtActiveKey = findViewById(R.id.edt_active_key);
+        btnActivateOnline = findViewById(R.id.btn_activate_online);
+        Button btnCopySerial = findViewById(R.id.btn_copy_serial);
+
+        TextView btnSettings = findViewById(R.id.btn_settings);
+        if (btnSettings != null) {
+            btnSettings.setOnClickListener(v -> showLanguageDialog());
+        }
+
+        switchVcam = findViewById(R.id.switch_vcam);
+        btnOpenFloating = findViewById(R.id.btn_open_floating);
+        txtVideoInfo = findViewById(R.id.txt_video_info);
+
+        Button btnPickVideo = findViewById(R.id.btn_pick_video);
+        Button btnApply = findViewById(R.id.btn_apply);
+
+        // 0. Sao chép Serial
+        final String serial = LicenseManager.getDeviceSerial();
+        txtDeviceSerial.setText(serial);
+        btnCopySerial.setOnClickListener(v -> {
+            ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            ClipData cd = ClipData.newPlainText("Pixel 4 Serial", serial);
+            cm.setPrimaryClip(cd);
+            Toast.makeText(this, getString(R.string.toast_copied) + serial, Toast.LENGTH_SHORT).show();
+        });
+
+        btnResetLicense = findViewById(R.id.btn_reset_license);
+        layoutActivationInput = findViewById(R.id.layout_activation_input);
+        btnResetLicense.setOnClickListener(v -> {
+            LicenseManager.removeLicense();
+            if (switchVcam != null && switchVcam.isChecked()) {
+                switchVcam.setChecked(false);
+            }
+            writeFlag(FLAG_DISABLE, true);
+            try {
+                stopService(new Intent(this, FloatingControlService.class));
+            } catch (Throwable ignored) {}
+            updateLicenseUI();
+            Toast.makeText(this, R.string.toast_key_removed, Toast.LENGTH_SHORT).show();
+        });
+
+        // 1. Kích hoạt Online
+        btnActivateOnline.setOnClickListener(v -> {
+            String key = edtActiveKey.getText().toString().trim();
+            if (key.isEmpty()) {
+                Toast.makeText(this, R.string.toast_enter_key, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            btnActivateOnline.setEnabled(false);
+            btnActivateOnline.setText("...");
+            LicenseManager.activateOnlineAsync(key, (success, message) -> runOnUiThread(() -> {
+                btnActivateOnline.setEnabled(true);
+                btnActivateOnline.setText(R.string.btn_activate_online);
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+                updateLicenseUI();
+            }));
+        });
+
+        // 2. Mở Cửa Sổ Nổi (Floating Overlay)
+        btnOpenFloating.setOnClickListener(v -> {
+            LicenseManager.LicenseInfo lic = LicenseManager.checkLicense();
+            if (!lic.isValid) {
+                Toast.makeText(this, R.string.license_status_default, Toast.LENGTH_LONG).show();
+                return;
+            }
+            if (!android.provider.Settings.canDrawOverlays(this)) {
+                Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + getPackageName()));
+                startActivity(intent);
+                Toast.makeText(this, R.string.toast_overlay_perm, Toast.LENGTH_LONG).show();
+            } else {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(new Intent(this, FloatingControlService.class));
+                } else {
+                    startService(new Intent(this, FloatingControlService.class));
+                }
+                Toast.makeText(this, R.string.toast_floating_opened, Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        // 3. Chọn Video
+        btnPickVideo.setOnClickListener(v -> {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
+                try {
+                    Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                    intent.setData(Uri.parse("package:" + getPackageName()));
+                    startActivity(intent);
+                    Toast.makeText(this, "Vui lòng bật quyền 'Cho phép quản lý tất cả tệp'!", Toast.LENGTH_LONG).show();
+                    return;
+                } catch (Throwable ignored) {}
+            }
+            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+            intent.setType("video/*");
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.putExtra(Intent.EXTRA_LOCAL_ONLY, true);
+            startActivityForResult(intent, REQ_PICK_VIDEO);
+        });
+
+        // 4. Lưu cài đặt thủ công
+        btnApply.setOnClickListener(v -> applySettings());
+
+        ensureControlFiles();
+        loadCurrentState();
+        updateLicenseUI();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        loadCurrentState();
+        updateLicenseUI();
+        LicenseManager.checkOnlineAsync((isValid, message) -> runOnUiThread(() -> {
+            if (!isValid) {
+                updateLicenseUI();
+                if (switchVcam != null && switchVcam.isChecked()) {
+                    switchVcam.setChecked(false);
+                }
+                writeFlag(FLAG_DISABLE, true);
+                try {
+                    stopService(new Intent(this, FloatingControlService.class));
+                } catch (Throwable ignored) {}
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+            }
+        }));
+        FloatingControlService.setVcamStateListener(isEnabled -> runOnUiThread(() -> {
+            if (switchVcam != null) {
+                switchVcam.setOnCheckedChangeListener(null);
+                switchVcam.setChecked(isEnabled);
+                setupVcamSwitchListener();
+            }
+        }));
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        FloatingControlService.setVcamStateListener(null);
+    }
+
+    private void showLanguageDialog() {
+        Log.i("CameraAssistant", "showLanguageDialog invoked!");
+        runOnUiThread(() -> {
+            try {
+                final String[] langs = new String[] {
+                    getString(R.string.lang_vi),
+                    getString(R.string.lang_en),
+                    getString(R.string.lang_zh)
+                };
+                final String[] langCodes = new String[] {
+                    LocaleManager.LANG_VI,
+                    LocaleManager.LANG_EN,
+                    LocaleManager.LANG_ZH
+                };
+
+                String currentLang = LocaleManager.getLanguage(this);
+                int selectedIndex = 0;
+                for (int i = 0; i < langCodes.length; i++) {
+                    if (langCodes[i].equals(currentLang)) {
+                        selectedIndex = i;
+                        break;
+                    }
+                }
+
+                new android.app.AlertDialog.Builder(this)
+                        .setTitle(R.string.dialog_settings_title)
+                        .setSingleChoiceItems(langs, selectedIndex, (dialog, which) -> {
+                            String chosenLang = langCodes[which];
+                            Log.i("CameraAssistant", "Language selected: " + chosenLang);
+                            if (!chosenLang.equals(currentLang)) {
+                                LocaleManager.setLanguage(this, chosenLang);
+                                dialog.dismiss();
+                                Toast.makeText(this, R.string.toast_lang_changed, Toast.LENGTH_SHORT).show();
+                                recreate();
+                            } else {
+                                dialog.dismiss();
+                            }
+                        })
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .show();
+            } catch (Throwable t) {
+                Log.e("CameraAssistant", "showLanguageDialog error: " + t.getMessage(), t);
+            }
+        });
+    }
+
+    private void setupVcamSwitchListener() {
+        if (switchVcam == null) return;
+        switchVcam.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isChecked) {
+                LicenseManager.LicenseInfo lic = LicenseManager.checkLicense();
+                if (!lic.isValid) {
+                    switchVcam.setOnCheckedChangeListener(null);
+                    switchVcam.setChecked(false);
+                    setupVcamSwitchListener();
+                    Toast.makeText(this, R.string.license_status_default, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+            }
+            writeFlag(FLAG_DISABLE, !isChecked);
+            FloatingControlService.syncVcamStateFromActivity(isChecked);
+            if (isChecked) {
+                Toast.makeText(this, R.string.toast_vcam_on, Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, R.string.toast_vcam_off, Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void updateLicenseUI() {
+        LicenseManager.LicenseInfo lic = LicenseManager.checkLicense();
+        if (lic.isValid) {
+            txtLicenseBadge.setText(R.string.license_active);
+            txtLicenseBadge.setTextColor(0xFF00E676);
+            txtLicenseStatus.setText(lic.message);
+            txtLicenseStatus.setTextColor(0xFF80CBC4);
+            btnOpenFloating.setEnabled(true);
+            btnOpenFloating.setAlpha(1.0f);
+
+            if (layoutActivationInput != null) {
+                layoutActivationInput.setVisibility(View.GONE);
+            }
+            if (btnResetLicense != null) {
+                btnResetLicense.setVisibility(View.VISIBLE);
+            }
+        } else {
+            txtLicenseBadge.setText(R.string.license_inactive);
+            txtLicenseBadge.setTextColor(0xFFFF5252);
+            txtLicenseStatus.setText(lic.message != null ? lic.message : getString(R.string.license_status_default));
+            txtLicenseStatus.setTextColor(0xFFFFAB91);
+            btnOpenFloating.setEnabled(false);
+            btnOpenFloating.setAlpha(0.5f);
+
+            if (layoutActivationInput != null) {
+                layoutActivationInput.setVisibility(View.VISIBLE);
+            }
+            if (btnResetLicense != null) {
+                btnResetLicense.setVisibility(View.GONE);
+            }
+            if (edtActiveKey != null) {
+                edtActiveKey.setText("");
+            }
+        }
+    }
+
+    private void loadCurrentState() {
+        boolean isDisabled = isFlagActive(FLAG_DISABLE);
+        switchVcam.setOnCheckedChangeListener(null);
+        switchVcam.setChecked(!isDisabled);
+        setupVcamSwitchListener();
+
+        File videoFile = new File("/data/local/tmp/" + TARGET_VIDEO);
+        if (!videoFile.exists() || videoFile.length() == 0) {
+            File sdVideo = new File("/sdcard/" + TARGET_VIDEO);
+            if (sdVideo.exists() && sdVideo.length() > 0) {
+                videoFile = sdVideo;
+            }
+        }
+        if (videoFile.exists() && videoFile.length() > 0) {
+            txtVideoInfo.setText("Video: " + videoFile.getAbsolutePath() + " (" + formatFileSize(videoFile.length()) + ")");
+        } else {
+            txtVideoInfo.setText("Chưa có video, hệ thống dùng mặc định");
+        }
+    }
+
+    private void applySettings() {
+        try {
+            boolean isChecked = switchVcam.isChecked();
+            writeFlag(FLAG_DISABLE, !isChecked);
+            FloatingControlService.syncVcamStateFromActivity(isChecked);
+
+            Toast.makeText(this, R.string.toast_saved, Toast.LENGTH_SHORT).show();
+            loadCurrentState();
+        } catch (Exception e) {
+            Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private String readStringFile(String path) {
+        File f = new File(path);
+        if (!f.exists() || f.length() == 0) return "";
+        try {
+            java.io.FileInputStream fis = new java.io.FileInputStream(f);
+            byte[] b = new byte[(int) f.length()];
+            int r = fis.read(b);
+            fis.close();
+            return new String(b, 0, r, "UTF-8").trim();
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    private void writeStringFile(String path, String val) {
+        try {
+            File f = new File(path);
+            if (!f.exists()) {
+                f.createNewFile();
+            }
+            FileOutputStream fos = new FileOutputStream(f);
+            fos.write(val.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            fos.flush();
+            fos.close();
+            f.setReadable(true, false);
+            f.setWritable(true, false);
+        } catch (Throwable t) {
+            Log.w("CameraAssistant", "writeStringFile error for " + path + ": " + t.getMessage());
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+            Uri uri = data.getData();
+            if (requestCode == REQ_PICK_VIDEO) {
+                copyUriToDualLocations(uri, TARGET_VIDEO, getString(R.string.toast_video_updated));
+            }
+        }
+    }
+
+    private void copyUriToDualLocations(final Uri srcUri, final String filename, final String successMsg) {
+        Toast.makeText(this, "⏳ Đang nhập video mới...", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            File tmpFile = new File("/data/local/tmp/" + filename);
+            File sdFile = new File("/sdcard/" + filename);
+            boolean success = false;
+            long savedSize = 0;
+
+            // 1. Ghi trực tiếp vào /data/local/tmp/ (Nơi VCam Framework ưu tiên đọc số 1)
+            try {
+                InputStream in = getContentResolver().openInputStream(srcUri);
+                if (in != null) {
+                    try { if (tmpFile.exists()) tmpFile.delete(); } catch (Throwable ignored) {}
+                    try { tmpFile.createNewFile(); } catch (Throwable ignored) {}
+                    OutputStream out = new FileOutputStream(tmpFile);
+                    byte[] buf = new byte[65536];
+                    int len;
+                    while ((len = in.read(buf)) > 0) {
+                        out.write(buf, 0, len);
+                    }
+                    in.close();
+                    out.flush();
+                    out.close();
+                    try {
+                        tmpFile.setReadable(true, false);
+                        tmpFile.setWritable(true, false);
+                    } catch (Throwable ignored) {}
+                    if (tmpFile.length() > 0) {
+                        success = true;
+                        savedSize = tmpFile.length();
+                        Log.i("CameraAssistant", "Đã lưu video vào /data/local/tmp: " + savedSize + " bytes");
+                    }
+                }
+            } catch (Throwable t) {
+                Log.e("CameraAssistant", "Lỗi ghi vào /data/local/tmp: " + t.getMessage(), t);
+            }
+
+            // 2. Ghi bản sao sang /sdcard/ để dự phòng
+            try {
+                InputStream inSd = getContentResolver().openInputStream(srcUri);
+                if (inSd != null) {
+                    try { if (sdFile.exists()) sdFile.delete(); } catch (Throwable ignored) {}
+                    try { sdFile.createNewFile(); } catch (Throwable ignored) {}
+                    OutputStream outSd = new FileOutputStream(sdFile);
+                    byte[] buf = new byte[65536];
+                    int len;
+                    while ((len = inSd.read(buf)) > 0) {
+                        outSd.write(buf, 0, len);
+                    }
+                    inSd.close();
+                    outSd.flush();
+                    outSd.close();
+                    try {
+                        sdFile.setReadable(true, false);
+                        sdFile.setWritable(true, false);
+                    } catch (Throwable ignored) {}
+                    if (sdFile.length() > 0) {
+                        if (!success) {
+                            success = true;
+                            savedSize = sdFile.length();
+                        }
+                        Log.i("CameraAssistant", "Đã lưu video dự phòng vào /sdcard: " + sdFile.length() + " bytes");
+                    }
+                }
+            } catch (Throwable t) {
+                Log.w("CameraAssistant", "Ghi đệm /sdcard bỏ qua: " + t.getMessage());
+            }
+
+            final boolean finalSuccess = success;
+            final long finalSize = savedSize;
+            runOnUiThread(() -> {
+                if (finalSuccess) {
+                    // Phát tín hiệu reset để Camera đang mở tự động tua/load video mới
+                    writeFlag("vcam_reset", true);
+                    Toast.makeText(this, successMsg + " (" + formatFileSize(finalSize) + ")", Toast.LENGTH_SHORT).show();
+                    loadCurrentState();
+                } else {
+                    Toast.makeText(this, "Không thể lưu video! Vui lòng kiểm tra quyền bộ nhớ.", Toast.LENGTH_LONG).show();
+                }
+            });
+        }).start();
+    }
+
+    private String formatFileSize(long bytes) {
+        if (bytes <= 0) return "0 MB";
+        if (bytes < 1024 * 1024) {
+            return String.format(Locale.US, "%.1f KB", bytes / 1024.0);
+        }
+        return String.format(Locale.US, "%.2f MB", bytes / (1024.0 * 1024.0));
+    }
+
+    private void ensureControlFiles() {
+        String[] files = new String[] {
+            FLAG_DISABLE, TARGET_VIDEO
+        };
+        for (String fName : files) {
+            try {
+                File fSd = new File("/sdcard/" + fName);
+                if (!fSd.exists()) {
+                    fSd.createNewFile();
+                }
+                fSd.setReadable(true, false);
+                fSd.setWritable(true, false);
+            } catch (Throwable ignored) {}
+
+            try {
+                File fTmp = new File("/data/local/tmp/" + fName);
+                if (!fTmp.exists()) {
+                    fTmp.createNewFile();
+                }
+                fTmp.setReadable(true, false);
+                fTmp.setWritable(true, false);
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    private boolean isFlagActive(String name) {
+        String val = readStringFileDual(name);
+        return "1".equals(val) || "true".equalsIgnoreCase(val);
+    }
+
+    private void writeFlag(String name, boolean active) {
+        Log.i("CameraAssistant", "MainActivity writeFlag: " + name + " -> " + active);
+        writeStringFileDual(name, active ? "1" : "0");
+    }
+
+    private String readStringFileDual(String filename) {
+        String s = readStringFile("/sdcard/" + filename);
+        if (!s.isEmpty()) return s;
+        return readStringFile("/data/local/tmp/" + filename);
+    }
+
+    private void writeStringFileDual(String filename, String val) {
+        writeStringFile("/sdcard/" + filename, val);
+        writeStringFile("/data/local/tmp/" + filename, val);
+    }
+}

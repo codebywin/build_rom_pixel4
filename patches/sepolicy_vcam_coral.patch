@@ -1,0 +1,39 @@
+diff --git a/sepolicy/private/file_contexts b/sepolicy/private/file_contexts
+index 1e55ebd..6d880da 100644
+--- a/sepolicy/private/file_contexts
++++ b/sepolicy/private/file_contexts
+@@ -1,3 +1,8 @@
+ ####### system file ###############
+ /system/bin/bt_logger                           u:object_r:bt_logger_exec:s0
+ /system/bin/smcinvoked                          u:object_r:smcinvoke_daemon_exec:s0
++
++# Virtual Camera & Virtual Mic files
++/data/local/tmp/vcam.*                          u:object_r:vcam_data_file:s0
++/data/local/tmp/vcam_.*                         u:object_r:vcam_data_file:s0
++/data/local/tmp/vcam(/.*)?                      u:object_r:vcam_data_file:s0
+diff --git a/sepolicy/private/vcam.te b/sepolicy/private/vcam.te
+new file mode 100644
+index 0000000..c20ae0e
+--- /dev/null
++++ b/sepolicy/private/vcam.te
+@@ -0,0 +1,13 @@
++# Allow all apps (untrusted, system, platform) to access VCAM files
++allow appdomain vcam_data_file:file { create read write open getattr setattr unlink map };
++allow appdomain vcam_data_file:dir { create read write open getattr add_name remove_name search };
++
++# Allow media framework services to access VCAM files
++allow mediaserver vcam_data_file:file { read open getattr map };
++allow mediaextractor vcam_data_file:file { read open getattr map };
++allow audioserver vcam_data_file:file { read open getattr map };
++allow hal_camera_default vcam_data_file:file { read open getattr map };
++
++# Allow shell (adb) to manage VCAM files
++allow shell vcam_data_file:file { create read write open getattr unlink rename setattr };
++allow shell vcam_data_file:dir { create read write open getattr add_name remove_name search };
+diff --git a/sepolicy/public/vcam.te b/sepolicy/public/vcam.te
+new file mode 100644
+index 0000000..7db4986
+--- /dev/null
++++ b/sepolicy/public/vcam.te
+@@ -0,0 +1 @@
++type vcam_data_file, file_type, data_file_type, core_data_file_type;
