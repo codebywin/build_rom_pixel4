@@ -42,3 +42,4 @@ Repository này hỗ trợ tự động build ROM xuất xưởng trên máy ch�
 4. **Patch SELinux:** `patches/sepolicy_vcam_coral.patch`
 5. **Workflow tự động:** `.github/workflows/selfhosted.yml`
 
+"# test_build_rom_lineageOS_px4" 
