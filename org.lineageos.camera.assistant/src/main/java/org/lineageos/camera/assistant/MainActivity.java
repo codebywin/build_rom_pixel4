@@ -11,8 +11,6 @@ import android.os.Bundle;
 import android.os.Build;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.RadioButton;
-import android.widget.RadioGroup;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -25,6 +23,7 @@ import android.util.Log;
 import java.io.BufferedReader;
 import java.io.File;
 import java.util.Locale;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.InputStream;
@@ -32,20 +31,12 @@ import java.io.OutputStream;
 
 public class MainActivity extends Activity {
     private static final int REQ_PICK_VIDEO = 101;
-    private static final int REQ_PICK_AUDIO = 102;
 
     private static final String FLAG_DISABLE = "vcam_disable";
-    private static final String FLAG_MIC_DISABLE = "vcam_mic_disable";
-    private static final String FLAG_MIC_MIX = "vcam_mic_mix";
 
     private static final String PREF_VCAM = "vcam_prefs";
-    private static final String KEY_MIC_MODE = "mic_mode";
-    private static final int MIC_MODE_VIRTUAL = 0;
-    private static final int MIC_MODE_MIX = 1;
-    private static final int MIC_MODE_REAL = 2;
 
     private static final String TARGET_VIDEO = "vcam.mp4";
-    private static final String TARGET_AUDIO = "vcam.wav";
 
     private TextView txtLicenseBadge;
     private TextView txtDeviceSerial;
@@ -58,31 +49,6 @@ public class MainActivity extends Activity {
     private Switch switchVcam;
     private Button btnOpenFloating;
     private TextView txtVideoInfo;
-    private TextView txtAudioInfo;
-    private RadioGroup rgAudioMode;
-    private RadioButton rbAudioVirtual;
-    private RadioButton rbAudioMix;
-    private RadioButton rbAudioReal;
-
-    private static final String FILE_MIC_BOOST = "vcam_mic_boost";
-    private Button btnMainMicBoost;
-    private int mCurrentBoostIndex = 2; // Default x3.0
-
-    private static final String[] BOOST_LABELS = new String[] {
-        "🎙️ KHUẾCH ĐẠI MIC: x1.0 (GỐC)",
-        "🎙️ KHUẾCH ĐẠI MIC: x2.0 (VỪA)",
-        "🎙️ KHUẾCH ĐẠI MIC: x3.0 (TO RÕ - KHUYÊN DÙNG)",
-        "🎙️ KHUẾCH ĐẠI MIC: x4.5 (CỰC TO)",
-        "🎙️ KHUẾCH ĐẠI MIC: x6.0 (TỐI ĐA)"
-    };
-
-    private static final String[] BOOST_VALS = new String[] {
-        "1.0",
-        "2.0",
-        "3.0",
-        "4.5",
-        "6.0"
-    };
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -112,18 +78,8 @@ public class MainActivity extends Activity {
         switchVcam = findViewById(R.id.switch_vcam);
         btnOpenFloating = findViewById(R.id.btn_open_floating);
         txtVideoInfo = findViewById(R.id.txt_video_info);
-        txtAudioInfo = findViewById(R.id.txt_audio_info);
-        rgAudioMode = findViewById(R.id.rg_audio_mode);
-        rbAudioVirtual = findViewById(R.id.rb_audio_virtual);
-        rbAudioMix = findViewById(R.id.rb_audio_mix);
-        rbAudioReal = findViewById(R.id.rb_audio_real);
-        btnMainMicBoost = findViewById(R.id.btn_main_mic_boost);
-        if (btnMainMicBoost != null) {
-            btnMainMicBoost.setOnClickListener(v -> cycleMicBoost());
-        }
 
         Button btnPickVideo = findViewById(R.id.btn_pick_video);
-        Button btnPickAudio = findViewById(R.id.btn_pick_audio);
         Button btnApply = findViewById(R.id.btn_apply);
 
         // 0. Sao chép Serial
@@ -190,7 +146,7 @@ public class MainActivity extends Activity {
             }
         });
 
-        // 3. Chọn Video / Audio
+        // 3. Chọn Video
         btnPickVideo.setOnClickListener(v -> {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
                 try {
@@ -203,22 +159,9 @@ public class MainActivity extends Activity {
             }
             Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
             intent.setType("video/*");
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.putExtra(Intent.EXTRA_LOCAL_ONLY, true);
             startActivityForResult(intent, REQ_PICK_VIDEO);
-        });
-
-        btnPickAudio.setOnClickListener(v -> {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
-                try {
-                    Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
-                    intent.setData(Uri.parse("package:" + getPackageName()));
-                    startActivity(intent);
-                    Toast.makeText(this, "Vui lòng bật quyền 'Cho phép quản lý tất cả tệp'!", Toast.LENGTH_LONG).show();
-                    return;
-                } catch (Throwable ignored) {}
-            }
-            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-            intent.setType("audio/*");
-            startActivityForResult(intent, REQ_PICK_AUDIO);
         });
 
         // 4. Lưu cài đặt thủ công
@@ -227,33 +170,6 @@ public class MainActivity extends Activity {
         ensureControlFiles();
         loadCurrentState();
         updateLicenseUI();
-    }
-
-    private void setupAudioModeListener() {
-        if (rgAudioMode == null) return;
-        rgAudioMode.setOnCheckedChangeListener((group, checkedId) -> {
-            int micMode = MIC_MODE_VIRTUAL;
-            if (checkedId == R.id.rb_audio_real) {
-                micMode = MIC_MODE_REAL;
-                writeFlag(FLAG_MIC_DISABLE, true);
-                writeFlag(FLAG_MIC_MIX, false);
-                Toast.makeText(this, "🎙️ Chế độ Micro: Dùng Mic thật", Toast.LENGTH_SHORT).show();
-            } else if (checkedId == R.id.rb_audio_mix) {
-                micMode = MIC_MODE_MIX;
-                writeFlag(FLAG_MIC_DISABLE, false);
-                writeFlag(FLAG_MIC_MIX, true);
-                Toast.makeText(this, "🎙️ Chế độ Micro: Trộn âm thanh Mic + Nhạc", Toast.LENGTH_SHORT).show();
-            } else if (checkedId == R.id.rb_audio_virtual) {
-                micMode = MIC_MODE_VIRTUAL;
-                writeFlag(FLAG_MIC_DISABLE, false);
-                writeFlag(FLAG_MIC_MIX, false);
-                Toast.makeText(this, "🎙️ Chế độ Micro: Phát nhạc ảo", Toast.LENGTH_SHORT).show();
-            }
-            getSharedPreferences(PREF_VCAM, MODE_PRIVATE)
-                    .edit()
-                    .putInt(KEY_MIC_MODE, micMode)
-                    .apply();
-        });
     }
 
     @Override
@@ -400,33 +316,6 @@ public class MainActivity extends Activity {
         switchVcam.setChecked(!isDisabled);
         setupVcamSwitchListener();
 
-        if (rgAudioMode != null) {
-            rgAudioMode.setOnCheckedChangeListener(null);
-        }
-        int mode = MIC_MODE_VIRTUAL;
-        File fDisable = new File("/data/local/tmp/" + FLAG_MIC_DISABLE);
-        File fMix = new File("/data/local/tmp/" + FLAG_MIC_MIX);
-        if (fDisable.exists() || fMix.exists()) {
-            if (isFlagActive(FLAG_MIC_DISABLE)) {
-                mode = MIC_MODE_REAL;
-            } else if (isFlagActive(FLAG_MIC_MIX)) {
-                mode = MIC_MODE_MIX;
-            } else {
-                mode = MIC_MODE_VIRTUAL;
-            }
-        } else {
-            mode = getSharedPreferences(PREF_VCAM, MODE_PRIVATE).getInt(KEY_MIC_MODE, MIC_MODE_VIRTUAL);
-        }
-
-        if (mode == MIC_MODE_REAL) {
-            rbAudioReal.setChecked(true);
-        } else if (mode == MIC_MODE_MIX) {
-            rbAudioMix.setChecked(true);
-        } else {
-            rbAudioVirtual.setChecked(true);
-        }
-        setupAudioModeListener();
-
         File videoFile = new File("/data/local/tmp/" + TARGET_VIDEO);
         if (!videoFile.exists() || videoFile.length() == 0) {
             File sdVideo = new File("/sdcard/" + TARGET_VIDEO);
@@ -439,29 +328,6 @@ public class MainActivity extends Activity {
         } else {
             txtVideoInfo.setText("Chưa có video, hệ thống dùng mặc định");
         }
-
-        File audioFile = new File("/data/local/tmp/" + TARGET_AUDIO);
-        if (!audioFile.exists() || audioFile.length() == 0) {
-            File sdAudio = new File("/sdcard/" + TARGET_AUDIO);
-            if (sdAudio.exists() && sdAudio.length() > 0) {
-                audioFile = sdAudio;
-            }
-        }
-        if (audioFile.exists() && audioFile.length() > 0) {
-            txtAudioInfo.setText("Audio: " + audioFile.getAbsolutePath() + " (" + formatFileSize(audioFile.length()) + ")");
-        } else {
-            txtAudioInfo.setText("Chưa có audio, hệ thống dùng mặc định");
-        }
-
-        String savedBoost = readStringFile("/data/local/tmp/" + FILE_MIC_BOOST);
-        if (savedBoost.isEmpty()) savedBoost = readStringFile("/sdcard/" + FILE_MIC_BOOST);
-        for (int i = 0; i < BOOST_VALS.length; i++) {
-            if (BOOST_VALS[i].equals(savedBoost)) {
-                mCurrentBoostIndex = i;
-                break;
-            }
-        }
-        updateMicBoostUi();
     }
 
     private void applySettings() {
@@ -470,49 +336,11 @@ public class MainActivity extends Activity {
             writeFlag(FLAG_DISABLE, !isChecked);
             FloatingControlService.syncVcamStateFromActivity(isChecked);
 
-            int micMode = MIC_MODE_VIRTUAL;
-            if (rbAudioReal.isChecked()) {
-                micMode = MIC_MODE_REAL;
-                writeFlag(FLAG_MIC_DISABLE, true);
-                writeFlag(FLAG_MIC_MIX, false);
-            } else if (rbAudioMix.isChecked()) {
-                micMode = MIC_MODE_MIX;
-                writeFlag(FLAG_MIC_DISABLE, false);
-                writeFlag(FLAG_MIC_MIX, true);
-            } else {
-                micMode = MIC_MODE_VIRTUAL;
-                writeFlag(FLAG_MIC_DISABLE, false);
-                writeFlag(FLAG_MIC_MIX, false);
-            }
-            getSharedPreferences(PREF_VCAM, MODE_PRIVATE)
-                    .edit()
-                    .putInt(KEY_MIC_MODE, micMode)
-                    .apply();
-
-            writeBoostVal(BOOST_VALS[mCurrentBoostIndex]);
-
             Toast.makeText(this, R.string.toast_saved, Toast.LENGTH_SHORT).show();
             loadCurrentState();
         } catch (Exception e) {
             Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
-    }
-
-    private void cycleMicBoost() {
-        mCurrentBoostIndex = (mCurrentBoostIndex + 1) % BOOST_LABELS.length;
-        updateMicBoostUi();
-        writeBoostVal(BOOST_VALS[mCurrentBoostIndex]);
-        Toast.makeText(this, BOOST_LABELS[mCurrentBoostIndex], Toast.LENGTH_SHORT).show();
-    }
-
-    private void updateMicBoostUi() {
-        if (btnMainMicBoost != null) {
-            btnMainMicBoost.setText(BOOST_LABELS[mCurrentBoostIndex]);
-        }
-    }
-
-    private void writeBoostVal(String val) {
-        writeStringFile("/data/local/tmp/" + FILE_MIC_BOOST, val);
     }
 
     private String readStringFile(String path) {
@@ -553,73 +381,91 @@ public class MainActivity extends Activity {
             Uri uri = data.getData();
             if (requestCode == REQ_PICK_VIDEO) {
                 copyUriToDualLocations(uri, TARGET_VIDEO, getString(R.string.toast_video_updated));
-            } else if (requestCode == REQ_PICK_AUDIO) {
-                copyUriToDualLocations(uri, TARGET_AUDIO, getString(R.string.toast_audio_updated));
             }
         }
     }
 
-    private void copyUriToDualLocations(Uri srcUri, String filename, String successMsg) {
-        File tmpFile = new File("/data/local/tmp/" + filename);
-        File sdFile = new File("/sdcard/" + filename);
+    private void copyUriToDualLocations(final Uri srcUri, final String filename, final String successMsg) {
+        Toast.makeText(this, "⏳ Đang nhập video mới...", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            File tmpFile = new File("/data/local/tmp/" + filename);
+            File sdFile = new File("/sdcard/" + filename);
+            boolean success = false;
+            long savedSize = 0;
 
-        boolean wroteTmp = false;
-        boolean wroteSd = false;
-
-        // 1. Luôn ghi vào /data/local/tmp/ (thư mục 777 không bị Scoped Storage chặn)
-        try {
-            InputStream in = getContentResolver().openInputStream(srcUri);
-            if (in != null) {
-                if (!tmpFile.exists()) {
+            // 1. Ghi trực tiếp vào /data/local/tmp/ (Nơi VCam Framework ưu tiên đọc số 1)
+            try {
+                InputStream in = getContentResolver().openInputStream(srcUri);
+                if (in != null) {
+                    try { if (tmpFile.exists()) tmpFile.delete(); } catch (Throwable ignored) {}
                     try { tmpFile.createNewFile(); } catch (Throwable ignored) {}
+                    OutputStream out = new FileOutputStream(tmpFile);
+                    byte[] buf = new byte[65536];
+                    int len;
+                    while ((len = in.read(buf)) > 0) {
+                        out.write(buf, 0, len);
+                    }
+                    in.close();
+                    out.flush();
+                    out.close();
+                    try {
+                        tmpFile.setReadable(true, false);
+                        tmpFile.setWritable(true, false);
+                    } catch (Throwable ignored) {}
+                    if (tmpFile.length() > 0) {
+                        success = true;
+                        savedSize = tmpFile.length();
+                        Log.i("CameraAssistant", "Đã lưu video vào /data/local/tmp: " + savedSize + " bytes");
+                    }
                 }
-                OutputStream out = new FileOutputStream(tmpFile);
-                byte[] buf = new byte[32768];
-                int len;
-                while ((len = in.read(buf)) > 0) {
-                    out.write(buf, 0, len);
-                }
-                in.close();
-                out.flush();
-                out.close();
-                tmpFile.setReadable(true, false);
-                tmpFile.setWritable(true, false);
-                wroteTmp = (tmpFile.length() > 0);
+            } catch (Throwable t) {
+                Log.e("CameraAssistant", "Lỗi ghi vào /data/local/tmp: " + t.getMessage(), t);
             }
-        } catch (Throwable t) {
-            Log.e("CameraAssistant", "Ghi /data/local/tmp thất bại: " + t.getMessage(), t);
-        }
 
-        // 2. Đồng thời sao chép sang /sdcard/
-        try {
-            InputStream inSd = getContentResolver().openInputStream(srcUri);
-            if (inSd != null) {
-                if (!sdFile.exists()) {
+            // 2. Ghi bản sao sang /sdcard/ để dự phòng
+            try {
+                InputStream inSd = getContentResolver().openInputStream(srcUri);
+                if (inSd != null) {
+                    try { if (sdFile.exists()) sdFile.delete(); } catch (Throwable ignored) {}
                     try { sdFile.createNewFile(); } catch (Throwable ignored) {}
+                    OutputStream outSd = new FileOutputStream(sdFile);
+                    byte[] buf = new byte[65536];
+                    int len;
+                    while ((len = inSd.read(buf)) > 0) {
+                        outSd.write(buf, 0, len);
+                    }
+                    inSd.close();
+                    outSd.flush();
+                    outSd.close();
+                    try {
+                        sdFile.setReadable(true, false);
+                        sdFile.setWritable(true, false);
+                    } catch (Throwable ignored) {}
+                    if (sdFile.length() > 0) {
+                        if (!success) {
+                            success = true;
+                            savedSize = sdFile.length();
+                        }
+                        Log.i("CameraAssistant", "Đã lưu video dự phòng vào /sdcard: " + sdFile.length() + " bytes");
+                    }
                 }
-                OutputStream outSd = new FileOutputStream(sdFile);
-                byte[] buf = new byte[32768];
-                int len;
-                while ((len = inSd.read(buf)) > 0) {
-                    outSd.write(buf, 0, len);
-                }
-                inSd.close();
-                outSd.flush();
-                outSd.close();
-                sdFile.setReadable(true, false);
-                sdFile.setWritable(true, false);
-                wroteSd = (sdFile.length() > 0);
+            } catch (Throwable t) {
+                Log.w("CameraAssistant", "Ghi đệm /sdcard bỏ qua: " + t.getMessage());
             }
-        } catch (Throwable t) {
-            Log.e("CameraAssistant", "Ghi /sdcard thất bại: " + t.getMessage(), t);
-        }
 
-        if (wroteTmp || wroteSd) {
-            Toast.makeText(this, successMsg, Toast.LENGTH_SHORT).show();
-            loadCurrentState();
-        } else {
-            Toast.makeText(this, "Không thể lưu tệp! Vui lòng cấp quyền Quản lý tệp.", Toast.LENGTH_LONG).show();
-        }
+            final boolean finalSuccess = success;
+            final long finalSize = savedSize;
+            runOnUiThread(() -> {
+                if (finalSuccess) {
+                    // Phát tín hiệu reset để Camera đang mở tự động tua/load video mới
+                    writeFlag("vcam_reset", true);
+                    Toast.makeText(this, successMsg + " (" + formatFileSize(finalSize) + ")", Toast.LENGTH_SHORT).show();
+                    loadCurrentState();
+                } else {
+                    Toast.makeText(this, "Không thể lưu video! Vui lòng kiểm tra quyền bộ nhớ.", Toast.LENGTH_LONG).show();
+                }
+            });
+        }).start();
     }
 
     private String formatFileSize(long bytes) {
@@ -632,28 +478,47 @@ public class MainActivity extends Activity {
 
     private void ensureControlFiles() {
         String[] files = new String[] {
-            FLAG_DISABLE, FLAG_MIC_DISABLE, FLAG_MIC_MIX,
-            FILE_MIC_BOOST, TARGET_VIDEO, TARGET_AUDIO
+            FLAG_DISABLE, TARGET_VIDEO
         };
         for (String fName : files) {
             try {
-                File f = new File("/data/local/tmp/" + fName);
-                if (!f.exists()) {
-                    f.createNewFile();
+                File fSd = new File("/sdcard/" + fName);
+                if (!fSd.exists()) {
+                    fSd.createNewFile();
                 }
-                f.setReadable(true, false);
-                f.setWritable(true, false);
+                fSd.setReadable(true, false);
+                fSd.setWritable(true, false);
+            } catch (Throwable ignored) {}
+
+            try {
+                File fTmp = new File("/data/local/tmp/" + fName);
+                if (!fTmp.exists()) {
+                    fTmp.createNewFile();
+                }
+                fTmp.setReadable(true, false);
+                fTmp.setWritable(true, false);
             } catch (Throwable ignored) {}
         }
     }
 
     private boolean isFlagActive(String name) {
-        String val = readStringFile("/data/local/tmp/" + name);
+        String val = readStringFileDual(name);
         return "1".equals(val) || "true".equalsIgnoreCase(val);
     }
 
     private void writeFlag(String name, boolean active) {
         Log.i("CameraAssistant", "MainActivity writeFlag: " + name + " -> " + active);
-        writeStringFile("/data/local/tmp/" + name, active ? "1" : "0");
+        writeStringFileDual(name, active ? "1" : "0");
+    }
+
+    private String readStringFileDual(String filename) {
+        String s = readStringFile("/sdcard/" + filename);
+        if (!s.isEmpty()) return s;
+        return readStringFile("/data/local/tmp/" + filename);
+    }
+
+    private void writeStringFileDual(String filename, String val) {
+        writeStringFile("/sdcard/" + filename, val);
+        writeStringFile("/data/local/tmp/" + filename, val);
     }
 }

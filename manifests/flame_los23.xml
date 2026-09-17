@@ -11,3 +11,4 @@
   <project name="TheMuppets/proprietary_vendor_google_flame" path="vendor/google/flame" remote="github" revision="lineage-23.2" />
   <project name="TheMuppets/proprietary_vendor_google_coral" path="vendor/google/coral" remote="github" revision="lineage-23.2" />
 </manifest>
+
