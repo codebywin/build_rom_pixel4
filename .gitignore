@@ -30,4 +30,7 @@ org.lineageos.camera.assistant/keystore.properties
 !manifests/*.xml
 
 pyinstxtractor.py
+crave.bin
+crave.bin_extracted/
+commit-push.bat
 

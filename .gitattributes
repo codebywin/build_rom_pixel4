@@ -8,6 +8,8 @@
 *.bp text eol=lf
 *.rc text eol=lf
 *.te text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
 
 # Windows batch files
 *.bat text eol=crlf

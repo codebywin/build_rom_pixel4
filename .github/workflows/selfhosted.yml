@@ -30,9 +30,9 @@ on:
           - 'CyanogenMOD 14.1'
           - 'AOSP'
       BUILD_DIFFERENT_ROM:
-        description: "Command to initialize a different 'repo' project:"
+        description: "Command to initialize a different 'repo' project (leave default to use base project):"
         required: false
-        default: "repo init -u https://github.com/LineageOS/android.git -b lineage-23.2 --git-lfs --depth=1"
+        default: "echo 'Build Starting!'"
       REMOVALS:
         description: "Folders to be removed before syncing:"
         required: false
@@ -96,8 +96,8 @@ jobs:
         case "${{ github.event.inputs.BASE_PROJECT }}" in
         "LineageOS 23.2 (Android 16)")
           export PROJECTFOLDER="/crave-devspaces/Lineage23"
-          export PROJECTID="72"
-          export REPO_INIT="repo init -u https://github.com/LineageOS/android.git -b lineage-23.2 --git-lfs --depth=1"
+          export PROJECTID="99"
+          export REPO_INIT="repo init -u https://github.com/accupara/los23.2.git -b lineage-23.2 --git-lfs --depth=1"
         ;;
         "ArrowOS 13.1")
           export PROJECTFOLDER="/crave-devspaces/Arrow13"
