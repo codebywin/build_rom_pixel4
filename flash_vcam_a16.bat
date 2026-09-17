@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 chcp 65001 >nul
 title VCam A16 Auto Patcher - Pixel 4 (flame)
 color 0B
