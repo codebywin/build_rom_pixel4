@@ -2,12 +2,6 @@ diff --git a/core/java/android/hardware/Camera.java b/core/java/android/hardware
 index 14d8a28..b1e35f7 100644
 --- a/core/java/android/hardware/Camera.java
 +++ b/core/java/android/hardware/Camera.java
-@@ -1,4 +1,4 @@
--/*
-+∩╗┐/*
-  * Copyright (C) 2008 The Android Open Source Project
-  *
-  * Licensed under the Apache License, Version 2.0 (the "License");
 @@ -493,7 +493,7 @@ public class Camera {
      public static Camera open(int cameraId) {
          Context context = ActivityThread.currentApplication().getApplicationContext();
@@ -57,12 +51,6 @@ diff --git a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java b/cor
 index 545be8f..4cad38c 100644
 --- a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
 +++ b/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
-@@ -1,4 +1,4 @@
--/*
-+∩╗┐/*
-  * Copyright (C) 2013 The Android Open Source Project
-  *
-  * Licensed under the Apache License, Version 2.0 (the "License");
 @@ -983,6 +983,7 @@ public class CameraDeviceImpl extends CameraDevice
              CameraAccessException pendingException = null;
              Surface input = null;
@@ -1176,7 +1164,7 @@ new file mode 100644
 +                    }
 +                } catch (Throwable ignored) {}
 +
-+                // Táº¡o dummy surface Ä‘á»™c láº­p cho tá»«ng stream
++                // Tao dummy surface doc lap cho tung stream
 +                SurfaceTexture dummyTex = new SurfaceTexture(200 + (streamIndex++));
 +                dummyTex.setDefaultBufferSize(width, height);
 +                Surface dummySurf = new Surface(dummyTex);
@@ -1519,7 +1507,7 @@ new file mode 100644
 +                EGL14.eglSwapInterval(mEGLDisplay, 0);
 +            } catch (Throwable ignored) {}
 +
-+            // Táº¡o external OES texture
++            // Tao external OES texture
 +            int[] textures = new int[1];
 +            GLES20.glGenTextures(1, textures, 0);
 +            mTextureId = textures[0];

@@ -104,18 +104,24 @@ apply_patch() {
     curl -sL "$patch_url" > "$tmp_patch"
     # FIX: Strip Windows CRLF line endings
     sed -i 's/\r$//' "$tmp_patch"
-    # FIX BUG#1: Strip UTF-8 BOM (EF BB BF) từ patch để tránh lỗi compile Java
-    # BOM trong patch sẽ được ghi vào Java source files gây: "error: illegal character: '\ufeff'"
+    # FIX: Strip UTF-8 BOM (EF BB BF) và chuỗi ký tự rác (∩╗┐: E2 88 A9 E2 95 97 E2 94 90)
     sed -i 's/\xef\xbb\xbf//g' "$tmp_patch"
+    sed -i 's/\xe2\x88\xa9\xe2\x95\x97\xe2\x94\x90//g' "$tmp_patch"
 
-    if git -C "$target_dir" apply --ignore-space-change --ignore-whitespace --check "$tmp_patch" 2>/dev/null; then
-        if git -C "$target_dir" apply --ignore-space-change --ignore-whitespace "$tmp_patch" 2>/dev/null; then
+    if git -C "$target_dir" apply --ignore-space-change --ignore-whitespace --check "$tmp_patch" >/dev/null 2>&1; then
+        if git -C "$target_dir" apply --ignore-space-change --ignore-whitespace "$tmp_patch"; then
             echo "   [SUCCESS] Applied ${patch_name}"
         else
             echo "   [WARNING] Patch ${patch_name} check passed but apply failed, continuing..."
         fi
     else
-        echo "   [WARNING] Patch ${patch_name} check failed or already applied, skipping."
+        # Kiểm tra xem patch đã được apply từ trước chưa
+        if git -C "$target_dir" apply --reverse --check "$tmp_patch" >/dev/null 2>&1; then
+            echo "   [INFO] Patch ${patch_name} is already applied, skipping."
+        else
+            echo "   [WARNING] Patch ${patch_name} check failed! Details:"
+            git -C "$target_dir" apply --ignore-space-change --ignore-whitespace --check "$tmp_patch" || true
+        fi
     fi
 }
 
