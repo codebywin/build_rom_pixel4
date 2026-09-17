@@ -10,11 +10,11 @@ LUNCH_COMMAND="${1:-lunch lineage_flame-userdebug}"
 BUILD_COMMAND="${2:-mka bacon}"
 LOCAL_MANIFEST_URL="${3:-}"
 LOCAL_MANIFEST_BRANCH="${4:-lineage-23.2}"
-BUILD_USERNAME="${5:-appbywin}"
+BUILD_USERNAME="${5:-codebywin}"
 REMOVALS="${6:-}"
 BUILD_DIFFERENT_ROM="${7:-echo 'Build Starting!'}"
 REPO_REF="${8:-main}"
-REPO_NAME="${9:-appbywin/lineageOS_pixel4_a16}"
+REPO_NAME="${9:-codebywin/test_build_rom_lineageOS_px4}"
 
 if [ -z "$LOCAL_MANIFEST_URL" ]; then
     LOCAL_MANIFEST_URL="https://raw.githubusercontent.com/${REPO_NAME}/${REPO_REF}/manifests/flame_los23.xml"

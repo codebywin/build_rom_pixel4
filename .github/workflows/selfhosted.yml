@@ -39,7 +39,7 @@ on:
       LOCAL_MANIFEST:
         description: "Personal local manifest [repository or raw]:"
         required: true
-        default: 'https://raw.githubusercontent.com/appbywin/lineageOS_pixel4_a16/main/manifests/flame_los23.xml'
+        default: 'https://raw.githubusercontent.com/codebywin/test_build_rom_lineageOS_px4/main/manifests/flame_los23.xml'
       LOCAL_MANIFEST_BRANCH:
         description: "Personal local manifest's branch:"
         required: false
