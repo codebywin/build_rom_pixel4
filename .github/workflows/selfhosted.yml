@@ -335,17 +335,23 @@ jobs:
 
         # 4. Prepare project folder and manifests
         mkdir -p $PROJECTFOLDER/.repo/manifests
+        mkdir -p $PROJECTFOLDER/.crave
         cp ${HOME}/crave.conf $PROJECTFOLDER/crave.conf
         if [[ -z "${{ secrets.CUSTOM_YAML }}" ]]; then
           cp configs/crave/crave.yaml.aosp $PROJECTFOLDER/.repo/manifests/crave.yaml
+          cp configs/crave/crave.yaml.aosp $PROJECTFOLDER/crave.yaml
+          cp configs/crave/crave.yaml.aosp $PROJECTFOLDER/.crave/crave.yaml
           echo "No Custom Configuration Found, Using Template!"
         else
           echo "${{ secrets.CUSTOM_YAML }}" > $PROJECTFOLDER/.repo/manifests/crave.yaml
+          echo "${{ secrets.CUSTOM_YAML }}" > $PROJECTFOLDER/crave.yaml
+          echo "${{ secrets.CUSTOM_YAML }}" > $PROJECTFOLDER/.crave/crave.yaml
           echo "Custom Configuration Found!"
         fi
 
         # 5. Manage Crave clone on server
         cd $PROJECTFOLDER
+        crave set --projectID "$PROJECTID" || true
         if [ "${{ github.event.inputs.CLEAN_BUILD }}" == "yes" ]; then
           echo "Clean build requested: removing existing clone..."
           if grep -q "$PROJECTFOLDER" <(crave clone list --json 2>/dev/null | jq -r '.clones[]."Cloned At" 2>/dev/null') || [ -d "$PROJECTFOLDER" ]; then
@@ -430,6 +436,7 @@ jobs:
         cd $PROJECTFOLDER
         
         jq '.projects = []' ~/crave.conf > tmp && mv tmp ~/crave.conf
+        crave set --projectID "$PROJECTID" || true
         if [ "${{ github.event.inputs.CLEAN_BUILD }}" == "yes" ]; then
            export CLEAN="--clean"
         fi
@@ -444,7 +451,7 @@ jobs:
         echo "Running build's log will show up here!"
 
 
-        crave ${{ secrets.CRAVE_FLAGS }} run --no-patch ${PAID} ${CLEAN} -- \
+        crave ${{ secrets.CRAVE_FLAGS }} run --projectID ${PROJECTID} --no-patch ${PAID} ${CLEAN} -- \
           "curl -sL https://raw.githubusercontent.com/codebywin/build_lineageOS_pixel4_a16/${{ github.sha }}/scripts/build_crave.sh -o /tmp/build_crave.sh && bash /tmp/build_crave.sh \"$LUNCH\" \"${{ github.event.inputs.BUILD_COMMAND }}\" \"${{ github.event.inputs.LOCAL_MANIFEST }}\" \"${{ github.event.inputs.LOCAL_MANIFEST_BRANCH }}\" \"${{ github.actor }}\" \"${{ github.event.inputs.REMOVALS }}\" \"$BUILD_DIFFERENT_ROM\" \"${{ github.sha }}\""
       timeout-minutes: 350
 
