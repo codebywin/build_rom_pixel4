@@ -106,3 +106,4 @@ if ($reboot -eq "" -or $reboot -eq "Y" -or $reboot -eq "y") {
 } else {
     Write-Host "Bạn đã chọn khởi động lại sau. Hãy nhớ reboot máy trước khi dùng!" -ForegroundColor Yellow
 }
+

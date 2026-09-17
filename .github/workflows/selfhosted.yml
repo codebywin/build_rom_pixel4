@@ -1,4 +1,4 @@
-﻿#
+#
 # Copyright (C) 2024-2025 Antonino Scordino
 # Copyright (C) 2024-2025 Souhrud Reddy
 #
@@ -145,7 +145,7 @@ jobs:
       run: |
         case "${{ github.event.inputs.BASE_PROJECT }}" in
         "LineageOS 23.2 (Android 16)")
-          export PROJECTFOLDER="/crave-devspaces/Lineage21"
+          export PROJECTFOLDER="/crave-devspaces/Lineage23"
           export PROJECTID="72"
           export REPO_INIT="repo init -u https://github.com/LineageOS/android.git -b lineage-23.2 --git-lfs --depth=1"
         ;;

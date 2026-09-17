@@ -15,7 +15,8 @@ build/
 # Keystores and private credentials
 *.keystore
 keystore.properties
-crave.conf
+crave*.conf
+*.conf
 *.pem
 *.key
 
@@ -27,3 +28,4 @@ org.lineageos.camera.assistant/keystore.properties
 
 # Allow XML manifests
 !manifests/*.xml
+

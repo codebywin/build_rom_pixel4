@@ -2,8 +2,10 @@ android_app_import {
     name: "CameraAssistant",
     apk: "CameraAssistant.apk",
     certificate: "platform",
+    // FIX WARN#2: privileged:true → vào /system/priv-app (có đủ quyền system)
+    // product_specific:true sẽ đặt vào /product/app với privilege thấp hơn → không đủ quyền
+    privileged: true,
     dex_preopt: {
         enabled: false,
     },
-    product_specific: true,
 }

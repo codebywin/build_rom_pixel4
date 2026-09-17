@@ -13,6 +13,11 @@ LOS 21:
   ignoreClientHostname: true
 LOS 22:
   ignoreClientHostname: true
+# FIX BUG#2: Thêm entry cho LineageOS 23.2 (Android 16) — thiếu entry này sẽ không match đúng project pool
+LOS 23:
+  ignoreClientHostname: true
+LOS 23.2:
+  ignoreClientHostname: true
 PixelOS:
   ignoreClientHostname: true
 Rising OS:

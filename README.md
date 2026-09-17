@@ -40,3 +40,4 @@ Repository này hỗ trợ tự động build ROM xuất xưởng trên máy ch�
 2. Patch VCam A16: `patches/vcam_pixel4_a16.patch`
 3. Patch SELinux: `patches/sepolicy_vcam_coral.patch`
 4. Workflow tự động: `.github/workflows/selfhosted.yml`
+

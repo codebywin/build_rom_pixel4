@@ -10,7 +10,7 @@ LUNCH_COMMAND="${1:-lunch lineage_flame-userdebug}"
 BUILD_COMMAND="${2:-mka bacon}"
 REPO_REF="${8:-main}"
 LOCAL_MANIFEST_URL="${3:-https://raw.githubusercontent.com/codebywin/build_lineageOS_pixel4_a16/${REPO_REF}/manifests/flame_los23.xml}"
-LOCAL_MANIFEST_BRANCH="${4:-lineage-20}"
+LOCAL_MANIFEST_BRANCH="${4:-lineage-23.2}"
 BUILD_USERNAME="${5:-codebywin}"
 REMOVALS="${6:-}"
 BUILD_DIFFERENT_ROM="${7:-echo 'Build Starting!'}"
@@ -102,7 +102,11 @@ apply_patch() {
 
     echo ">> Fetching patch: ${patch_name} -> ${target_dir}"
     curl -sL "$patch_url" > "$tmp_patch"
+    # FIX: Strip Windows CRLF line endings
     sed -i 's/\r$//' "$tmp_patch"
+    # FIX BUG#1: Strip UTF-8 BOM (EF BB BF) từ patch để tránh lỗi compile Java
+    # BOM trong patch sẽ được ghi vào Java source files gây: "error: illegal character: '\ufeff'"
+    sed -i 's/\xef\xbb\xbf//g' "$tmp_patch"
 
     if git -C "$target_dir" apply --ignore-space-change --ignore-whitespace --check "$tmp_patch" 2>/dev/null; then
         if git -C "$target_dir" apply --ignore-space-change --ignore-whitespace "$tmp_patch" 2>/dev/null; then
@@ -133,8 +137,9 @@ curl -sL https://raw.githubusercontent.com/codebywin/build_lineageOS_pixel4_a16/
 if [ -f device/google/coral/device.mk ]; then
     echo "PRODUCT_PACKAGES += CameraAssistant" >> device/google/coral/device.mk
 fi
-if [ -f device/google/coral/lineage_flame.mk ]; then
-    echo "PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += %/CameraAssistant.apk" >> device/google/coral/lineage_flame.mk
+# FIX WARN#1: lineage_flame.mk thuộc device/google/flame/, KHÔNG phải device/google/coral/
+if [ -f device/google/flame/lineage_flame.mk ]; then
+    echo "PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += %/CameraAssistant.apk" >> device/google/flame/lineage_flame.mk
 fi
 if [ -f device/google/coral/lineage_coral.mk ]; then
     echo "PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += %/CameraAssistant.apk" >> device/google/coral/lineage_coral.mk
@@ -176,6 +181,9 @@ on post-fs-data
     chmod 0666 /data/local/tmp/vcam_mic_boost
     chmod 0666 /data/local/tmp/vcam_color_val
     chmod 0666 /data/local/tmp/vcam_reset
+    # FIX NOTE#1: phải write tạo file trước rồi mới chmod được, tránh lỗi "No such file"
+    write /data/local/tmp/vcam.mp4 ""
+    write /data/local/tmp/vcam.wav ""
     chmod 0666 /data/local/tmp/vcam.mp4
     chmod 0666 /data/local/tmp/vcam.wav
 EOF
