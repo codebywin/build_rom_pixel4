@@ -45,21 +45,6 @@
            revision="e19fb8e954082e550ef8803624dfb0cd1bbec613"
            upstream="refs/heads/lineage-23.2" />
 
-  <!-- Sound Trigger HAL: athletico — pinned SHA từ build 20260910 -->
-  <project name="LineageOS/android_hardware_knowles_athletico_sound_trigger_hal"
-           path="hardware/knowles/athletico/sound_trigger_hal"
-           remote="github"
-           revision="16e4d7f6d3201905f103d36ff7195d9e21ce1671"
-           upstream="refs/heads/lineage-23.2"
-           groups="coral" />
-
-  <!-- Active Edge Service: ElmyraService — pinned SHA từ build 20260910 -->
-  <project name="LineageOS/android_packages_apps_ElmyraService"
-           path="packages/apps/ElmyraService"
-           remote="github"
-           revision="baab2beb7165caef27b4ee235641775e9d189acc"
-           upstream="refs/heads/lineage-23.2" />
-
   <!--
     Proprietary Vendor Blobs (TheMuppets)
     NOTE: TheMuppets không có SHA cụ thể trong build-manifest.xml (private).
