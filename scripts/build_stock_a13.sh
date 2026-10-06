@@ -295,6 +295,11 @@ if [ "$STOCK_MODE" == "1" ]; then
     m api-stubs-docs-non-updatable-update-current-api 2>/dev/null || true
 fi
 
+if [ "$GAPPS_MODE" == "1" ]; then
+    echo -e "${CYAN}>> Làm sạch thư mục ảnh đĩa phân vùng để tích hợp GApps (installclean)...${NC}"
+    m installclean 2>/dev/null || true
+fi
+
 echo -e "${GREEN}>> Đang build AOSP với ${CPU_CORES} luồng...${NC}"
 m -j"${CPU_CORES}"
 
