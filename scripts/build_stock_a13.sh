@@ -176,7 +176,8 @@ if [ "$STOCK_MODE" == "1" ]; then
 
     apply_patch "frameworks/base" "vcam_pixel4.patch"
     apply_patch "frameworks/base" "spoof_locked_bootloader.patch"
-    apply_patch "system/core" "init_spoof_bootloader.patch"
+    # Không áp init_spoof_bootloader vào boot.img để tránh làm fastbootd bị nhận nhầm là locked device
+    # apply_patch "system/core" "init_spoof_bootloader.patch"
     apply_patch "frameworks/base" "disable_flag_secure.patch"
     apply_patch "frameworks/base" "hide_developer_options.patch"
     apply_patch "frameworks/base" "hide_accessibility_services.patch"
