@@ -226,12 +226,12 @@ if [ "$STOCK_MODE" == "1" ]; then
     python3 - << 'PYEOF'
 import os
 
-hook_code = """        for (StackTraceElement elem : Thread.currentThread().getStackTrace()) {
+hook_code = """
+        for (StackTraceElement elem : Thread.currentThread().getStackTrace()) {
             if (elem.getClassName().contains("DroidGuard")) {
                 throw new UnsupportedOperationException();
             }
-        }
-"""
+        }"""
 
 for root, _, files in os.walk("frameworks/base/keystore"):
     for f in files:
@@ -241,7 +241,7 @@ for root, _, files in os.walk("frameworks/base/keystore"):
                 content = fp.read()
             target = "public Certificate[] engineGetCertificateChain(String alias) {"
             if target in content and "DroidGuard" not in content:
-                content = content.replace(target, target + "\\n" + hook_code, 1)
+                content = content.replace(target, target + hook_code, 1)
                 with open(filepath, "w", encoding="utf-8") as fp:
                     fp.write(content)
                 print(f"   [HOOK OK] Injected DroidGuard fallback into {filepath}")
