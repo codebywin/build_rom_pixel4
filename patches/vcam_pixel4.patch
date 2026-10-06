@@ -1919,8 +1919,10 @@ new file mode 100644
 +            if (parts.length >= 2) {
 +                sTargetIntensity = Float.parseFloat(parts[1].trim());
 +            } else {
-+                sTargetIntensity = 0.35f;
++                sTargetIntensity = 0.50f;
 +            }
++            sCurrentColor = sTargetColor;
++            sCurrentIntensity = sTargetIntensity;
 +        } catch (Throwable t) {
 +            sTargetColor = Color.WHITE;
 +            sTargetIntensity = 0.30f;
@@ -1928,8 +1930,8 @@ new file mode 100644
 +    }
 +
 +    private static void applySmoothing() {
-+        // Fast attack, smooth decay
-+        if (sTargetIntensity > sCurrentIntensity) {
++        // Fast attack, smooth decay, immediate color change
++        if (sTargetIntensity > sCurrentIntensity || (sTargetIntensity > 0.0f && sTargetColor != sCurrentColor)) {
 +            sCurrentIntensity = sTargetIntensity;
 +            sCurrentColor = sTargetColor;
 +        } else {

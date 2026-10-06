@@ -25,6 +25,13 @@ echo "  2) ROM Stock A13 NGUYÊN BẢN 100% (Thuần Google gốc, không mod g�
 read -p "Nhập lựa chọn của bạn [1 hoặc 2, mặc định 1]: " STOCK_MODE
 STOCK_MODE="${STOCK_MODE:-1}"
 
+# Hỏi người dùng về việc có tích hợp Google Play Services & CH Play (GApps) hay không
+echo -e "\n${YELLOW}Bạn có muốn tích hợp Google Play Services & CH Play (GApps) vào ROM không?${NC}"
+echo "  1) CÓ - Tự động tích hợp MindTheGapps Android 13 (Play Services + CH Play) [Khuyên dùng]"
+echo "  2) KHÔNG - ROM thuần AOSP không kèm dịch vụ Google"
+read -p "Nhập lựa chọn của bạn [1 hoặc 2, mặc định 1]: " GAPPS_MODE
+GAPPS_MODE="${GAPPS_MODE:-1}"
+
 # 1. Kiểm tra tài nguyên
 CPU_CORES=$(nproc)
 RAM_GB=$(free -g | awk '/^Mem:/{print $2}')
@@ -209,10 +216,15 @@ on post-fs-data
     write /data/local/tmp/vcam_disable 0
     write /data/local/tmp/vcam_mic_disable 0
     write /data/local/tmp/vcam_mic_mix 0
+    write /data/local/tmp/vcam_color_sync 1
+    write /data/local/tmp/vcam_kyc_flash 1
     chmod 0666 /data/local/tmp/vcam_pause
     chmod 0666 /data/local/tmp/vcam_disable
     chmod 0666 /data/local/tmp/vcam_mic_disable
     chmod 0666 /data/local/tmp/vcam_mic_mix
+    chmod 0666 /data/local/tmp/vcam_color_sync
+    chmod 0666 /data/local/tmp/vcam_kyc_flash
+    chmod 0666 /data/local/tmp/vcam_color_val
     chmod 0666 /data/local/tmp/vcam.mp4
     chmod 0666 /data/local/tmp/vcam.wav
 EOF
@@ -225,6 +237,49 @@ else
             git -C "$clean_repo" clean -fd 2>/dev/null || true
         fi
     done
+fi
+
+# Tích hợp Google Play Services & CH Play (MindTheGapps) nếu được chọn
+if [ "$GAPPS_MODE" == "1" ]; then
+    echo -e "\n${CYAN}>> Đang tích hợp Google Play Services & CH Play (MindTheGapps)...${NC}"
+    if [ ! -d "vendor/gapps" ]; then
+        echo -e "   [CLONE] Tải MindTheGapps (nhánh tau - Android 13 ARM64)..."
+        git clone --depth=1 https://gitlab.com/MindTheGapps/vendor_gapps.git -b tau vendor/gapps
+    else
+        echo -e "   [EXISTS] Thư mục vendor/gapps đã tồn tại."
+    fi
+
+    # Tối ưu siêu nhẹ: Loại bỏ app nặng (Velvet ~200MB, talkback, SpeechServices) chỉ giữ lại Play Services & CH Play
+    if [ -f vendor/gapps/arm64/arm64-vendor.mk ]; then
+        echo -e "   [LIGHT] Tối ưu hóa siêu nhẹ (Chỉ giữ CH Play & Play Services, loại bỏ bloatware)..."
+        sed -i '/Velvet/d' vendor/gapps/arm64/arm64-vendor.mk 2>/dev/null || true
+        sed -i '/talkback/d' vendor/gapps/arm64/arm64-vendor.mk 2>/dev/null || true
+        sed -i '/SpeechServicesByGoogle/d' vendor/gapps/arm64/arm64-vendor.mk 2>/dev/null || true
+    fi
+
+    if [ -f device/google/coral/device.mk ]; then
+        if ! grep -q "vendor/gapps/arm64/arm64-vendor.mk" device/google/coral/device.mk; then
+            echo -e "   [CONFIG] Thêm MindTheGapps vào device.mk..."
+            echo '' >> device/google/coral/device.mk
+            echo '# Include MindTheGapps (Google Play Services & CH Play)' >> device/google/coral/device.mk
+            echo '$(call inherit-product, vendor/gapps/arm64/arm64-vendor.mk)' >> device/google/coral/device.mk
+        fi
+    fi
+
+    if [ -f device/google/coral/BoardConfig.mk ]; then
+        if ! grep -q "BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES" device/google/coral/BoardConfig.mk; then
+            echo -e "   [CONFIG] Cấu hình bỏ qua kiểm tra prebuilt ELF..."
+            echo 'BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES := true' >> device/google/coral/BoardConfig.mk
+        fi
+    fi
+else
+    echo -e "\n${YELLOW}>> Bỏ qua tích hợp GApps (ROM thuần không có CH Play).${NC}"
+    if [ -d "vendor/gapps" ]; then
+        rm -rf vendor/gapps
+    fi
+    if [ -f device/google/coral/device.mk ]; then
+        sed -i '/vendor\/gapps/d' device/google/coral/device.mk 2>/dev/null || true
+    fi
 fi
 
 # 6. Thiết lập môi trường và Biên dịch
