@@ -151,7 +151,7 @@ index 8be1bcd..9b53b26 100644
      }
  
      /**
-@@ -1686,8 +1695,12 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
+@@ -1686,7 +1695,11 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
              return ERROR_BAD_VALUE;
          }
  

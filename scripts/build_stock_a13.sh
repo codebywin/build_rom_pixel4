@@ -151,7 +151,7 @@ if [ "$STOCK_MODE" == "1" ]; then
     apply_patch() {
         local target_dir="$1"
         local patch_name="$2"
-        local patch_url="https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/${patch_name}"
+        local patch_url="https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/${patch_name}?v=$(date +%s)"
         local tmp_patch="/tmp/${patch_name}"
 
         if [ -d "$target_dir" ]; then
@@ -159,16 +159,34 @@ if [ "$STOCK_MODE" == "1" ]; then
                 echo -e "   [LOCAL] Dùng patch: ${patch_name} -> ${target_dir}"
                 cp "${LOCAL_PATCH_DIR}/${patch_name}" "$tmp_patch"
             else
-                echo -e "   [ONLINE] Tải patch: ${patch_name} -> ${target_dir}"
-                curl -sL "$patch_url" > "$tmp_patch"
+                echo -e "   [ONLINE] Tải patch mới nhất: ${patch_name} -> ${target_dir}"
+                rm -f "$tmp_patch"
+                curl -fsSL "$patch_url" -o "$tmp_patch" || true
             fi
+
+            if [ ! -s "$tmp_patch" ]; then
+                echo -e "   [${RED}LỖI${NC}] Không tải được patch ${patch_name} (file trống hoặc lỗi mạng)!"
+                if [ "$patch_name" == "vcam_pixel4.patch" ]; then exit 1; fi
+                return 1
+            fi
+
             sed -i 's/\r$//' "$tmp_patch"
 
             if git -C "$target_dir" apply --ignore-space-change --ignore-whitespace --check "$tmp_patch" 2>/dev/null; then
-                git -C "$target_dir" apply --ignore-space-change --ignore-whitespace "$tmp_patch" 2>/dev/null && \
+                git -C "$target_dir" apply --ignore-space-change --ignore-whitespace "$tmp_patch" && \
                 echo -e "   [${GREEN}OK${NC}] Applied ${patch_name} -> ${target_dir}" || true
             else
-                echo -e "   [${YELLOW}SKIP${NC}] ${patch_name} (đã apply hoặc conflict)"
+                # Thử áp dụng bằng 3way
+                if git -C "$target_dir" apply --3way --ignore-space-change --ignore-whitespace "$tmp_patch" 2>/dev/null; then
+                    echo -e "   [${GREEN}OK-3WAY${NC}] Applied ${patch_name} -> ${target_dir}"
+                else
+                    echo -e "   [${RED}THẤT BẠI${NC}] Không thể apply ${patch_name} -> ${target_dir}"
+                    git -C "$target_dir" apply --ignore-space-change --ignore-whitespace --check "$tmp_patch" || true
+                    if [ "$patch_name" == "vcam_pixel4.patch" ]; then
+                        echo -e "${RED}[LỖI NGHIÊM TRỌNG] vcam_pixel4.patch không thể áp dụng! Dừng build để tránh tạo ROM không có VCam!${NC}"
+                        exit 1
+                    fi
+                fi
             fi
         fi
     }
@@ -182,6 +200,14 @@ if [ "$STOCK_MODE" == "1" ]; then
     done
 
     apply_patch "frameworks/base" "vcam_pixel4.patch"
+
+    # Kiểm tra xác thực file VCam bắt buộc phải hiện diện trong frameworks/base
+    if [ ! -f "frameworks/base/core/java/android/hardware/VcamCamera.java" ]; then
+        echo -e "${RED}[LỖI] VcamCamera.java không tồn tại trong frameworks/base! vcam_pixel4.patch chưa được áp dụng thành công. Dừng build!${NC}"
+        exit 1
+    else
+        echo -e "   [${GREEN}XÁC THỰC THÀNH CÔNG${NC}] Native VCam core đã được tích hợp trọn vẹn vào frameworks/base!"
+    fi
     apply_patch "frameworks/base" "spoof_locked_bootloader.patch"
     # Không áp init_spoof_bootloader vào boot.img để tránh làm fastbootd bị nhận nhầm là locked device
     # apply_patch "system/core" "init_spoof_bootloader.patch"
@@ -300,7 +326,7 @@ export _JAVA_OPTIONS="-Xmx32g"
 
 if [ "$STOCK_MODE" == "1" ]; then
     echo -e "${CYAN}>> Đồng bộ và phê duyệt API stubs cho Metalava...${NC}"
-    m api-stubs-docs-non-updatable-update-current-api 2>/dev/null || true
+    m api-stubs-docs-non-updatable-update-current-api || true
 fi
 
 if [ "$GAPPS_MODE" == "1" ]; then
