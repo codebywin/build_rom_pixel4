@@ -221,6 +221,32 @@ if [ "$STOCK_MODE" == "1" ]; then
     # Loại bỏ triệt để file su (root binary) để app ngân hàng không phát hiện custom ROM / root
     sed -i '/[[:space:]]su[[:space:]]*\\/d' build/make/target/product/base_system.mk 2>/dev/null || true
 
+    # Bổ sung cơ chế fallback DroidGuard (Chuyển Key Attestation từ Hardware sang Basic Software)
+    # Giúp MEETS_DEVICE_INTEGRITY luôn XANH trên thiết bị mở Bootloader
+    python3 - << 'PYEOF'
+import os
+
+hook_code = """        for (StackTraceElement elem : Thread.currentThread().getStackTrace()) {
+            if (elem.getClassName().contains("DroidGuard")) {
+                throw new UnsupportedOperationException();
+            }
+        }
+"""
+
+for root, _, files in os.walk("frameworks/base/keystore"):
+    for f in files:
+        if f == "AndroidKeyStoreSpi.java":
+            filepath = os.path.join(root, f)
+            with open(filepath, "r", encoding="utf-8") as fp:
+                content = fp.read()
+            target = "public Certificate[] engineGetCertificateChain(String alias) {"
+            if target in content and "DroidGuard" not in content:
+                content = content.replace(target, target + "\\n" + hook_code, 1)
+                with open(filepath, "w", encoding="utf-8") as fp:
+                    fp.write(content)
+                print(f"   [HOOK OK] Injected DroidGuard fallback into {filepath}")
+PYEOF
+
     # Đổi Brand và Model từ "AOSP on flame" sang chuẩn "Google Pixel 4"
     if [ -f device/google/coral/aosp_flame.mk ]; then
         sed -i 's/PRODUCT_MODEL := AOSP on flame/PRODUCT_MODEL := Pixel 4/g' device/google/coral/aosp_flame.mk
