@@ -249,12 +249,20 @@ if [ "$GAPPS_MODE" == "1" ]; then
         echo -e "   [EXISTS] Thư mục vendor/gapps đã tồn tại."
     fi
 
-    # Tối ưu siêu nhẹ: Loại bỏ app nặng (Velvet ~200MB, talkback, SpeechServices) chỉ giữ lại Play Services & CH Play
-    if [ -f vendor/gapps/arm64/arm64-vendor.mk ]; then
-        echo -e "   [LIGHT] Tối ưu hóa siêu nhẹ (Chỉ giữ CH Play & Play Services, loại bỏ bloatware)..."
-        sed -i '/Velvet/d' vendor/gapps/arm64/arm64-vendor.mk 2>/dev/null || true
-        sed -i '/talkback/d' vendor/gapps/arm64/arm64-vendor.mk 2>/dev/null || true
-        sed -i '/SpeechServicesByGoogle/d' vendor/gapps/arm64/arm64-vendor.mk 2>/dev/null || true
+    # Tối ưu siêu nhẹ: Chỉ giữ lại đúng Play Services & CH Play, loại bỏ ELF .so lỗi và bloatware
+    if [ -d vendor/gapps/arm64 ]; then
+        echo -e "   [LIGHT] Tối ưu hóa siêu nhẹ (Chỉ giữ CH Play & Play Services, loại bỏ ELF lỗi và bloatware)..."
+        cat << 'EOF' > vendor/gapps/arm64/arm64-vendor.mk
+# MindTheGapps Ultra-Light (Pixel 4 Core GApps: Play Store + Play Services)
+PRODUCT_SOONG_NAMESPACES += \
+    vendor/gapps/arm64
+
+PRODUCT_PACKAGES += \
+    GmsCore \
+    Phonesky
+
+$(call inherit-product, vendor/gapps/common/common-vendor.mk)
+EOF
     fi
 
     if [ -f device/google/coral/device.mk ]; then
