@@ -209,8 +209,7 @@ if [ "$STOCK_MODE" == "1" ]; then
         echo -e "   [${GREEN}XÁC THỰC THÀNH CÔNG${NC}] Native VCam core đã được tích hợp trọn vẹn vào frameworks/base!"
     fi
     apply_patch "frameworks/base" "spoof_locked_bootloader.patch"
-    # Không áp init_spoof_bootloader vào boot.img để tránh làm fastbootd bị nhận nhầm là locked device
-    # apply_patch "system/core" "init_spoof_bootloader.patch"
+    apply_patch "system/core" "init_spoof_bootloader.patch"
     apply_patch "frameworks/base" "disable_flag_secure.patch"
     apply_patch "frameworks/base" "hide_developer_options.patch"
     apply_patch "frameworks/base" "hide_accessibility_services.patch"
@@ -218,6 +217,28 @@ if [ "$STOCK_MODE" == "1" ]; then
     apply_patch "frameworks/base" "hide_sensitive_packages.patch"
     apply_patch "device/google/coral" "sepolicy_vcam_coral.patch"
     apply_patch "device/google/coral-sepolicy" "sepolicy_vcam_coral.patch"
+
+    # Loại bỏ triệt để file su (root binary) để app ngân hàng không phát hiện custom ROM / root
+    sed -i '/[[:space:]]su[[:space:]]*\\/d' build/make/target/product/base_system.mk 2>/dev/null || true
+
+    # Đổi Brand và Model từ "AOSP on flame" sang chuẩn "Google Pixel 4"
+    if [ -f device/google/coral/aosp_flame.mk ]; then
+        sed -i 's/PRODUCT_MODEL := AOSP on flame/PRODUCT_MODEL := Pixel 4/g' device/google/coral/aosp_flame.mk
+        sed -i 's/PRODUCT_BRAND := Android/PRODUCT_BRAND := google/g' device/google/coral/aosp_flame.mk
+    fi
+
+    # Cấu hình Fingerprint chính hãng Pixel 4 vào device.mk
+    if [ -f device/google/coral/device.mk ] && ! grep -q "BUILD_FINGERPRINT" device/google/coral/device.mk; then
+        cat << 'EOF' >> device/google/coral/device.mk
+
+# Google Stock Certified Fingerprint & Properties
+PRODUCT_BUILD_PROP_OVERRIDES += \
+    PRODUCT_NAME=flame \
+    TARGET_DEVICE=flame \
+    BUILD_FINGERPRINT="google/flame/flame:13/TP1A.221005.002.B2/9382335:user/release-keys" \
+    PRIVATE_BUILD_DESC="flame-user 13 TP1A.221005.002.B2 9382335 release-keys"
+EOF
+    fi
 
     # [TẠM THỜI TẮT] Chưa nhúng CameraAssistant App để build test core VCam & ROM trước
     # mkdir -p packages/apps/CameraAssistant
