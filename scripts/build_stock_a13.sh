@@ -256,8 +256,48 @@ if [ "$STOCK_MODE" == "1" ]; then
     apply_patch "frameworks/base" "hide_accessibility_services.patch"
     apply_patch "frameworks/base" "bypass_overlay_tapjacking.patch"
     apply_patch "frameworks/base" "hide_sensitive_packages.patch"
-    apply_patch "device/google/coral" "sepolicy_vcam_coral.patch"
-    apply_patch "device/google/coral-sepolicy" "sepolicy_vcam_coral.patch"
+
+    # Cấu hình SELinux cho các file Virtual Camera & Virtual Mic trong /data/local/tmp
+    echo -e "   [SEPOLICY] Cấu hình quyền SELinux cho VCam trong system/sepolicy..."
+    if [ -d "system/sepolicy" ]; then
+        mkdir -p system/sepolicy/public system/sepolicy/private
+        
+        # 1. Định nghĩa type vcam_data_file
+        cat << 'EOF' > system/sepolicy/public/vcam.te
+type vcam_data_file, file_type, data_file_type, core_data_file_type;
+EOF
+
+        # 2. Cấp quyền truy cập cho appdomain và mediaserver
+        cat << 'EOF' > system/sepolicy/private/vcam.te
+# Allow all apps (untrusted, system, platform) to access VCAM files
+allow appdomain vcam_data_file:file { create read write open getattr setattr unlink map };
+allow appdomain vcam_data_file:dir { create read write open getattr add_name remove_name search };
+
+# Allow media framework services to access VCAM files
+allow mediaserver vcam_data_file:file { read open getattr map };
+allow mediaextractor vcam_data_file:file { read open getattr map };
+allow audioserver vcam_data_file:file { read open getattr map };
+allow hal_camera_default vcam_data_file:file { read open getattr map };
+
+# Allow shell (adb) to manage VCAM files
+allow shell vcam_data_file:file { create read write open getattr unlink rename setattr };
+allow shell vcam_data_file:dir { create read write open getattr add_name remove_name search };
+EOF
+
+        # 3. Gán nhãn cho các file vcam trong /data/local/tmp
+        if [ -f "system/sepolicy/private/file_contexts" ]; then
+            if ! grep -q "vcam_data_file" system/sepolicy/private/file_contexts; then
+                cat << 'EOF' >> system/sepolicy/private/file_contexts
+
+# Virtual Camera & Virtual Mic files
+/data/local/tmp/vcam.*                          u:object_r:vcam_data_file:s0
+/data/local/tmp/vcam_.*                         u:object_r:vcam_data_file:s0
+/data/local/tmp/vcam(/.*)?                      u:object_r:vcam_data_file:s0
+EOF
+            fi
+        fi
+        echo -e "   [${GREEN}OK${NC}] Đã tích hợp luật SELinux cho VCam vào system/sepolicy!"
+    fi
 
     # Cấu hình AVB 2.0 (Android Verified Boot) để hỗ trợ khóa Bootloader phần cứng (Device state: locked)
     echo -e "   [AVB] Cấu hình Android Verified Boot (AVB 2.0) để hỗ trợ Khóa Bootloader phần cứng (Titan M)..."
