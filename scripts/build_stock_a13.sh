@@ -233,7 +233,7 @@ if [ "$STOCK_MODE" == "1" ]; then
     }
 
     echo -e "   [CLEAN] Đưa các repo về trạng thái sạch trước khi apply..."
-    for clean_repo in frameworks/base system/core system/sepolicy device/google/coral device/google/coral-sepolicy; do
+    for clean_repo in frameworks/base system/core system/sepolicy packages/providers/SettingsProvider device/google/coral device/google/coral-sepolicy; do
         if [ -d "$clean_repo" ]; then
             git -C "$clean_repo" checkout -f 2>/dev/null || true
             git -C "$clean_repo" clean -fd 2>/dev/null || true
@@ -253,6 +253,7 @@ if [ "$STOCK_MODE" == "1" ]; then
     apply_patch "system/core" "init_spoof_bootloader.patch"
     apply_patch "frameworks/base" "disable_flag_secure.patch"
     apply_patch "frameworks/base" "hide_developer_options.patch"
+    apply_patch "packages/providers/SettingsProvider" "hide_settings_provider.patch"
     apply_patch "frameworks/base" "hide_accessibility_services.patch"
     apply_patch "frameworks/base" "bypass_overlay_tapjacking.patch"
     apply_patch "frameworks/base" "hide_sensitive_packages.patch"
