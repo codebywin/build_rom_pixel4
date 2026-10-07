@@ -413,7 +413,7 @@ fi
 # 6. Thiết lập môi trường và Biên dịch
 echo -e "\n${BLUE}>> [6/6] Sắp xếp môi trường và bắt đầu Build AOSP...${NC}"
 source build/envsetup.sh
-lunch aosp_flame-userdebug
+lunch aosp_flame-user
 
 # Tối ưu hóa JVM cho RAM 128GB
 export _JAVA_OPTIONS="-Xmx32g"
