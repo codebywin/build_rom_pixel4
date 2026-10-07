@@ -75,26 +75,26 @@ index e986320..5213ab2 100644
          mFaceDetectionRunning = false;
  
 diff --git a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java b/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
-index a07e8d2..f7fdb85 100644
+index a07e8d2..3b4f856 100644
 --- a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
 +++ b/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
-@@ -727,6 +727,7 @@ public class CameraDeviceImpl extends CameraDevice
-             CameraAccessException pendingException = null;
+@@ -728,6 +728,7 @@ public class CameraDeviceImpl extends CameraDevice
              Surface input = null;
              try {
-+                android.hardware.camera2.impl.VcamEngine.prepareOutputs(this, outputConfigurations);
                  // configure streams and then block until IDLE
++                android.hardware.camera2.impl.VcamEngine.prepareOutputs(this, outputConfigurations);
                  configureSuccess = configureStreamsChecked(inputConfig, outputConfigurations,
                          operatingMode, sessionParams, createSessionStartTime);
-@@ -761,6 +762,8 @@ public class CameraDeviceImpl extends CameraDevice
-                         callback, executor, this, mDeviceExecutor, configureSuccess);
+                 if (configureSuccess == true && inputConfig != null) {
+@@ -762,6 +763,8 @@ public class CameraDeviceImpl extends CameraDevice
              }
  
+             // TODO: wait until current session closes, then create the new session
 +            android.hardware.camera2.impl.VcamEngine.onSessionConfigured(this, outputConfigurations);
 +
-             // TODO: wait until current session closes, then create the new session
              mCurrentSession = newSession;
  
+             if (pendingException != null) {
 @@ -1264,6 +1267,7 @@ public class CameraDeviceImpl extends CameraDevice
              CaptureRequest[] requestArray = requestList.toArray(new CaptureRequest[requestList.size()]);
              // Convert Surface to streamIdx and surfaceIdx
@@ -111,6 +111,15 @@ index a07e8d2..f7fdb85 100644
              if (mClosing.getAndSet(true)) {
                  return;
              }
+@@ -2218,6 +2223,8 @@ public class CameraDeviceImpl extends CameraDevice
+                 }
+ 
+ 
++                android.hardware.camera2.impl.VcamEngine.injectCaptureResult(CameraDeviceImpl.this, result, request);
++
+                 Runnable resultDispatch = null;
+ 
+                 CaptureResult finalResult;
 diff --git a/media/java/android/media/AudioRecord.java b/media/java/android/media/AudioRecord.java
 index 8be1bcd..9b53b26 100644
 --- a/media/java/android/media/AudioRecord.java
@@ -169,7 +178,7 @@ diff --git a/core/java/android/hardware/VcamCamera.java b/core/java/android/hard
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/VcamCamera.java
-@@ -0,0 +1,117 @@
+@@ -0,0 +1,115 @@
 +package android.hardware;
 +
 +import android.graphics.SurfaceTexture;
@@ -182,8 +191,6 @@ new file mode 100644
 +import java.io.File;
 +import java.io.IOException;
 +
-+/** @hide */
-+@android.annotation.SuppressLint("all")
 +public class VcamCamera extends Camera {
 +    private static final String TAG = "VcamCamera";
 +
@@ -291,7 +298,7 @@ diff --git a/core/java/android/hardware/VcamYuvPlayer.java b/core/java/android/h
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/VcamYuvPlayer.java
-@@ -0,0 +1,188 @@
+@@ -0,0 +1,186 @@
 +package android.hardware;
 +
 +import android.graphics.Rect;
@@ -304,8 +311,6 @@ new file mode 100644
 +import java.nio.ByteBuffer;
 +import java.util.Queue;
 +
-+/** @hide */
-+@android.annotation.SuppressLint("all")
 +public class VcamYuvPlayer extends Thread {
 +    private static final String TAG = "VcamYuvPlayer";
 +
@@ -484,7 +489,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamEngine.java b/core/java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamEngine.java
-@@ -0,0 +1,346 @@
+@@ -0,0 +1,339 @@
 +package android.hardware.camera2.impl;
 +
 +import android.hardware.Camera;
@@ -507,15 +512,13 @@ new file mode 100644
 +    private static final String TAG = "VCAM";
 +
 +    private static class VideoPlayer implements Runnable {
-+        final String cameraId;
 +        final File file;
 +        final List<Surface> realSurfaces;
 +        final List<int[]> surfaceSizes;
 +        volatile boolean running = true;
 +        Thread thread;
 +
-+        VideoPlayer(String cameraId, File file, List<Surface> surfaces, List<int[]> sizes) {
-+            this.cameraId = cameraId != null ? cameraId : "1";
++        VideoPlayer(File file, List<Surface> surfaces, List<int[]> sizes) {
 +            this.file = file;
 +            this.realSurfaces = surfaces;
 +            this.surfaceSizes = sizes;
@@ -568,21 +571,7 @@ new file mode 100644
 +
 +                    Surface decodeSurface = null;
 +                    try {
-+                        int vidW = 0;
-+                        int vidH = 0;
-+                        int vidRot = 0;
-+                        if (format.containsKey(MediaFormat.KEY_WIDTH)) {
-+                            try { vidW = format.getInteger(MediaFormat.KEY_WIDTH); } catch (Throwable ignored) {}
-+                        }
-+                        if (format.containsKey(MediaFormat.KEY_HEIGHT)) {
-+                            try { vidH = format.getInteger(MediaFormat.KEY_HEIGHT); } catch (Throwable ignored) {}
-+                        }
-+                        if (format.containsKey(MediaFormat.KEY_ROTATION)) {
-+                            try { vidRot = format.getInteger(MediaFormat.KEY_ROTATION); } catch (Throwable ignored) {}
-+                        }
 +                        renderer = new VcamRenderer();
-+                        renderer.setCameraId(cameraId);
-+                        renderer.setVideoDimensions(vidW, vidH, vidRot);
 +                        if (renderer.init(realSurfaces, surfaceSizes)) {
 +                            decodeSurface = renderer.getInputSurface();
 +                            Log.i(TAG, "VcamRenderer EGL pipeline active with " + realSurfaces.size() + " targets!");
@@ -774,8 +763,7 @@ new file mode 100644
 +                return;
 +            }
 +
-+            String camId = device != null ? device.getId() : "1";
-+            VideoPlayer player = new VideoPlayer(camId, videoFile, targetSurfaces, targetSizes);
++            VideoPlayer player = new VideoPlayer(videoFile, targetSurfaces, targetSizes);
 +            sPlayers.put(device, player);
 +            player.start();
 +
@@ -800,7 +788,7 @@ new file mode 100644
 +            List<int[]> sizes = new ArrayList<>();
 +            sizes.add(new int[] { width, height });
 +
-+            VideoPlayer player = new VideoPlayer("1", videoFile, surfaces, sizes);
++            VideoPlayer player = new VideoPlayer(videoFile, surfaces, sizes);
 +            sCamera1Players.put(camera, player);
 +            player.start();
 +            Log.i(TAG, "Started Vcam Camera1 VideoPlayer with size " + width + "x" + height);
@@ -830,12 +818,22 @@ new file mode 100644
 +        }
 +        VcamMultiStreamManager.cleanupDevice(device);
 +    }
++
++    public static void injectCaptureResult(CameraDeviceImpl device, CameraMetadataNative result, CaptureRequest request) {
++        try {
++            if (!VcamLicenseVerifier.isLicenseActive()) return;
++            if (VcamConfig.isVcamDisabled()) return;
++            VcamFaceMetadata.inject(device, result, request);
++        } catch (Throwable t) {
++            Log.w(TAG, "injectCaptureResult error: " + t);
++        }
++    }
 +}
 diff --git a/core/java/android/hardware/camera2/impl/VcamConfig.java b/core/java/android/hardware/camera2/impl/VcamConfig.java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamConfig.java
-@@ -0,0 +1,168 @@
+@@ -0,0 +1,190 @@
 +package android.hardware.camera2.impl;
 +
 +import java.io.BufferedReader;
@@ -854,8 +852,18 @@ new file mode 100644
 +    public static final String TARGET_AUDIO = "vcam.wav";
 +    public static final String RESET_FLAG = "vcam_reset";
 +    public static final String ROTATION_FILE = "vcam_rotation";
++    public static final String FACE_DISABLE_FLAG = "vcam_face_disable";
++    public static final String FACE_FILE = "vcam_face";
++    public static final String RAW_EXP_FILE = "vcam_raw_exp";
 +
-+    private static final String SEARCH_DIR = "/data/local/tmp/";
++    public static boolean isFaceDisabled() {
++        return isFlagActive(FACE_DISABLE_FLAG);
++    }
++
++    private static final String[] SEARCH_DIRS = new String[] {
++        "/data/local/tmp/",
++        "/sdcard/"
++    };
 +
 +    public static final String PAUSE_FLAG = "vcam_pause";
 +
@@ -881,9 +889,11 @@ new file mode 100644
 +
 +    public static File getActiveVideoFile() {
 +        if (isVcamDisabled()) return null;
-+        File f = new File(SEARCH_DIR + TARGET_VIDEO);
-+        if (f.exists() && f.canRead() && f.length() > 0) {
-+            return f;
++        for (String dir : SEARCH_DIRS) {
++            File f = new File(dir + TARGET_VIDEO);
++            if (f.exists() && f.canRead() && f.length() > 0) {
++                return f;
++            }
 +        }
 +        return null;
 +    }
@@ -950,8 +960,16 @@ new file mode 100644
 +    }
 +
 +    public static boolean isFlagActive(String flagName) {
-+        String val = readFileContent(flagName);
-+        return "1".equals(val) || "true".equalsIgnoreCase(val);
++        for (String dir : SEARCH_DIRS) {
++            File f = new File(dir + flagName);
++            if (f.exists()) {
++                if (f.length() == 0) return true;
++                String val = readFileContent(flagName);
++                if ("0".equals(val)) return false;
++                return true;
++            }
++        }
++        return false;
 +    }
 +
 +    private static volatile long sCachedResetTs = 0;
@@ -992,14 +1010,16 @@ new file mode 100644
 +    }
 +
 +    private static String readFileContent(String filename) {
-+        File f = new File(SEARCH_DIR + filename);
-+        if (f.exists() && f.canRead()) {
-+            try {
-+                BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f)));
-+                String line = br.readLine();
-+                br.close();
-+                if (line != null) return line.trim();
-+            } catch (Throwable ignored) {}
++        for (String dir : SEARCH_DIRS) {
++            File f = new File(dir + filename);
++            if (f.exists() && f.canRead()) {
++                try {
++                    BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f)));
++                    String line = br.readLine();
++                    br.close();
++                    if (line != null) return line.trim();
++                } catch (Throwable ignored) {}
++            }
 +        }
 +        return "";
 +    }
@@ -1404,7 +1424,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamRenderer.java b/core/ja
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamRenderer.java
-@@ -0,0 +1,413 @@
+@@ -0,0 +1,389 @@
 +package android.hardware.camera2.impl;
 +
 +import android.graphics.Color;
@@ -1502,20 +1522,6 @@ new file mode 100644
 +    private SurfaceTexture mSurfaceTexture;
 +    private Surface mInputSurface;
 +    private boolean mInitialized = false;
-+    private String mCameraId = "1";
-+    private int mVideoWidth = 0;
-+    private int mVideoHeight = 0;
-+    private int mVideoRotation = 0;
-+
-+    public void setCameraId(String cameraId) {
-+        mCameraId = cameraId != null ? cameraId : "1";
-+    }
-+
-+    public void setVideoDimensions(int width, int height, int rotation) {
-+        mVideoWidth = width;
-+        mVideoHeight = height;
-+        mVideoRotation = rotation;
-+    }
 +
 +    public VcamRenderer() {
 +        mVertexBuffer = ByteBuffer.allocateDirect(VERTICES.length * 4)
@@ -1667,17 +1673,7 @@ new file mode 100644
 +        try {
 +            mSurfaceTexture.updateTexImage();
 +            mSurfaceTexture.getTransformMatrix(mSTMatrix);
-+            int manualRotation = VcamConfig.getRotation();
-+            int baseAutoRotation = 0;
-+            boolean isPortrait = (mVideoHeight > mVideoWidth && mVideoWidth > 0) || (mVideoRotation == 90 || mVideoRotation == 270);
-+            if (isPortrait) {
-+                if ("1".equals(mCameraId)) {
-+                    baseAutoRotation = 90;
-+                } else {
-+                    baseAutoRotation = 270;
-+                }
-+            }
-+            int rotation = (baseAutoRotation + manualRotation) % 360;
++            int rotation = VcamConfig.getRotation();
 +            float zoom = VcamConfig.getZoomScale();
 +            float panX = VcamConfig.getPanX();
 +            float panY = VcamConfig.getPanY();
@@ -1822,118 +1818,103 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamColorSync.java b/core/j
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamColorSync.java
-@@ -0,0 +1,337 @@
+@@ -0,0 +1,115 @@
 +package android.hardware.camera2.impl;
 +
-+import android.app.Activity;
-+import android.content.Context;
-+import android.content.ContextWrapper;
-+import android.graphics.Bitmap;
 +import android.graphics.Color;
-+import android.os.Handler;
-+import android.os.HandlerThread;
-+import android.util.Log;
-+import android.view.PixelCopy;
-+import android.view.View;
-+import android.view.Window;
-+
 +import java.io.BufferedReader;
 +import java.io.File;
 +import java.io.FileInputStream;
 +import java.io.InputStreamReader;
-+import java.lang.reflect.Field;
-+import java.lang.reflect.Method;
-+import java.util.ArrayList;
-+import java.util.Map;
 +
-+/**
-+ * VcamColorSync: Dynamic Real-time On-Screen KYC Color & Light Synchronization.
-+ * Captures the foreground app's Window surface via PixelCopy (32x32) at ~20Hz without
-+ * requiring MediaProjection permissions or showing security prompts.
-+ */
 +public class VcamColorSync {
-+    private static final String TAG = "VCAM_COLOR_SYNC";
-+
-+    private static final String VAL_FILE = "vcam_color_val";
-+    private static final String FLASH_FLAG = "vcam_color_sync";
-+    private static final String KYC_FLAG = "vcam_kyc_flash";
-+
 +    private static final String[] SEARCH_DIRS = new String[] {
 +        "/data/local/tmp/",
-+        "/sdcard/"
++        "/sdcard/",
++        "/storage/emulated/0/"
 +    };
 +
-+    private static final int SAMPLE_SIZE = 32;
-+    private static final long SAMPLE_INTERVAL_MS = 50; // ~20 fps sampling
++    private static final String[] FLASH_FLAGS = new String[] {
++        "vcam_kyc_flash",
++        "vcam_color_sync"
++    };
 +
-+    // Thread-safe cached values for VcamRenderer
-+    private static volatile int sCurrentColor = Color.TRANSPARENT;
-+    private static volatile float sCurrentIntensity = 0.0f;
++    private static final String VAL_FILE = "vcam_color_val";
 +
-+    // Internal state
-+    private static volatile int sTargetColor = Color.TRANSPARENT;
-+    private static volatile float sTargetIntensity = 0.0f;
-+    private static volatile long sLastSampleTime = 0;
-+    private static volatile boolean sIsSampling = false;
++    // Auto flash color palette: White, Cyan/Blue, Green, Red, Yellow, Magenta
++    private static final int[] AUTO_COLORS = new int[] {
++        0xFFFFFFFF, // White
++        0xFF00E5FF, // Cyan / Blue
++        0xFF00E676, // Green
++        0xFFFF1744, // Red
++        0xFFFFEA00, // Yellow
++        0xFFE040FB  // Magenta
++    };
 +
-+    private static HandlerThread sHandlerThread = null;
-+    private static Handler sWorkerHandler = null;
-+    private static Bitmap sSampleBitmap = null;
-+    private static int[] sPixelBuffer = null;
-+
-+    private static synchronized void ensureWorkerThread() {
-+        if (sHandlerThread == null) {
-+            try {
-+                sHandlerThread = new HandlerThread("VcamColorSyncWorker");
-+                sHandlerThread.start();
-+                sWorkerHandler = new Handler(sHandlerThread.getLooper());
-+                sSampleBitmap = Bitmap.createBitmap(SAMPLE_SIZE, SAMPLE_SIZE, Bitmap.Config.ARGB_8888);
-+                sPixelBuffer = new int[SAMPLE_SIZE * SAMPLE_SIZE];
-+                Log.i(TAG, "VcamColorSync background worker initialized.");
-+            } catch (Throwable t) {
-+                Log.e(TAG, "Failed to initialize worker thread: " + t);
-+            }
-+        }
-+    }
++    private static volatile int sLastColor = Color.TRANSPARENT;
++    private static volatile float sLastIntensity = 0.0f;
++    private static volatile long sLastCheckTime = 0;
++    private static volatile String sCachedVal = "";
++    private static volatile boolean sCachedActive = false;
 +
 +    public static int getFlashColor() {
-+        tickSync();
-+        return sCurrentColor;
++        checkColorSyncState();
++        return sLastColor;
 +    }
 +
 +    public static float getFlashIntensity() {
-+        tickSync();
-+        return sCurrentIntensity;
++        checkColorSyncState();
++        return sLastIntensity;
 +    }
 +
-+    private static boolean isFeatureActive() {
-+        return VcamConfig.isFlagActive(FLASH_FLAG) || VcamConfig.isFlagActive(KYC_FLAG);
++    private static boolean isFlashActive() {
++        for (String flag : FLASH_FLAGS) {
++            if (VcamConfig.isFlagActive(flag)) {
++                return true;
++            }
++        }
++        return false;
 +    }
 +
-+    private static void tickSync() {
-+        if (!isFeatureActive()) {
-+            sCurrentColor = Color.TRANSPARENT;
-+            sCurrentIntensity = 0.0f;
-+            sTargetIntensity = 0.0f;
-+            return;
-+        }
-+
-+        // Check manual override file first (/data/local/tmp/vcam_color_val or /sdcard/vcam_color_val)
-+        String overrideVal = readColorVal();
-+        if (!overrideVal.isEmpty() && !"auto".equalsIgnoreCase(overrideVal)) {
-+            parseManualOverride(overrideVal);
-+            applySmoothing();
-+            return;
-+        }
-+
-+        // Automatic Dynamic Screen Detection via PixelCopy
++    private static void checkColorSyncState() {
 +        long now = System.currentTimeMillis();
-+        if (now - sLastSampleTime >= SAMPLE_INTERVAL_MS && !sIsSampling) {
-+            sLastSampleTime = now;
-+            requestScreenSample();
++        if (now - sLastCheckTime > 100) {
++            sLastCheckTime = now;
++            sCachedActive = isFlashActive();
++            if (sCachedActive) {
++                sCachedVal = readColorVal();
++            } else {
++                sCachedVal = "";
++            }
 +        }
 +
-+        applySmoothing();
++        if (!sCachedActive) {
++            sLastColor = Color.TRANSPARENT;
++            sLastIntensity = 0.0f;
++            return;
++        }
++
++        String val = sCachedVal;
++        if (val.isEmpty() || "auto".equalsIgnoreCase(val)) {
++            // Auto flash mode: cycle color every 700ms with sine pulse
++            long cycle = (now / 700) % AUTO_COLORS.length;
++            sLastColor = AUTO_COLORS[(int) cycle];
++            double phase = (now % 700) / 700.0 * Math.PI;
++            sLastIntensity = (float) (0.22 + 0.25 * Math.sin(phase));
++        } else {
++            try {
++                String[] parts = val.split(",");
++                sLastColor = Color.parseColor(parts[0].trim());
++                if (parts.length >= 2) {
++                    sLastIntensity = Float.parseFloat(parts[1].trim());
++                } else {
++                    sLastIntensity = 0.35f;
++                }
++            } catch (Throwable t) {
++                sLastColor = Color.WHITE;
++                sLastIntensity = 0.35f;
++            }
++        }
 +    }
 +
 +    private static String readColorVal() {
@@ -1950,214 +1931,7 @@ new file mode 100644
 +                } catch (Throwable ignored) {}
 +            }
 +        }
-+        return "";
-+    }
-+
-+    private static void parseManualOverride(String val) {
-+        try {
-+            String[] parts = val.split(",");
-+            sTargetColor = Color.parseColor(parts[0].trim());
-+            if (parts.length >= 2) {
-+                sTargetIntensity = Float.parseFloat(parts[1].trim());
-+            } else {
-+                sTargetIntensity = 0.50f;
-+            }
-+            sCurrentColor = sTargetColor;
-+            sCurrentIntensity = sTargetIntensity;
-+        } catch (Throwable t) {
-+            sTargetColor = Color.WHITE;
-+            sTargetIntensity = 0.30f;
-+        }
-+    }
-+
-+    private static void applySmoothing() {
-+        // Fast attack, smooth decay, immediate color change
-+        if (sTargetIntensity > sCurrentIntensity || (sTargetIntensity > 0.0f && sTargetColor != sCurrentColor)) {
-+            sCurrentIntensity = sTargetIntensity;
-+            sCurrentColor = sTargetColor;
-+        } else {
-+            sCurrentIntensity = sCurrentIntensity * 0.75f + sTargetIntensity * 0.25f;
-+            if (sCurrentIntensity < 0.03f) {
-+                sCurrentIntensity = 0.0f;
-+                sCurrentColor = Color.TRANSPARENT;
-+            }
-+        }
-+    }
-+
-+    private static void requestScreenSample() {
-+        ensureWorkerThread();
-+        if (sWorkerHandler == null || sSampleBitmap == null) return;
-+        sIsSampling = true;
-+        sWorkerHandler.post(sSampleTask);
-+    }
-+
-+    private static final SampleTask sSampleTask = new SampleTask();
-+    private static final CopyListener sCopyListener = new CopyListener();
-+
-+    private static class SampleTask implements Runnable {
-+        @Override
-+        public void run() {
-+            try {
-+                Window window = findActiveWindow();
-+                if (window == null || window.peekDecorView() == null) {
-+                    sIsSampling = false;
-+                    return;
-+                }
-+                PixelCopy.request(window, sSampleBitmap, sCopyListener, sWorkerHandler);
-+            } catch (Throwable t) {
-+                sIsSampling = false;
-+            }
-+        }
-+    }
-+
-+    private static class CopyListener implements PixelCopy.OnPixelCopyFinishedListener {
-+        @Override
-+        public void onPixelCopyFinished(int copyResult) {
-+            try {
-+                if (copyResult == PixelCopy.SUCCESS && sSampleBitmap != null) {
-+                    analyzeSampleBitmap(sSampleBitmap);
-+                }
-+            } catch (Throwable t) {
-+                Log.e(TAG, "Analysis error: " + t);
-+            } finally {
-+                sIsSampling = false;
-+            }
-+        }
-+    }
-+
-+    /**
-+     * Finds the foreground Window belonging to the active KYC/Camera Activity.
-+     */
-+    private static Window findActiveWindow() {
-+        // Strategy 1: Search WindowManagerGlobal views via reflection
-+        try {
-+            Class<?> wmgClass = Class.forName("android.view.WindowManagerGlobal");
-+            Method getInstanceMethod = wmgClass.getMethod("getInstance");
-+            Object wmg = getInstanceMethod.invoke(null);
-+            if (wmg != null) {
-+                Method getViewsMethod = wmgClass.getMethod("getWindowViews");
-+                @SuppressWarnings("unchecked")
-+                ArrayList<View> views = (ArrayList<View>) getViewsMethod.invoke(wmg);
-+                if (views != null && !views.isEmpty()) {
-+                    for (int i = views.size() - 1; i >= 0; i--) {
-+                        View v = views.get(i);
-+                        if (v != null && v.isAttachedToWindow() && v.getVisibility() == View.VISIBLE) {
-+                            Context ctx = v.getContext();
-+                            while (ctx instanceof ContextWrapper) {
-+                                if (ctx instanceof Activity) break;
-+                                ctx = ((ContextWrapper) ctx).getBaseContext();
-+                            }
-+                            if (ctx instanceof Activity) {
-+                                Activity act = (Activity) ctx;
-+                                if (!act.isFinishing() && !act.isDestroyed()) {
-+                                    return act.getWindow();
-+                                }
-+                            }
-+                        }
-+                    }
-+                }
-+            }
-+        } catch (Throwable ignored) {}
-+
-+        // Strategy 2: Inspect ActivityThread mActivities via reflection
-+        try {
-+            Class<?> atClass = Class.forName("android.app.ActivityThread");
-+            Method curThreadMethod = atClass.getMethod("currentActivityThread");
-+            Object at = curThreadMethod.invoke(null);
-+            if (at != null) {
-+                Field fActivities = atClass.getDeclaredField("mActivities");
-+                fActivities.setAccessible(true);
-+                Map<?, ?> map = (Map<?, ?>) fActivities.get(at);
-+                if (map != null) {
-+                    for (Object record : map.values()) {
-+                        Field fPaused = record.getClass().getDeclaredField("paused");
-+                        fPaused.setAccessible(true);
-+                        boolean paused = fPaused.getBoolean(record);
-+                        if (!paused) {
-+                            Field fActivity = record.getClass().getDeclaredField("activity");
-+                            fActivity.setAccessible(true);
-+                            Activity act = (Activity) fActivity.get(record);
-+                            if (act != null && !act.isFinishing() && !act.isDestroyed()) {
-+                                return act.getWindow();
-+                            }
-+                        }
-+                    }
-+                }
-+            }
-+        } catch (Throwable ignored) {}
-+
-+        return null;
-+    }
-+
-+    /**
-+     * Analyzes the 32x32 sampled bitmap to detect KYC flash lighting.
-+     * Focuses on the perimeter / bezel region while excluding the center face oval.
-+     */
-+    private static void analyzeSampleBitmap(Bitmap bm) {
-+        if (bm == null || bm.isRecycled()) return;
-+
-+        bm.getPixels(sPixelBuffer, 0, SAMPLE_SIZE, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
-+
-+        float[] hsv = new float[3];
-+        long totalR = 0, totalG = 0, totalB = 0;
-+        int flashPixels = 0;
-+        int perimeterPixels = 0;
-+
-+        final int center = SAMPLE_SIZE / 2; // 16
-+        final int excludeRadiusSq = 90;     // excludes center face oval
-+
-+        for (int y = 0; y < SAMPLE_SIZE; y++) {
-+            for (int x = 0; x < SAMPLE_SIZE; x++) {
-+                int dx = x - center;
-+                int dy = y - center;
-+                int distSq = dx * dx + dy * dy;
-+
-+                // Only sample perimeter, borders, and outer area
-+                boolean isPerimeter = (x < 7 || x >= 25 || y < 6 || y >= 26 || distSq >= excludeRadiusSq);
-+                if (!isPerimeter) continue;
-+
-+                perimeterPixels++;
-+                int pixel = sPixelBuffer[y * SAMPLE_SIZE + x];
-+                int r = (pixel >> 16) & 0xFF;
-+                int g = (pixel >> 8) & 0xFF;
-+                int b = pixel & 0xFF;
-+
-+                Color.colorToHSV(pixel, hsv);
-+                float sat = hsv[1];
-+                float val = hsv[2];
-+
-+                // KYC Flash Detection Criteria:
-+                // 1. Saturated color flash (Cyan, Blue, Green, Red, Yellow, Orange, Purple)
-+                boolean isColorFlash = (sat >= 0.28f && val >= 0.35f);
-+                // 2. Bright white flash (High luminance white flash screen)
-+                boolean isWhiteFlash = (val >= 0.85f && sat < 0.20f && r > 205 && g > 205 && b > 205);
-+
-+                if (isColorFlash || isWhiteFlash) {
-+                    totalR += r;
-+                    totalG += g;
-+                    totalB += b;
-+                    flashPixels++;
-+                }
-+            }
-+        }
-+
-+        if (perimeterPixels > 0 && flashPixels > 0) {
-+            float ratio = (float) flashPixels / (float) perimeterPixels;
-+            // Flash is active if at least 12% of perimeter area is glowing with flash color
-+            if (ratio >= 0.12f) {
-+                int avgR = (int) (totalR / flashPixels);
-+                int avgG = (int) (totalG / flashPixels);
-+                int avgB = (int) (totalB / flashPixels);
-+
-+                sTargetColor = Color.rgb(avgR, avgG, avgB);
-+                // Intensity scales smoothly with flash coverage and brightness: range 0.22 - 0.40
-+                sTargetIntensity = Math.min(0.40f, 0.22f + ratio * 0.25f);
-+                return;
-+            }
-+        }
-+
-+        // Normal screen content / no flash
-+        sTargetIntensity = 0.0f;
++        return "auto";
 +    }
 +}
 diff --git a/core/java/android/hardware/camera2/impl/VcamCamera1Engine.java b/core/java/android/hardware/camera2/impl/VcamCamera1Engine.java
@@ -2377,6 +2151,316 @@ new file mode 100644
 +
 +    public static void release(Camera camera) {
 +        stopPreview(camera);
++    }
++}
+diff --git a/core/java/android/hardware/camera2/impl/VcamFaceMetadata.java b/core/java/android/hardware/camera2/impl/VcamFaceMetadata.java
+new file mode 100644
+--- /dev/null
++++ b/core/java/android/hardware/camera2/impl/VcamFaceMetadata.java
+@@ -0,0 +1,305 @@
++package android.hardware.camera2.impl;
++
++import android.graphics.Point;
++import android.graphics.Rect;
++import android.hardware.camera2.CameraCharacteristics;
++import android.hardware.camera2.CameraMetadata;
++import android.hardware.camera2.CaptureRequest;
++import android.hardware.camera2.CaptureResult;
++import android.hardware.camera2.params.Face;
++import android.util.Log;
++import java.io.BufferedReader;
++import java.io.File;
++import java.io.FileReader;
++import java.lang.reflect.Constructor;
++import java.util.ArrayList;
++import java.util.List;
++
++/**
++ * VcamFaceMetadata — Tu dong tong hop va inject face metadata (Face detection + ISP Sensor stats)
++ * vao CaptureResult / TotalCaptureResult trong AOSP Camera framework.
++ *
++ * Giup cac ung dung camera va xac thuc khuon mat nhan dien tu nhien tu video gia lap VCAM.
++ */
++public class VcamFaceMetadata {
++    private static final String TAG = "VcamFaceMetadata";
++
++    private static final String[] SEARCH_DIRS = new String[] {
++        "/data/local/tmp/",
++        "/sdcard/"
++    };
++
++    private static final String FACE_CFG_NAME = "vcam_face";
++    private static final String FACE_DISABLE_NAME = "vcam_face_disable";
++    private static final String RAW_EXP_NAME = "vcam_raw_exp";
++
++    private static class FaceBox {
++        final int x, y, w, h;
++        final int score;
++
++        FaceBox(int x, int y, int w, int h, int score) {
++            this.x = x;
++            this.y = y;
++            this.w = w;
++            this.h = h;
++            this.score = Math.max(1, Math.min(100, score));
++        }
++    }
++
++    private static volatile long sLastDisableCheck = 0;
++    private static volatile boolean sCachedDisabled = false;
++
++    private static volatile long sLastCfgReadMs = 0;
++    private static volatile List<FaceBox> sCachedCustomFaces = null;
++
++    private static volatile long sCachedExpTime = 66500000L; // ~1/15s
++    private static volatile int sCachedIso = 80;
++    private static volatile long sLastExpCheckMs = 0;
++
++    // Reflection cache for Face constructors
++    private static volatile Constructor<Face> sFaceFullCtor = null;
++    private static volatile Constructor<Face> sFaceSimpleCtor = null;
++    private static volatile boolean sCtorResolved = false;
++
++    private static synchronized void resolveFaceConstructors() {
++        if (sCtorResolved) return;
++        sCtorResolved = true;
++        try {
++            sFaceFullCtor = Face.class.getDeclaredConstructor(
++                    Rect.class, int.class, int.class,
++                    Point.class, Point.class, Point.class
++            );
++            sFaceFullCtor.setAccessible(true);
++        } catch (Throwable t) {
++            Log.w(TAG, "Full Face constructor not found: " + t);
++        }
++        try {
++            sFaceSimpleCtor = Face.class.getDeclaredConstructor(Rect.class, int.class);
++            sFaceSimpleCtor.setAccessible(true);
++        } catch (Throwable t) {
++            Log.w(TAG, "Simple Face constructor not found: " + t);
++        }
++    }
++
++    private static Face createFace(Rect bounds, int score, int id, Point leftEye, Point rightEye, Point mouth) {
++        resolveFaceConstructors();
++        if (sFaceFullCtor != null) {
++            try {
++                return sFaceFullCtor.newInstance(bounds, score, id, leftEye, rightEye, mouth);
++            } catch (Throwable ignored) {}
++        }
++        if (sFaceSimpleCtor != null) {
++            try {
++                return sFaceSimpleCtor.newInstance(bounds, score);
++            } catch (Throwable ignored) {}
++        }
++        return null;
++    }
++
++    public static boolean isFaceDetectionDisabled() {
++        long now = System.currentTimeMillis();
++        if (now - sLastDisableCheck < 200) {
++            return sCachedDisabled;
++        }
++        sLastDisableCheck = now;
++
++        for (String dir : SEARCH_DIRS) {
++            File f = new File(dir + FACE_DISABLE_NAME);
++            if (f.exists()) {
++                sCachedDisabled = true;
++                return true;
++            }
++        }
++        sCachedDisabled = false;
++        return false;
++    }
++
++    private static List<FaceBox> readCustomFaces() {
++        long now = System.currentTimeMillis();
++        if (now - sLastCfgReadMs < 200) {
++            return sCachedCustomFaces;
++        }
++        sLastCfgReadMs = now;
++
++        File targetFile = null;
++        for (String dir : SEARCH_DIRS) {
++            File f = new File(dir + FACE_CFG_NAME);
++            if (f.exists() && f.canRead()) {
++                targetFile = f;
++                break;
++            }
++        }
++
++        if (targetFile == null) {
++            sCachedCustomFaces = null;
++            return null;
++        }
++
++        // Bo qua neu file qua 5 giay (stale tu phien cu)
++        if (now - targetFile.lastModified() > 5000) {
++            sCachedCustomFaces = null;
++            return null;
++        }
++
++        List<FaceBox> list = new ArrayList<>();
++        BufferedReader reader = null;
++        try {
++            reader = new BufferedReader(new FileReader(targetFile));
++            String line;
++            while ((line = reader.readLine()) != null && list.size() < 4) {
++                line = line.trim();
++                if (line.isEmpty() || line.startsWith("#")) continue;
++                String[] parts = line.split("\\s+");
++                if (parts.length >= 4) {
++                    int x = Integer.parseInt(parts[0]);
++                    int y = Integer.parseInt(parts[1]);
++                    int w = Integer.parseInt(parts[2]);
++                    int h = Integer.parseInt(parts[3]);
++                    int sc = (parts.length >= 5) ? Integer.parseInt(parts[4]) : 99;
++                    if (w > 0 && h > 0) {
++                        list.add(new FaceBox(x, y, w, h, sc));
++                    }
++                }
++            }
++        } catch (Throwable ignored) {
++        } finally {
++            if (reader != null) {
++                try { reader.close(); } catch (Throwable ignored) {}
++            }
++        }
++
++        sCachedCustomFaces = list.isEmpty() ? null : list;
++        return sCachedCustomFaces;
++    }
++
++    private static void updateSensorExposure() {
++        long now = System.currentTimeMillis();
++        if (now - sLastExpCheckMs < 500) return;
++        sLastExpCheckMs = now;
++
++        File targetFile = null;
++        for (String dir : SEARCH_DIRS) {
++            File f = new File(dir + RAW_EXP_NAME);
++            if (f.exists() && f.canRead()) {
++                targetFile = f;
++                break;
++            }
++        }
++        if (targetFile != null) {
++            BufferedReader reader = null;
++            try {
++                reader = new BufferedReader(new FileReader(targetFile));
++                String line = reader.readLine();
++                if (line != null) {
++                    String[] parts = line.trim().split("\\s+");
++                    if (parts.length >= 1) {
++                        long exp = Long.parseLong(parts[0]);
++                        if (exp > 1000000L) sCachedExpTime = exp;
++                    }
++                    if (parts.length >= 2) {
++                        int iso = Integer.parseInt(parts[1]);
++                        if (iso > 0) sCachedIso = iso;
++                    }
++                }
++            } catch (Throwable ignored) {
++            } finally {
++                if (reader != null) {
++                    try { reader.close(); } catch (Throwable ignored) {}
++                }
++            }
++        }
++    }
++
++    /**
++     * Inject face metadata va ISP sensor parameters vao CameraMetadataNative.
++     */
++    public static void inject(CameraDeviceImpl device, CameraMetadataNative result, CaptureRequest request) {
++        if (result == null) return;
++        if (isFaceDetectionDisabled()) return;
++
++        try {
++            // 1. Xac dinh crop region va sensor active array
++            int cx = 0, cy = 0, cw = 3280, ch = 2464;
++            Rect crop = null;
++            if (request != null) {
++                crop = request.get(CaptureRequest.SCALER_CROP_REGION);
++            }
++            if (crop == null && device != null) {
++                try {
++                    crop = device.getCharacteristics().get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
++                } catch (Throwable ignored) {}
++            }
++            if (crop != null && crop.width() > 0 && crop.height() > 0) {
++                cx = crop.left;
++                cy = crop.top;
++                cw = crop.width();
++                ch = crop.height();
++            }
++
++            // 2. Lay danh sach khuon mat
++            List<FaceBox> customList = readCustomFaces();
++            List<Face> faceList = new ArrayList<>();
++
++            if (customList != null && !customList.isEmpty()) {
++                int id = 1;
++                for (FaceBox fb : customList) {
++                    Point leftEye = new Point(fb.x + fb.w * 3 / 10, fb.y + fb.h * 35 / 100);
++                    Point rightEye = new Point(fb.x + fb.w * 7 / 10, fb.y + fb.h * 35 / 100);
++                    Point mouth = new Point(fb.x + fb.w / 2, fb.y + fb.h * 7 / 10);
++                    Face f = createFace(new Rect(fb.x, fb.y, fb.x + fb.w, fb.y + fb.h), fb.score, id++, leftEye, rightEye, mouth);
++                    if (f != null) faceList.add(f);
++                }
++            } else {
++                // Tinh toan tu dong theo Zoom / Pan cua Vcam
++                float zoom = VcamConfig.getZoomScale();
++                if (zoom < 0.5f) zoom = 0.5f;
++                if (zoom > 5.0f) zoom = 5.0f;
++
++                float panX = VcamConfig.getPanX();
++                float panY = VcamConfig.getPanY();
++
++                int baseW = (int) (cw * 0.26f * zoom);
++                int baseH = (int) (ch * 0.42f * zoom);
++
++                // Pixel 4 sensor xoay 270 do so voi khung hinh doc
++                int shiftSensorX = (int) (panY * (cw * 0.35f));
++                int shiftSensorY = (int) (-panX * (ch * 0.35f));
++
++                int centerX = cx + cw / 2 + shiftSensorX;
++                int centerY = cy + ch / 2 + shiftSensorY;
++
++                int fx = centerX - baseW / 2;
++                int fy = centerY - baseH / 2;
++
++                if (fx < cx) fx = cx;
++                if (fy < cy) fy = cy;
++                if (fx + baseW > cx + cw) baseW = cx + cw - fx;
++                if (fy + baseH > cy + ch) baseH = cy + ch - fy;
++
++                Point leftEye = new Point(fx + baseW * 3 / 10, fy + baseH * 35 / 100);
++                Point rightEye = new Point(fx + baseW * 7 / 10, fy + baseH * 35 / 100);
++                Point mouth = new Point(fx + baseW / 2, fy + baseH * 7 / 10);
++
++                Face f = createFace(new Rect(fx, fy, fx + baseW, fy + baseH), 99, 1, leftEye, rightEye, mouth);
++                if (f != null) faceList.add(f);
++            }
++
++            Face[] faces = faceList.toArray(new Face[faceList.size()]);
++
++            // 3. Inject Face metadata
++            result.set(CaptureResult.STATISTICS_FACE_DETECT_MODE, Integer.valueOf(CameraMetadata.STATISTICS_FACE_DETECT_MODE_FULL));
++            result.set(CaptureResult.STATISTICS_FACES, faces);
++
++            // 4. Inject Sensor & ISP stats
++            updateSensorExposure();
++            result.set(CaptureResult.SENSOR_EXPOSURE_TIME, Long.valueOf(sCachedExpTime));
++            result.set(CaptureResult.SENSOR_SENSITIVITY, Integer.valueOf(sCachedIso));
++            result.set(CaptureResult.SENSOR_FRAME_DURATION, Long.valueOf(33333333L));
++            result.set(CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST, Integer.valueOf(100));
++            result.set(CaptureResult.COLOR_CORRECTION_MODE, Integer.valueOf(0));
++
++        } catch (Throwable t) {
++            Log.w(TAG, "inject error: " + t);
++        }
 +    }
 +}
 diff --git a/media/java/android/media/VcamAudioEngine.java b/media/java/android/media/VcamAudioEngine.java
