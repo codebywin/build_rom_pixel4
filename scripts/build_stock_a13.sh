@@ -36,9 +36,9 @@ if [ -z "$BUILD_CHOICE" ]; then
     echo -e "\n${YELLOW}==================================================================${NC}"
     echo -e "${YELLOW}         CHỌN BẢN DỰNG ROM CHO PIXEL 4 (CHỈ 1 BƯỚC BẤM)           ${NC}"
     echo -e "${YELLOW}==================================================================${NC}"
-    echo "  1) ROM Stock A13 + CORE VCAM (BỎ QUA GApps / Siêu nhẹ & sạch 100%) [Mặc định]"
-    echo "  2) ROM Stock A13 + CORE VCAM + KÈM MindTheGapps (Play Services & CH Play)"
-    echo "  3) ROM Stock A13 NGUYÊN BẢN 100% (Thuần Google gốc)"
+    echo "  1) ROM Stock A13 Chuẩn Gốc + VCAM + KÈM GAPPS (CH Play & Play Services) [Mặc định]"
+    echo "  2) ROM Stock A13 + VCAM (BỎ QUA GApps / Thuần sạch không có CH Play)"
+    echo "  3) ROM Stock A13 NGUYÊN BẢN 100% (Thuần Google gốc, không mod VCam)"
     BUILD_CHOICE=$(prompt_input "Nhập lựa chọn của bạn [1, 2 hoặc 3, mặc định 1]: " "1")
 fi
 
@@ -47,13 +47,13 @@ BUILD_CHOICE="${BUILD_CHOICE:-1}"
 case "$BUILD_CHOICE" in
     1)
         STOCK_MODE="1"
-        GAPPS_MODE="2"
-        echo -e "\n${GREEN}>> ĐÃ CHỌN: [1] ROM Stock A13 + CORE VCAM (BỎ QUA GApps / Siêu nhẹ & sạch 100%)${NC}"
+        GAPPS_MODE="1"
+        echo -e "\n${GREEN}>> ĐÃ CHỌN: [1] ROM Stock A13 Chuẩn Gốc + VCAM + KÈM GAPPS (CH Play & Play Services)${NC}"
         ;;
     2)
         STOCK_MODE="1"
-        GAPPS_MODE="1"
-        echo -e "\n${GREEN}>> ĐÃ CHỌN: [2] ROM Stock A13 + CORE VCAM + KÈM MindTheGapps (Play Services & CH Play)${NC}"
+        GAPPS_MODE="2"
+        echo -e "\n${GREEN}>> ĐÃ CHỌN: [2] ROM Stock A13 + VCAM (BỎ QUA GApps / Thuần sạch)${NC}"
         ;;
     3)
         STOCK_MODE="2"
@@ -61,9 +61,9 @@ case "$BUILD_CHOICE" in
         echo -e "\n${GREEN}>> ĐÃ CHỌN: [3] ROM Stock A13 NGUYÊN BẢN 100% (Thuần Google gốc)${NC}"
         ;;
     *)
-        echo -e "\n${YELLOW}>> Lựa chọn không hợp lệ, mặc định chọn [1] ROM Stock A13 + CORE VCAM (Không GApps)${NC}"
+        echo -e "\n${YELLOW}>> Lựa chọn không hợp lệ, mặc định chọn [1] ROM Stock A13 + VCAM + KÈM GAPPS${NC}"
         STOCK_MODE="1"
-        GAPPS_MODE="2"
+        GAPPS_MODE="1"
         ;;
 esac
 
@@ -288,6 +288,11 @@ BOARD_AVB_VBMETA_SYSTEM_ROLLBACK_INDEX := 1788220800
 BOARD_AVB_VBMETA_SYSTEM_ROLLBACK_INDEX_LOCATION := 1
 EOF
 
+    # Đổi BUILD_ID thành chuẩn Google Stock chính hãng TP1A.221005.002.B2
+    if [ -f build/make/core/build_id.mk ]; then
+        echo 'BUILD_ID=TP1A.221005.002.B2' > build/make/core/build_id.mk
+    fi
+
     # Đổi nhãn test-keys thành release-keys trong Makefile của AOSP
     sed -i 's/BUILD_KEYS := test-keys/BUILD_KEYS := release-keys/g' build/make/core/Makefile 2>/dev/null || true
 
@@ -296,18 +301,23 @@ EOF
 
     # Đổi Brand và Model từ "AOSP on flame" sang chuẩn "Google Pixel 4"
     if [ -f device/google/coral/aosp_flame.mk ]; then
-        sed -i 's/PRODUCT_MODEL := AOSP on flame/PRODUCT_MODEL := Pixel 4/g' device/google/coral/aosp_flame.mk
-        sed -i 's/PRODUCT_BRAND := Android/PRODUCT_BRAND := google/g' device/google/coral/aosp_flame.mk
+        sed -i 's/PRODUCT_MODEL := AOSP on flame/PRODUCT_MODEL := Pixel 4/g' device/google/coral/aosp_flame.mk 2>/dev/null || true
+        sed -i 's/PRODUCT_BRAND := Android/PRODUCT_BRAND := google/g' device/google/coral/aosp_flame.mk 2>/dev/null || true
+        sed -i 's/PRODUCT_MANUFACTURER := Android/PRODUCT_MANUFACTURER := Google/g' device/google/coral/aosp_flame.mk 2>/dev/null || true
     fi
 
     # Cấu hình Fingerprint chính hãng Pixel 4 vào device.mk
-    if [ -f device/google/coral/device.mk ] && ! grep -q "BUILD_FINGERPRINT" device/google/coral/device.mk; then
+    if [ -f device/google/coral/device.mk ]; then
+        sed -i '/BUILD_FINGERPRINT/d' device/google/coral/device.mk 2>/dev/null || true
+        sed -i '/BUILD_ID/d' device/google/coral/device.mk 2>/dev/null || true
         cat << 'EOF' >> device/google/coral/device.mk
 
-# Google Stock Certified Fingerprint & Properties
+# Google Stock Certified Fingerprint & Properties (100% Gốc)
 PRODUCT_BUILD_PROP_OVERRIDES += \
     PRODUCT_NAME=flame \
     TARGET_DEVICE=flame \
+    BUILD_ID=TP1A.221005.002.B2 \
+    BUILD_DISPLAY_ID=TP1A.221005.002.B2 \
     BUILD_FINGERPRINT="google/flame/flame:13/TP1A.221005.002.B2/9382335:user/release-keys" \
     PRIVATE_BUILD_DESC="flame-user 13 TP1A.221005.002.B2 9382335 release-keys"
 EOF
