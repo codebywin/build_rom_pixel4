@@ -264,23 +264,18 @@ if [ "$STOCK_MODE" == "1" ]; then
         
         # 1. Định nghĩa type vcam_data_file
         cat << 'EOF' > system/sepolicy/public/vcam.te
-type vcam_data_file, file_type, data_file_type;
+type vcam_data_file, file_type, data_file_type, core_data_file_type;
 EOF
 
-        # 2. Cấp quyền truy cập cho appdomain, mediaserver, audioserver và shell
+        # 2. Cấp quyền đọc cho appdomain và toàn quyền quản trị cho shell (adb)
         cat << 'EOF' > system/sepolicy/private/vcam.te
-# Allow all apps (untrusted, system, platform) to access VCAM files
-allow appdomain vcam_data_file:file { create read write open getattr setattr unlink map };
-allow appdomain vcam_data_file:dir { create read write open getattr add_name remove_name search };
-
-# Allow media framework services to access VCAM files
-allow mediaserver vcam_data_file:file { read open getattr map };
-allow mediaextractor vcam_data_file:file { read open getattr map };
-allow audioserver vcam_data_file:file { read open getattr map };
+# Allow all apps (untrusted, system, platform) to read VCAM files
+allow appdomain vcam_data_file:dir { read open getattr search };
+allow appdomain vcam_data_file:file { read open getattr map };
 
 # Allow shell (adb) to manage VCAM files
-allow shell vcam_data_file:file { create read write open getattr unlink rename setattr };
 allow shell vcam_data_file:dir { create read write open getattr add_name remove_name search };
+allow shell vcam_data_file:file { create read write open getattr unlink rename setattr };
 EOF
 
         # 3. Gán nhãn cho các file vcam trong /data/local/tmp

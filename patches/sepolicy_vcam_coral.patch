@@ -16,20 +16,14 @@ new file mode 100644
 index 0000000..c20ae0e
 --- /dev/null
 +++ b/sepolicy/private/vcam.te
-@@ -0,0 +1,13 @@
-+# Allow all apps (untrusted, system, platform) to access VCAM files
-+allow appdomain vcam_data_file:file { create read write open getattr setattr unlink map };
-+allow appdomain vcam_data_file:dir { create read write open getattr add_name remove_name search };
-+
-+# Allow media framework services to access VCAM files
-+allow mediaserver vcam_data_file:file { read open getattr map };
-+allow mediaextractor vcam_data_file:file { read open getattr map };
-+allow audioserver vcam_data_file:file { read open getattr map };
-+allow hal_camera_default vcam_data_file:file { read open getattr map };
+@@ -0,0 +1,8 @@
++# Allow all apps (untrusted, system, platform) to read VCAM files
++allow appdomain vcam_data_file:dir { read open getattr search };
++allow appdomain vcam_data_file:file { read open getattr map };
 +
 +# Allow shell (adb) to manage VCAM files
-+allow shell vcam_data_file:file { create read write open getattr unlink rename setattr };
 +allow shell vcam_data_file:dir { create read write open getattr add_name remove_name search };
++allow shell vcam_data_file:file { create read write open getattr unlink rename setattr };
 diff --git a/sepolicy/public/vcam.te b/sepolicy/public/vcam.te
 new file mode 100644
 index 0000000..7db4986
