@@ -18,19 +18,51 @@ echo -e "${CYAN}================================================================
 echo -e "${CYAN}     BẮT ĐẦU QUY TRÌNH BUILD ROM STOCK A13 CHO PIXEL 4 (FLAME)     ${NC}"
 echo -e "${CYAN}==================================================================${NC}"
 
-# Hỏi người dùng về việc có tích hợp VCam hay không
-echo -e "\n${YELLOW}Bạn muốn build ROM Stock theo dạng nào?${NC}"
-echo "  1) ROM Stock A13 + TÍCH HỢP CORE VCAM & Bypass bảo mật (Tạm tắt CameraAssistant để test)"
-echo "  2) ROM Stock A13 NGUYÊN BẢN 100% (Thuần Google gốc, không mod gì)"
-read -p "Nhập lựa chọn của bạn [1 hoặc 2, mặc định 1]: " STOCK_MODE
-STOCK_MODE="${STOCK_MODE:-1}"
+# Nhận tham số từ dòng lệnh hoặc biến môi trường (Ví dụ: bash build_stock_a13.sh 1)
+BUILD_CHOICE="${1:-$BUILD_CHOICE}"
 
-# Hỏi người dùng về việc có tích hợp Google Play Services & CH Play (GApps) hay không
-echo -e "\n${YELLOW}Bạn có muốn tích hợp Google Play Services & CH Play (GApps) vào ROM không?${NC}"
-echo "  1) CÓ - Tự động tích hợp MindTheGapps Android 13 (Play Services + CH Play) [Khuyên dùng]"
-echo "  2) KHÔNG - ROM thuần AOSP không kèm dịch vụ Google"
-read -p "Nhập lựa chọn của bạn [1 hoặc 2, mặc định 1]: " GAPPS_MODE
-GAPPS_MODE="${GAPPS_MODE:-1}"
+if [ -z "$BUILD_CHOICE" ]; then
+    echo -e "\n${YELLOW}==================================================================${NC}"
+    echo -e "${YELLOW}               CHỌN LOẠI BẢN DỰNG ROM CẦN BUILD                   ${NC}"
+    echo -e "${YELLOW}==================================================================${NC}"
+    echo "  1) ROM Stock A13 + CORE VCAM (KHÔNG kèm GApps / Siêu nhẹ, siêu sạch) [Khuyên dùng]"
+    echo "  2) ROM Stock A13 + CORE VCAM + KÈM GApps (Play Services & CH Play)"
+    echo "  3) ROM Stock A13 NGUYÊN BẢN 100% (Thuần Google gốc, không mod VCam)"
+    
+    # Hỗ trợ nhận phím từ /dev/tty ngay cả khi chạy dạng: curl ... | bash
+    if [ -t 0 ]; then
+        read -p "Nhập lựa chọn của bạn [1, 2 hoặc 3, mặc định 1]: " BUILD_CHOICE
+    elif [ -e /dev/tty ]; then
+        read -p "Nhập lựa chọn của bạn [1, 2 hoặc 3, mặc định 1]: " BUILD_CHOICE < /dev/tty
+    else
+        BUILD_CHOICE="1"
+    fi
+fi
+
+BUILD_CHOICE="${BUILD_CHOICE:-1}"
+
+case "$BUILD_CHOICE" in
+    1)
+        STOCK_MODE="1"
+        GAPPS_MODE="2"
+        echo -e "\n${GREEN}>> ĐÃ CHỌN: [1] ROM Stock A13 + CORE VCAM (BỎ QUA GApps - Siêu nhẹ, siêu sạch)${NC}"
+        ;;
+    2)
+        STOCK_MODE="1"
+        GAPPS_MODE="1"
+        echo -e "\n${GREEN}>> ĐÃ CHỌN: [2] ROM Stock A13 + CORE VCAM + KÈM MindTheGapps (Play Services & CH Play)${NC}"
+        ;;
+    3)
+        STOCK_MODE="2"
+        GAPPS_MODE="2"
+        echo -e "\n${GREEN}>> ĐÃ CHỌN: [3] ROM Stock A13 NGUYÊN BẢN (Thuần Google gốc, không mod)${NC}"
+        ;;
+    *)
+        echo -e "\n${YELLOW}>> Lựa chọn không hợp lệ, mặc định chọn [1] ROM Stock A13 + VCAM (Không GApps)${NC}"
+        STOCK_MODE="1"
+        GAPPS_MODE="2"
+        ;;
+esac
 
 # 1. Kiểm tra tài nguyên
 CPU_CORES=$(nproc)
