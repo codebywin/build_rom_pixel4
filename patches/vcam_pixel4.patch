@@ -484,7 +484,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamEngine.java b/core/java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamEngine.java
-@@ -0,0 +1,329 @@
+@@ -0,0 +1,346 @@
 +package android.hardware.camera2.impl;
 +
 +import android.hardware.Camera;
@@ -1404,7 +1404,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamRenderer.java b/core/ja
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamRenderer.java
-@@ -0,0 +1,389 @@
+@@ -0,0 +1,413 @@
 +package android.hardware.camera2.impl;
 +
 +import android.graphics.Color;
