@@ -553,9 +553,11 @@ if exist super.img (
     if exist system_ext.img fastboot flash system_ext system_ext.img
     if exist vendor.img fastboot flash vendor vendor.img
     if exist product.img fastboot flash product product.img
+    echo Returning to bootloader to wipe cleanly...
+    fastboot reboot bootloader
+    ping 127.0.0.1 -n 6 > nul
 )
 
-if exist userdata.img fastboot flash userdata userdata.img
 echo [4/6] Wiping userdata...
 fastboot -w
 echo [5/6] Khoi dong may de kiem tra boot truoc khi khoa...
@@ -629,9 +631,11 @@ else
     [ -f system_ext.img ] && fastboot flash system_ext system_ext.img
     [ -f vendor.img ] && fastboot flash vendor vendor.img
     [ -f product.img ] && fastboot flash product product.img
+    echo "Returning to bootloader to wipe..."
+    fastboot reboot bootloader
+    sleep 4
 fi
 
-[ -f userdata.img ] && fastboot flash userdata userdata.img
 fastboot -w
 fastboot reboot
 echo "DONE! Boot into Android to verify, then run fastboot flashing lock!"
