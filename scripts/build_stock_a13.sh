@@ -208,12 +208,22 @@ if [ "$STOCK_MODE" == "1" ]; then
     else
         echo -e "   [${GREEN}XÁC THỰC THÀNH CÔNG${NC}] Native VCam core đã được tích hợp trọn vẹn vào frameworks/base!"
     fi
+    apply_patch "frameworks/base" "spoof_locked_bootloader.patch"
+    apply_patch "system/core" "init_spoof_bootloader.patch"
     apply_patch "frameworks/base" "disable_flag_secure.patch"
+    apply_patch "frameworks/base" "hide_developer_options.patch"
     apply_patch "frameworks/base" "hide_accessibility_services.patch"
     apply_patch "frameworks/base" "bypass_overlay_tapjacking.patch"
     apply_patch "frameworks/base" "hide_sensitive_packages.patch"
     apply_patch "device/google/coral" "sepolicy_vcam_coral.patch"
     apply_patch "device/google/coral-sepolicy" "sepolicy_vcam_coral.patch"
+
+    # Dọn sạch cấu hình AVB custom trong BoardConfig.mk nếu có để tránh lỗi dm-verity
+    sed -i '/BOARD_AVB_KEY_PATH/d' device/google/coral/BoardConfig.mk 2>/dev/null || true
+    sed -i '/BOARD_AVB_ALGORITHM/d' device/google/coral/BoardConfig.mk 2>/dev/null || true
+
+    # Đổi nhãn test-keys thành release-keys trong Makefile của AOSP
+    sed -i 's/BUILD_KEYS := test-keys/BUILD_KEYS := release-keys/g' build/make/core/Makefile 2>/dev/null || true
 
     # Loại bỏ triệt để file su (root binary) để app ngân hàng không phát hiện custom ROM / root
     sed -i '/[[:space:]]su[[:space:]]*\\/d' build/make/target/product/base_system.mk 2>/dev/null || true

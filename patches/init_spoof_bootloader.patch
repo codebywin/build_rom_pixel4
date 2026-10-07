@@ -1,6 +1,6 @@
 --- a/init/property_service.cpp
 +++ b/init/property_service.cpp
-@@ -174,14 +174,39 @@
+@@ -174,14 +174,43 @@
  }
  
  static uint32_t PropertySet(const std::string& name, const std::string& value, std::string* error) {
@@ -27,6 +27,10 @@
 +            actual_value = "user";
 +        } else if (name == "ro.build.tags") {
 +            actual_value = "release-keys";
++        } else if (name == "ro.build.display.id") {
++            actual_value = "TP1A.221005.002.B2";
++        } else if (name == "ro.build.id") {
++            actual_value = "TP1A.221005.002.B2";
 +        }
 +    }
 +
