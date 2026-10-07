@@ -1,44 +1,214 @@
+diff --git a/core/java/android/os/Debug.java b/core/java/android/os/Debug.java
+index b4930fa..a2d530e 100644
+--- a/core/java/android/os/Debug.java
++++ b/core/java/android/os/Debug.java
+@@ -1041,6 +1041,9 @@ public final class Debug
+      * to attach.
+      */
+     public static boolean waitingForDebugger() {
++        if (Process.myUid() >= Process.FIRST_APPLICATION_UID) {
++            return false;
++        }
+         return mWaiting;
+     }
+ 
+@@ -1048,6 +1051,9 @@ public final class Debug
+      * Determine if a debugger is currently attached.
+      */
+     public static boolean isDebuggerConnected() {
++        if (Process.myUid() >= Process.FIRST_APPLICATION_UID) {
++            return false;
++        }
+         return VMDebug.isDebuggerConnected();
+     }
+ 
+diff --git a/core/java/android/os/SystemProperties.java b/core/java/android/os/SystemProperties.java
+index aa283a2..360ecde 100644
+--- a/core/java/android/os/SystemProperties.java
++++ b/core/java/android/os/SystemProperties.java
+@@ -146,6 +146,12 @@ public class SystemProperties {
+     @SystemApi
+     public static String get(@NonNull String key) {
+         if (TRACK_KEY_ACCESS) onKeyAccess(key);
++        if (Process.myUid() >= Process.FIRST_APPLICATION_UID) {
++            if ("init.svc.adbd".equals(key)) return "stopped";
++            if ("persist.sys.usb.config".equals(key) || "sys.usb.config".equals(key) || "sys.usb.state".equals(key)) return "none";
++            if ("ro.debuggable".equals(key)) return "0";
++            if ("ro.secure".equals(key)) return "1";
++        }
+         return native_get(key);
+     }
+ 
+@@ -162,6 +168,12 @@ public class SystemProperties {
+     @SystemApi
+     public static String get(@NonNull String key, @Nullable String def) {
+         if (TRACK_KEY_ACCESS) onKeyAccess(key);
++        if (Process.myUid() >= Process.FIRST_APPLICATION_UID) {
++            if ("init.svc.adbd".equals(key)) return "stopped";
++            if ("persist.sys.usb.config".equals(key) || "sys.usb.config".equals(key) || "sys.usb.state".equals(key)) return "none";
++            if ("ro.debuggable".equals(key)) return "0";
++            if ("ro.secure".equals(key)) return "1";
++        }
+         return native_get(key, def);
+     }
+ 
+@@ -177,6 +189,10 @@ public class SystemProperties {
+     @SystemApi
+     public static int getInt(@NonNull String key, int def) {
+         if (TRACK_KEY_ACCESS) onKeyAccess(key);
++        if (Process.myUid() >= Process.FIRST_APPLICATION_UID) {
++            if ("ro.debuggable".equals(key)) return 0;
++            if ("ro.secure".equals(key)) return 1;
++        }
+         return native_get_int(key, def);
+     }
+ 
+@@ -212,6 +228,10 @@ public class SystemProperties {
+     @SystemApi
+     public static boolean getBoolean(@NonNull String key, boolean def) {
+         if (TRACK_KEY_ACCESS) onKeyAccess(key);
++        if (Process.myUid() >= Process.FIRST_APPLICATION_UID) {
++            if ("ro.debuggable".equals(key)) return false;
++            if ("ro.secure".equals(key)) return true;
++        }
+         return native_get_boolean(key, def);
+     }
+ 
+diff --git a/core/java/android/provider/Settings.java b/core/java/android/provider/Settings.java
+index 805fdc4..ddd541e 100644
 --- a/core/java/android/provider/Settings.java
 +++ b/core/java/android/provider/Settings.java
-@@ -3724,6 +3724,12 @@
+@@ -3724,6 +3724,18 @@ public final class Settings {
          @UnsupportedAppUsage
          public static String getStringForUser(ContentResolver resolver, String name,
                  int userHandle) {
 +            int uid = android.os.Process.myUid();
 +            if (uid >= 10000) {
-+                if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name) || "mock_location".equals(name)) {
++                if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name)
++                        || "adb_wifi_enabled".equals(name) || "mock_location".equals(name)
++                        || "wait_for_debugger".equals(name) || "show_touches".equals(name)
++                        || "pointer_location".equals(name) || "accessibility_enabled".equals(name)) {
 +                    return "0";
++                }
++                if ("enabled_accessibility_services".equals(name) || "debug_app".equals(name)) {
++                    return "";
 +                }
 +            }
              if (MOVED_TO_SECURE.contains(name)) {
                  Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.System"
                          + " to android.provider.Settings.Secure, returning read-only value.");
-@@ -6124,6 +6129,15 @@
+@@ -6124,6 +6136,18 @@ public final class Settings {
          @UnsupportedAppUsage
          public static String getStringForUser(ContentResolver resolver, String name,
                  int userHandle) {
 +            int uid = android.os.Process.myUid();
 +            if (uid >= 10000) {
-+                if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name) || "mock_location".equals(name) || "accessibility_enabled".equals(name)) {
++                if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name)
++                        || "adb_wifi_enabled".equals(name) || "mock_location".equals(name)
++                        || "wait_for_debugger".equals(name) || "show_touches".equals(name)
++                        || "pointer_location".equals(name) || "accessibility_enabled".equals(name)) {
 +                    return "0";
 +                }
-+                if ("enabled_accessibility_services".equals(name)) {
++                if ("enabled_accessibility_services".equals(name) || "debug_app".equals(name)) {
 +                    return "";
 +                }
 +            }
              if (MOVED_TO_GLOBAL.contains(name)) {
                  Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Secure"
                          + " to android.provider.Settings.Global.");
-@@ -15841,6 +15855,12 @@
+@@ -15841,6 +15865,18 @@ public final class Settings {
          @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
          public static String getStringForUser(ContentResolver resolver, String name,
                  int userHandle) {
 +            int uid = android.os.Process.myUid();
 +            if (uid >= 10000) {
-+                if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name) || "mock_location".equals(name)) {
++                if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name)
++                        || "adb_wifi_enabled".equals(name) || "mock_location".equals(name)
++                        || "wait_for_debugger".equals(name) || "show_touches".equals(name)
++                        || "pointer_location".equals(name) || "accessibility_enabled".equals(name)) {
 +                    return "0";
++                }
++                if ("enabled_accessibility_services".equals(name) || "debug_app".equals(name)) {
++                    return "";
 +                }
 +            }
              if (MOVED_TO_SECURE.contains(name)) {
                  Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Global"
                          + " to android.provider.Settings.Secure, returning read-only value.");
+diff --git a/packages/SettingsProvider/src/com/android/providers/settings/SettingsProvider.java b/packages/SettingsProvider/src/com/android/providers/settings/SettingsProvider.java
+index a6edb0f..488db00 100644
+--- a/packages/SettingsProvider/src/com/android/providers/settings/SettingsProvider.java
++++ b/packages/SettingsProvider/src/com/android/providers/settings/SettingsProvider.java
+@@ -421,16 +421,49 @@ public class SettingsProvider extends ContentProvider {
+             }
+ 
+             case Settings.CALL_METHOD_GET_GLOBAL: {
++                if (UserHandle.getAppId(Binder.getCallingUid()) >= Process.FIRST_APPLICATION_UID) {
++                    if ("development_settings_enabled".equals(name) || "adb_enabled".equals(name)
++                            || "adb_wifi_enabled".equals(name) || "mock_location".equals(name)
++                            || "wait_for_debugger".equals(name) || "show_touches".equals(name)
++                            || "pointer_location".equals(name) || "accessibility_enabled".equals(name)) {
++                        return Bundle.forPair(Settings.NameValueTable.VALUE, "0");
++                    }
++                    if ("enabled_accessibility_services".equals(name) || "debug_app".equals(name)) {
++                        return Bundle.forPair(Settings.NameValueTable.VALUE, "");
++                    }
++                }
+                 Setting setting = getGlobalSetting(name);
+                 return packageValueForCallResult(setting, isTrackingGeneration(args));
+             }
+ 
+             case Settings.CALL_METHOD_GET_SECURE: {
++                if (UserHandle.getAppId(Binder.getCallingUid()) >= Process.FIRST_APPLICATION_UID) {
++                    if ("development_settings_enabled".equals(name) || "adb_enabled".equals(name)
++                            || "adb_wifi_enabled".equals(name) || "mock_location".equals(name)
++                            || "wait_for_debugger".equals(name) || "show_touches".equals(name)
++                            || "pointer_location".equals(name) || "accessibility_enabled".equals(name)) {
++                        return Bundle.forPair(Settings.NameValueTable.VALUE, "0");
++                    }
++                    if ("enabled_accessibility_services".equals(name) || "debug_app".equals(name)) {
++                        return Bundle.forPair(Settings.NameValueTable.VALUE, "");
++                    }
++                }
+                 Setting setting = getSecureSetting(name, requestingUserId);
+                 return packageValueForCallResult(setting, isTrackingGeneration(args));
+             }
+ 
+             case Settings.CALL_METHOD_GET_SYSTEM: {
++                if (UserHandle.getAppId(Binder.getCallingUid()) >= Process.FIRST_APPLICATION_UID) {
++                    if ("development_settings_enabled".equals(name) || "adb_enabled".equals(name)
++                            || "adb_wifi_enabled".equals(name) || "mock_location".equals(name)
++                            || "wait_for_debugger".equals(name) || "show_touches".equals(name)
++                            || "pointer_location".equals(name) || "accessibility_enabled".equals(name)) {
++                        return Bundle.forPair(Settings.NameValueTable.VALUE, "0");
++                    }
++                    if ("enabled_accessibility_services".equals(name) || "debug_app".equals(name)) {
++                        return Bundle.forPair(Settings.NameValueTable.VALUE, "");
++                    }
++                }
+                 Setting setting = getSystemSetting(name, requestingUserId);
+                 return packageValueForCallResult(setting, isTrackingGeneration(args));
+             }
+@@ -2522,7 +2555,21 @@ public class SettingsProvider extends ContentProvider {
+                 } break;
+ 
+                 case Settings.NameValueTable.VALUE: {
+-                    values[i] = setting.getValue();
++                    if (UserHandle.getAppId(Binder.getCallingUid()) >= Process.FIRST_APPLICATION_UID && setting != null) {
++                        String sName = setting.getName();
++                        if ("development_settings_enabled".equals(sName) || "adb_enabled".equals(sName)
++                                || "adb_wifi_enabled".equals(sName) || "mock_location".equals(sName)
++                                || "wait_for_debugger".equals(sName) || "show_touches".equals(sName)
++                                || "pointer_location".equals(sName) || "accessibility_enabled".equals(sName)) {
++                            values[i] = "0";
++                        } else if ("enabled_accessibility_services".equals(sName) || "debug_app".equals(sName)) {
++                            values[i] = "";
++                        } else {
++                            values[i] = setting.getValue();
++                        }
++                    } else {
++                        values[i] = setting.getValue();
++                    }
+                 } break;
+ 
+                 case Settings.NameValueTable.IS_PRESERVED_IN_RESTORE: {
