@@ -30,48 +30,47 @@ prompt_input() {
     echo "${result:-$default_value}"
 }
 
-# 1. BƯỚC 1: Chọn ROM VCam hay ROM Gốc nguyên bản
-ARG_ROM="${1:-$ROM_MODE}"
-if [ -z "$ARG_ROM" ]; then
+BUILD_CHOICE="${1:-$BUILD_CHOICE}"
+
+if [ -z "$BUILD_CHOICE" ]; then
     echo -e "\n${YELLOW}==================================================================${NC}"
-    echo -e "${YELLOW}           [BƯỚC 1/2] CHỌN LOẠI BẢN DỰNG ROM CẦN BUILD            ${NC}"
+    echo -e "${YELLOW}         CHỌN BẢN DỰNG ROM CHO PIXEL 4 (CHỈ 1 BƯỚC BẤM)           ${NC}"
     echo -e "${YELLOW}==================================================================${NC}"
-    echo "  1) ROM Stock A13 + TÍCH HỢP VCAM & BYPASS (Camera1, Camera2, KYC ColorSync) [Mặc định]"
-    echo "  2) ROM Stock A13 NGUYÊN BẢN GỐC 100% (Thuần Google AOSP, không mod VCam)"
-    ARG_ROM=$(prompt_input "Nhập lựa chọn của bạn [1 hoặc 2, mặc định 1]: " "1")
+    echo "  1) ROM Stock A13 + CORE VCAM (BỎ QUA GApps / Siêu nhẹ & sạch 100%) [Mặc định]"
+    echo "  2) ROM Stock A13 + CORE VCAM + KÈM MindTheGapps (Play Services & CH Play)"
+    echo "  3) ROM Stock A13 NGUYÊN BẢN 100% (Thuần Google gốc)"
+    BUILD_CHOICE=$(prompt_input "Nhập lựa chọn của bạn [1, 2 hoặc 3, mặc định 1]: " "1")
 fi
 
-if [ "$ARG_ROM" == "2" ] || [ "$ARG_ROM" == "stock" ]; then
-    STOCK_MODE="2"
-    echo -e "${GREEN}>> [BƯỚC 1] Đã chọn: ROM Stock A13 NGUYÊN BẢN GỐC 100%${NC}"
-else
-    STOCK_MODE="1"
-    echo -e "${GREEN}>> [BƯỚC 1] Đã chọn: ROM Stock A13 + TÍCH HỢP VCAM & BYPASS${NC}"
-fi
+BUILD_CHOICE="${BUILD_CHOICE:-1}"
 
-# 2. BƯỚC 2: Chọn GApps hay Bỏ qua GApps
-ARG_GAPPS="${2:-$GAPPS_MODE_ARG}"
-if [ -z "$ARG_GAPPS" ]; then
-    echo -e "\n${YELLOW}==================================================================${NC}"
-    echo -e "${YELLOW}           [BƯỚC 2/2] CHỌN DỊCH VỤ GOOGLE (GAPPS & CH PLAY)       ${NC}"
-    echo -e "${YELLOW}==================================================================${NC}"
-    echo "  1) BỎ QUA GApps (ROM siêu nhẹ, thuần sạch, không kèm CH Play / Play Services) [Mặc định]"
-    echo "  2) CÓ CÀI GApps (Tự động tích hợp MindTheGapps: CH Play + Play Services)"
-    ARG_GAPPS=$(prompt_input "Nhập lựa chọn của bạn [1 hoặc 2, mặc định 1]: " "1")
-fi
-
-if [ "$ARG_GAPPS" == "2" ] || [ "$ARG_GAPPS" == "gapps" ]; then
-    GAPPS_MODE="1"
-    echo -e "${GREEN}>> [BƯỚC 2] Đã chọn: CÓ CÀI MindTheGapps (CH Play & Play Services)${NC}"
-else
-    GAPPS_MODE="2"
-    echo -e "${GREEN}>> [BƯỚC 2] Đã chọn: BỎ QUA GApps (ROM thuần không kèm dịch vụ Google)${NC}"
-fi
+case "$BUILD_CHOICE" in
+    1)
+        STOCK_MODE="1"
+        GAPPS_MODE="2"
+        echo -e "\n${GREEN}>> ĐÃ CHỌN: [1] ROM Stock A13 + CORE VCAM (BỎ QUA GApps / Siêu nhẹ & sạch 100%)${NC}"
+        ;;
+    2)
+        STOCK_MODE="1"
+        GAPPS_MODE="1"
+        echo -e "\n${GREEN}>> ĐÃ CHỌN: [2] ROM Stock A13 + CORE VCAM + KÈM MindTheGapps (Play Services & CH Play)${NC}"
+        ;;
+    3)
+        STOCK_MODE="2"
+        GAPPS_MODE="2"
+        echo -e "\n${GREEN}>> ĐÃ CHỌN: [3] ROM Stock A13 NGUYÊN BẢN 100% (Thuần Google gốc)${NC}"
+        ;;
+    *)
+        echo -e "\n${YELLOW}>> Lựa chọn không hợp lệ, mặc định chọn [1] ROM Stock A13 + CORE VCAM (Không GApps)${NC}"
+        STOCK_MODE="1"
+        GAPPS_MODE="2"
+        ;;
+esac
 
 echo -e "\n${CYAN}==================================================================${NC}"
-echo -e "${CYAN}>> TỔNG KẾT CẤU HÌNH BUILD:${NC}"
-[ "$STOCK_MODE" == "1" ] && echo -e "   - Bản ROM: ${GREEN}Stock A13 + VCAM Core & Bypass bảo mật${NC}" || echo -e "   - Bản ROM: ${GREEN}Stock A13 NGUYÊN BẢN 100%${NC}"
-[ "$GAPPS_MODE" == "1" ] && echo -e "   - Dịch vụ Google: ${GREEN}CÓ (MindTheGapps CH Play)${NC}" || echo -e "   - Dịch vụ Google: ${GREEN}KHÔNG (Bỏ qua GApps / Siêu nhẹ)${NC}"
+echo -e "${CYAN}>> CẤU HÌNH BIÊN DỊCH:${NC}"
+[ "$STOCK_MODE" == "1" ] && echo -e "   - Nhân VCam: ${GREEN}TÍCH HỢP (Camera1, Camera2, KYC ColorSync Flash, Titan M lock)${NC}" || echo -e "   - Nhân VCam: ${YELLOW}KHÔNG (ROM nguyên bản)${NC}"
+[ "$GAPPS_MODE" == "1" ] && echo -e "   - Dịch vụ Google: ${GREEN}CÓ (MindTheGapps: CH Play + Play Services)${NC}" || echo -e "   - Dịch vụ Google: ${GREEN}BỎ QUA (Siêu nhẹ, sạch 100%)${NC}"
 echo -e "${CYAN}==================================================================${NC}"
 
 # 1. Kiểm tra tài nguyên
