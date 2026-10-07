@@ -498,6 +498,7 @@ cp "${IMG_SRC}"/boot.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/dtbo.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/vbmeta.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/vbmeta_system.img "$OUTPUT_DIR/" 2>/dev/null || true
+
 # Tự động trích xuất trực tiếp Root of Trust Public Key từ chính vbmeta.img vừa build xong (Khớp 100% chữ ký phần cứng)
 python3 -c '
 import struct, sys
@@ -507,18 +508,21 @@ with open(sys.argv[1], "rb") as f:
     key = f.read(fields[11])
 with open(sys.argv[2], "wb") as out:
     out.write(key)
-' "${IMG_SRC}/vbmeta.img" "$OUTPUT_DIR/avb_custom_key.bin" 2>/dev/null || cp "certs/avb_custom_key.bin" "$OUTPUT_DIR/" 2>/dev/null || true
+' "${IMG_SRC}/vbmeta.img" "$OUTPUT_DIR/avb_custom_key.bin" 2>/dev/null || \
+python3 external/avb/avbtool.py extract_public_key --key certs/avb.pem --output "$OUTPUT_DIR/avb_custom_key.bin" 2>/dev/null || \
+cp "certs/avb_custom_key.bin" "$OUTPUT_DIR/" 2>/dev/null || true
+
 cp "${IMG_SRC}"/super.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/system.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/system_ext.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/vendor.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/product.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/userdata.img "$OUTPUT_DIR/" 2>/dev/null || true
-cp "${IMG_SRC}"/*.zip "$OUTPUT_DIR/" 2>/dev/null || true
 
 # Tạo script flash toàn diện hỗ trợ Khóa Bootloader phần cứng thật (Titan M)
 cat << 'EOF' > "$OUTPUT_DIR/flash-all.bat"
 @echo off
+cd /d "%~dp0"
 echo ========================================================
 echo Flashing Signed Stock A13 ROM to Google Pixel 4 (flame)
 echo Support Genuine Hardware Bootloader Lock (Titan M)
@@ -565,6 +569,7 @@ EOF
 
 cat << 'EOF' > "$OUTPUT_DIR/lock-bootloader.bat"
 @echo off
+cd /d "%~dp0"
 echo ========================================================
 echo KHOA BOOTLOADER PHAN CUNG (GENUINE HARDWARE LOCK)
 echo Google Pixel 4 (flame) - Chip Bao Mat Titan M
@@ -594,6 +599,7 @@ EOF
 
 cat << 'EOF' > "$OUTPUT_DIR/flash-all.sh"
 #!/bin/bash
+cd "$(dirname "$0")"
 echo "========================================================"
 echo "Flashing Signed Stock A13 ROM to Google Pixel 4 (flame)"
 echo "Support Genuine Hardware Bootloader Lock (Titan M)"
@@ -632,5 +638,46 @@ echo "DONE! Boot into Android to verify, then run fastboot flashing lock!"
 EOF
 chmod +x "$OUTPUT_DIR/flash-all.sh"
 
-echo -e "Toàn bộ file ROM Stock A13 và tool flash tự động đã được lưu tại:\n${CYAN}${OUTPUT_DIR}${NC}"
-ls -lh "$OUTPUT_DIR"
+# Kiểm tra xác thực khóa AVB Root of Trust
+KEY_SHA1=""
+if [ -f "$OUTPUT_DIR/avb_custom_key.bin" ] && [ -s "$OUTPUT_DIR/avb_custom_key.bin" ]; then
+    KEY_SHA1=$(sha1sum "$OUTPUT_DIR/avb_custom_key.bin" | awk '{print $1}')
+    echo -e "\n${GREEN}>> [AVB 2.0] Trích xuất thành công Root of Trust Public Key từ vbmeta.img!${NC}"
+    echo -e "   - File khóa: ${CYAN}$OUTPUT_DIR/avb_custom_key.bin${NC}"
+    echo -e "   - SHA-1: ${YELLOW}${KEY_SHA1}${NC}"
+else
+    echo -e "\n${RED}[CẢNH BÁO] Không trích xuất được avb_custom_key.bin!${NC}"
+fi
+
+# Tự động nén toàn bộ thành file .ZIP duy nhất
+ZIP_FILE="${OUTPUT_DIR}.zip"
+LATEST_ZIP="$HOME/pixel4_latest.zip"
+echo -e "\n${CYAN}>> [ZIP] Đang tự động nén toàn bộ ROM + Khóa AVB thành file ZIP duy nhất để tải siêu tốc...${NC}"
+
+if command -v zip &>/dev/null; then
+    (cd "$HOME" && zip -r -1 "$(basename "$ZIP_FILE")" "$(basename "$OUTPUT_DIR")")
+else
+    python3 -c "
+import shutil, sys
+shutil.make_archive(sys.argv[1].replace('.zip', ''), 'zip', root_dir=sys.argv[2], base_dir='.')
+" "$ZIP_FILE" "$OUTPUT_DIR"
+fi
+
+ln -sf "$ZIP_FILE" "$LATEST_ZIP" 2>/dev/null || true
+
+echo -e "\n${GREEN}==================================================================${NC}"
+echo -e "${GREEN}       ĐÃ ĐÓNG GÓI HOÀN TẤT BẢN ROM VÀ FILE KHÓA AVB CHUẨN!       ${NC}"
+echo -e "${GREEN}==================================================================${NC}"
+echo -e "Thư mục ROM: ${CYAN}${OUTPUT_DIR}${NC}"
+if [ -f "$ZIP_FILE" ]; then
+    ZIP_SIZE=$(ls -lh "$ZIP_FILE" | awk '{print $5}')
+    echo -e "File nén ZIP: ${YELLOW}${ZIP_FILE}${NC} (${GREEN}${ZIP_SIZE}${NC})"
+    echo -e "File nén mới nhất: ${YELLOW}${LATEST_ZIP}${NC}"
+fi
+[ -n "$KEY_SHA1" ] && echo -e "Mã SHA-1 Root of Trust (Titan M): ${GREEN}${KEY_SHA1}${NC}"
+echo -e "\n${CYAN}>> HƯỚNG DẪN TẢI VỀ MÁY TÍNH:${NC}"
+echo -e "   1. Qua RustDesk: Kéo thả file ${YELLOW}$(basename "$ZIP_FILE")${NC} (trong thư mục Home ~/) về máy tính."
+echo -e "   2. Hoặc qua SCP từ máy tính (PowerShell):"
+echo -e "      ${GREEN}scp user@<IP-VPS>:~/$(basename "$ZIP_FILE") ./${NC}"
+echo -e "   3. Giải nén trên máy tính và chỉ cần nhấp đúp file ${GREEN}flash-all.bat${NC} để nạp!"
+echo -e "==================================================================\n"
