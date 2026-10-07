@@ -218,9 +218,34 @@ if [ "$STOCK_MODE" == "1" ]; then
     apply_patch "device/google/coral" "sepolicy_vcam_coral.patch"
     apply_patch "device/google/coral-sepolicy" "sepolicy_vcam_coral.patch"
 
-    # Dọn sạch cấu hình AVB custom trong BoardConfig.mk nếu có để tránh lỗi dm-verity
+    # Cấu hình AVB 2.0 (Android Verified Boot) để hỗ trợ khóa Bootloader phần cứng (Device state: locked)
+    echo -e "   [AVB] Cấu hình Android Verified Boot (AVB 2.0) để hỗ trợ Khóa Bootloader phần cứng (Titan M)..."
+    mkdir -p certs
+    if [ ! -f certs/avb.pem ]; then
+        openssl genrsa -out certs/avb.pem 4096
+    fi
+    python3 external/avb/avbtool.py extract_public_key --key certs/avb.pem --output certs/avb_custom_key.bin
+
+    sed -i '/BOARD_AVB_ENABLE/d' device/google/coral/BoardConfig.mk 2>/dev/null || true
     sed -i '/BOARD_AVB_KEY_PATH/d' device/google/coral/BoardConfig.mk 2>/dev/null || true
     sed -i '/BOARD_AVB_ALGORITHM/d' device/google/coral/BoardConfig.mk 2>/dev/null || true
+    sed -i '/BOARD_AVB_ROLLBACK_INDEX/d' device/google/coral/BoardConfig.mk 2>/dev/null || true
+    sed -i '/BOARD_AVB_VBMETA_SYSTEM/d' device/google/coral/BoardConfig.mk 2>/dev/null || true
+
+    cat << 'EOF' >> device/google/coral/BoardConfig.mk
+
+# Hardware AVB 2.0 Signing Configuration for Bootloader Locking
+BOARD_AVB_ENABLE := true
+BOARD_AVB_KEY_PATH := certs/avb.pem
+BOARD_AVB_ALGORITHM := SHA256_RSA4096
+BOARD_AVB_ROLLBACK_INDEX := 1788220800
+
+BOARD_AVB_VBMETA_SYSTEM := system system_ext product
+BOARD_AVB_VBMETA_SYSTEM_KEY_PATH := certs/avb.pem
+BOARD_AVB_VBMETA_SYSTEM_ALGORITHM := SHA256_RSA4096
+BOARD_AVB_VBMETA_SYSTEM_ROLLBACK_INDEX := 1788220800
+BOARD_AVB_VBMETA_SYSTEM_ROLLBACK_INDEX_LOCATION := 1
+EOF
 
     # Đổi nhãn test-keys thành release-keys trong Makefile của AOSP
     sed -i 's/BUILD_KEYS := test-keys/BUILD_KEYS := release-keys/g' build/make/core/Makefile 2>/dev/null || true
@@ -377,6 +402,8 @@ IMG_SRC="out/target/product/flame"
 cp "${IMG_SRC}"/boot.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/dtbo.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/vbmeta.img "$OUTPUT_DIR/" 2>/dev/null || true
+cp "${IMG_SRC}"/vbmeta_system.img "$OUTPUT_DIR/" 2>/dev/null || true
+cp "certs/avb_custom_key.bin" "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/super.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/system.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/system_ext.img "$OUTPUT_DIR/" 2>/dev/null || true
@@ -385,19 +412,29 @@ cp "${IMG_SRC}"/product.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/userdata.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/*.zip "$OUTPUT_DIR/" 2>/dev/null || true
 
-# Tạo script flash nhanh bằng fastboot cho người dùng
+# Tạo script flash toàn diện hỗ trợ Khóa Bootloader phần cứng thật (Titan M)
 cat << 'EOF' > "$OUTPUT_DIR/flash-all.bat"
 @echo off
 echo ========================================================
-echo Flashing Stock A13 ROM to Google Pixel 4 (flame)
+echo Flashing Signed Stock A13 ROM to Google Pixel 4 (flame)
+echo Support Genuine Hardware Bootloader Lock (Titan M)
 echo ========================================================
 fastboot reboot bootloader
 ping 127.0.0.1 -n 5 > nul
 
+if exist avb_custom_key.bin (
+    echo [1/6] Nap khoa Custom Root of Trust vao chip Titan M...
+    fastboot erase avb_custom_key
+    fastboot flash avb_custom_key avb_custom_key.bin
+)
+
+echo [2/6] Nap boot, dtbo va cac phan vung xac thuc AVB 2.0 (Verity BAT)...
 if exist boot.img fastboot flash boot boot.img
 if exist dtbo.img fastboot flash dtbo dtbo.img
-if exist vbmeta.img fastboot --disable-verity --disable-verification flash vbmeta vbmeta.img
+if exist vbmeta.img fastboot flash vbmeta vbmeta.img
+if exist vbmeta_system.img fastboot flash vbmeta_system vbmeta_system.img
 
+echo [3/6] Nap cac phan vung he thong...
 if exist super.img (
     fastboot flash super super.img
 ) else (
@@ -411,25 +448,66 @@ if exist super.img (
 )
 
 if exist userdata.img fastboot flash userdata userdata.img
-echo Wiping data...
+echo [4/6] Wiping userdata...
 fastboot -w
-echo Rebooting to system...
+echo [5/6] Khoi dong may de kiem tra boot truoc khi khoa...
 fastboot reboot
-echo DONE!
+echo ========================================================
+echo [6/6] Sau khi may khoi dong vao man hinh Android OK,
+echo hay chay tiep file lock-bootloader.bat de KHOA BOOTLOADER THAT!
+echo ========================================================
+pause
+EOF
+
+cat << 'EOF' > "$OUTPUT_DIR/lock-bootloader.bat"
+@echo off
+echo ========================================================
+echo KHOA BOOTLOADER PHAN CUNG (GENUINE HARDWARE LOCK)
+echo Google Pixel 4 (flame) - Chip Bao Mat Titan M
+echo ========================================================
+echo [CHU Y]: Chi chay script nay SAU KHI da chay flash-all.bat
+echo va dien thoai da khoi dong vao Android thanh cong!
+echo.
+pause
+fastboot reboot bootloader
+ping 127.0.0.1 -n 5 > nul
+echo.
+echo Dang gui lenh khoa Bootloader toi Titan M...
+fastboot flashing lock
+echo.
+echo ========================================================
+echo TREN MAN HINH PIXEL 4 LUC NAY:
+echo 1. Dung phim Am luong de chon dong "LOCK THE BOOTLOADER"
+echo 2. Nhan phim Nguon (Power) de xac nhan!
+echo.
+echo May se hien canh bao mau vang (Yellow State):
+echo "Your device is loading a different operating system..."
+echo Va may se tu dong boot vao Android voi Bootloader LOCKED 100%!
+echo (Vao Fastboot kiem tra se thay: Device state: locked mau xanh!)
+echo ========================================================
 pause
 EOF
 
 cat << 'EOF' > "$OUTPUT_DIR/flash-all.sh"
 #!/bin/bash
 echo "========================================================"
-echo "Flashing Stock A13 ROM to Google Pixel 4 (flame)"
+echo "Flashing Signed Stock A13 ROM to Google Pixel 4 (flame)"
+echo "Support Genuine Hardware Bootloader Lock (Titan M)"
 echo "========================================================"
 fastboot reboot bootloader
 sleep 4
 
+if [ -f avb_custom_key.bin ]; then
+    echo "[1/6] Enrolling Custom Root of Trust to Titan M..."
+    fastboot erase avb_custom_key
+    fastboot flash avb_custom_key avb_custom_key.bin
+fi
+
+echo "[2/6] Flashing boot, dtbo and AVB partitions..."
 [ -f boot.img ] && fastboot flash boot boot.img
 [ -f dtbo.img ] && fastboot flash dtbo dtbo.img
-[ -f vbmeta.img ] && fastboot --disable-verity --disable-verification flash vbmeta vbmeta.img
+[ -f vbmeta.img ] && fastboot flash vbmeta vbmeta.img
+[ -f vbmeta_system.img ] && fastboot flash vbmeta_system vbmeta_system.img
 
 if [ -f super.img ]; then
     fastboot flash super super.img
@@ -446,7 +524,7 @@ fi
 [ -f userdata.img ] && fastboot flash userdata userdata.img
 fastboot -w
 fastboot reboot
-echo "DONE!"
+echo "DONE! Boot into Android to verify, then run fastboot flashing lock!"
 EOF
 chmod +x "$OUTPUT_DIR/flash-all.sh"
 
