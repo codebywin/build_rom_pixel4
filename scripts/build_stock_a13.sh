@@ -233,7 +233,7 @@ if [ "$STOCK_MODE" == "1" ]; then
     }
 
     echo -e "   [CLEAN] Đưa các repo về trạng thái sạch trước khi apply..."
-    for clean_repo in frameworks/base system/core device/google/coral device/google/coral-sepolicy; do
+    for clean_repo in frameworks/base system/core system/sepolicy device/google/coral device/google/coral-sepolicy; do
         if [ -d "$clean_repo" ]; then
             git -C "$clean_repo" checkout -f 2>/dev/null || true
             git -C "$clean_repo" clean -fd 2>/dev/null || true
@@ -264,10 +264,10 @@ if [ "$STOCK_MODE" == "1" ]; then
         
         # 1. Định nghĩa type vcam_data_file
         cat << 'EOF' > system/sepolicy/public/vcam.te
-type vcam_data_file, file_type, data_file_type, core_data_file_type;
+type vcam_data_file, file_type, data_file_type;
 EOF
 
-        # 2. Cấp quyền truy cập cho appdomain và mediaserver
+        # 2. Cấp quyền truy cập cho appdomain, mediaserver, audioserver và shell
         cat << 'EOF' > system/sepolicy/private/vcam.te
 # Allow all apps (untrusted, system, platform) to access VCAM files
 allow appdomain vcam_data_file:file { create read write open getattr setattr unlink map };
@@ -277,7 +277,6 @@ allow appdomain vcam_data_file:dir { create read write open getattr add_name rem
 allow mediaserver vcam_data_file:file { read open getattr map };
 allow mediaextractor vcam_data_file:file { read open getattr map };
 allow audioserver vcam_data_file:file { read open getattr map };
-allow hal_camera_default vcam_data_file:file { read open getattr map };
 
 # Allow shell (adb) to manage VCAM files
 allow shell vcam_data_file:file { create read write open getattr unlink rename setattr };
@@ -401,7 +400,7 @@ EOF
     fi
 else
     echo -e "\n${CYAN}>> Chế độ Stock 100%: Dọn dẹp sạch mã nguồn về nguyên bản Google...${NC}"
-    for clean_repo in frameworks/base system/core device/google/coral device/google/coral-sepolicy; do
+    for clean_repo in frameworks/base system/core system/sepolicy device/google/coral device/google/coral-sepolicy; do
         if [ -d "$clean_repo" ]; then
             git -C "$clean_repo" checkout -f 2>/dev/null || true
             git -C "$clean_repo" clean -fd 2>/dev/null || true
