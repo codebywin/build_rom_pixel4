@@ -223,8 +223,8 @@ if [ "$STOCK_MODE" == "1" ]; then
                 else
                     echo -e "   [${RED}THẤT BẠI${NC}] Không thể apply ${patch_name} -> ${target_dir}"
                     git -C "$target_dir" apply --ignore-space-change --ignore-whitespace --check "$tmp_patch" || true
-                    if [ "$patch_name" == "vcam_pixel4.patch" ]; then
-                        echo -e "${RED}[LỖI NGHIÊM TRỌNG] vcam_pixel4.patch không thể áp dụng! Dừng build để tránh tạo ROM không có VCam!${NC}"
+                    if [ "$patch_name" == "vcam_pixel4.patch" ] || [ "$patch_name" == "hide_developer_options.patch" ] || [ "$patch_name" == "hide_settings_provider.patch" ] || [ "$patch_name" == "spoof_locked_bootloader.patch" ]; then
+                        echo -e "${RED}[LỖI NGHIÊM TRỌNG] ${patch_name} không thể áp dụng vào ${target_dir}! Dừng build!${NC}"
                         exit 1
                     fi
                 fi

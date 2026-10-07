@@ -38,7 +38,7 @@
          return native_get_boolean(key, def);
      }
  
-@@ -382,4 +392,39 @@
+@@ -382,4 +392,41 @@
              mNativeHandle = nativeHandle;
          }
      }
@@ -52,6 +52,8 @@
 +        if ("ro.build.type".equals(key)) return "user";
 +        if ("ro.debuggable".equals(key)) return "0";
 +        if ("ro.secure".equals(key)) return "1";
++        if ("init.svc.adbd".equals(key)) return "stopped";
++        if ("persist.sys.usb.config".equals(key) || "sys.usb.config".equals(key) || "sys.usb.state".equals(key)) return "none";
 +
 +        if (key != null && (key.startsWith("ro.lineage.") || key.startsWith("ro.modversion") || key.startsWith("ro.cm."))) {
 +            return "";

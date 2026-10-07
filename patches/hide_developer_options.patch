@@ -22,58 +22,6 @@ index b4930fa..a2d530e 100644
          return VMDebug.isDebuggerConnected();
      }
  
-diff --git a/core/java/android/os/SystemProperties.java b/core/java/android/os/SystemProperties.java
-index aa283a2..360ecde 100644
---- a/core/java/android/os/SystemProperties.java
-+++ b/core/java/android/os/SystemProperties.java
-@@ -146,6 +146,12 @@ public class SystemProperties {
-     @SystemApi
-     public static String get(@NonNull String key) {
-         if (TRACK_KEY_ACCESS) onKeyAccess(key);
-+        if (Process.myUid() >= Process.FIRST_APPLICATION_UID) {
-+            if ("init.svc.adbd".equals(key)) return "stopped";
-+            if ("persist.sys.usb.config".equals(key) || "sys.usb.config".equals(key) || "sys.usb.state".equals(key)) return "none";
-+            if ("ro.debuggable".equals(key)) return "0";
-+            if ("ro.secure".equals(key)) return "1";
-+        }
-         return native_get(key);
-     }
- 
-@@ -162,6 +168,12 @@ public class SystemProperties {
-     @SystemApi
-     public static String get(@NonNull String key, @Nullable String def) {
-         if (TRACK_KEY_ACCESS) onKeyAccess(key);
-+        if (Process.myUid() >= Process.FIRST_APPLICATION_UID) {
-+            if ("init.svc.adbd".equals(key)) return "stopped";
-+            if ("persist.sys.usb.config".equals(key) || "sys.usb.config".equals(key) || "sys.usb.state".equals(key)) return "none";
-+            if ("ro.debuggable".equals(key)) return "0";
-+            if ("ro.secure".equals(key)) return "1";
-+        }
-         return native_get(key, def);
-     }
- 
-@@ -177,6 +189,10 @@ public class SystemProperties {
-     @SystemApi
-     public static int getInt(@NonNull String key, int def) {
-         if (TRACK_KEY_ACCESS) onKeyAccess(key);
-+        if (Process.myUid() >= Process.FIRST_APPLICATION_UID) {
-+            if ("ro.debuggable".equals(key)) return 0;
-+            if ("ro.secure".equals(key)) return 1;
-+        }
-         return native_get_int(key, def);
-     }
- 
-@@ -212,6 +228,10 @@ public class SystemProperties {
-     @SystemApi
-     public static boolean getBoolean(@NonNull String key, boolean def) {
-         if (TRACK_KEY_ACCESS) onKeyAccess(key);
-+        if (Process.myUid() >= Process.FIRST_APPLICATION_UID) {
-+            if ("ro.debuggable".equals(key)) return false;
-+            if ("ro.secure".equals(key)) return true;
-+        }
-         return native_get_boolean(key, def);
-     }
- 
 diff --git a/core/java/android/provider/Settings.java b/core/java/android/provider/Settings.java
 index 805fdc4..ddd541e 100644
 --- a/core/java/android/provider/Settings.java
