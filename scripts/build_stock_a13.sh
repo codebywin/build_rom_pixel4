@@ -498,7 +498,16 @@ cp "${IMG_SRC}"/boot.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/dtbo.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/vbmeta.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/vbmeta_system.img "$OUTPUT_DIR/" 2>/dev/null || true
-cp "certs/avb_custom_key.bin" "$OUTPUT_DIR/" 2>/dev/null || true
+# Tự động trích xuất trực tiếp Root of Trust Public Key từ chính vbmeta.img vừa build xong (Khớp 100% chữ ký phần cứng)
+python3 -c '
+import struct, sys
+with open(sys.argv[1], "rb") as f:
+    fields = struct.unpack("!4s2L2Q L2Q2Q2Q2Q2Q QLL 48s 80s", f.read(256))
+    f.seek(256 + fields[3] + fields[10])
+    key = f.read(fields[11])
+with open(sys.argv[2], "wb") as out:
+    out.write(key)
+' "${IMG_SRC}/vbmeta.img" "$OUTPUT_DIR/avb_custom_key.bin" 2>/dev/null || cp "certs/avb_custom_key.bin" "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/super.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/system.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/system_ext.img "$OUTPUT_DIR/" 2>/dev/null || true
