@@ -507,13 +507,15 @@ new file mode 100644
 +    private static final String TAG = "VCAM";
 +
 +    private static class VideoPlayer implements Runnable {
++        final String cameraId;
 +        final File file;
 +        final List<Surface> realSurfaces;
 +        final List<int[]> surfaceSizes;
 +        volatile boolean running = true;
 +        Thread thread;
 +
-+        VideoPlayer(File file, List<Surface> surfaces, List<int[]> sizes) {
++        VideoPlayer(String cameraId, File file, List<Surface> surfaces, List<int[]> sizes) {
++            this.cameraId = cameraId != null ? cameraId : "1";
 +            this.file = file;
 +            this.realSurfaces = surfaces;
 +            this.surfaceSizes = sizes;
@@ -566,7 +568,21 @@ new file mode 100644
 +
 +                    Surface decodeSurface = null;
 +                    try {
++                        int vidW = 0;
++                        int vidH = 0;
++                        int vidRot = 0;
++                        if (format.containsKey(MediaFormat.KEY_WIDTH)) {
++                            try { vidW = format.getInteger(MediaFormat.KEY_WIDTH); } catch (Throwable ignored) {}
++                        }
++                        if (format.containsKey(MediaFormat.KEY_HEIGHT)) {
++                            try { vidH = format.getInteger(MediaFormat.KEY_HEIGHT); } catch (Throwable ignored) {}
++                        }
++                        if (format.containsKey(MediaFormat.KEY_ROTATION)) {
++                            try { vidRot = format.getInteger(MediaFormat.KEY_ROTATION); } catch (Throwable ignored) {}
++                        }
 +                        renderer = new VcamRenderer();
++                        renderer.setCameraId(cameraId);
++                        renderer.setVideoDimensions(vidW, vidH, vidRot);
 +                        if (renderer.init(realSurfaces, surfaceSizes)) {
 +                            decodeSurface = renderer.getInputSurface();
 +                            Log.i(TAG, "VcamRenderer EGL pipeline active with " + realSurfaces.size() + " targets!");
@@ -758,7 +774,8 @@ new file mode 100644
 +                return;
 +            }
 +
-+            VideoPlayer player = new VideoPlayer(videoFile, targetSurfaces, targetSizes);
++            String camId = device != null ? device.getId() : "1";
++            VideoPlayer player = new VideoPlayer(camId, videoFile, targetSurfaces, targetSizes);
 +            sPlayers.put(device, player);
 +            player.start();
 +
@@ -783,7 +800,7 @@ new file mode 100644
 +            List<int[]> sizes = new ArrayList<>();
 +            sizes.add(new int[] { width, height });
 +
-+            VideoPlayer player = new VideoPlayer(videoFile, surfaces, sizes);
++            VideoPlayer player = new VideoPlayer("1", videoFile, surfaces, sizes);
 +            sCamera1Players.put(camera, player);
 +            player.start();
 +            Log.i(TAG, "Started Vcam Camera1 VideoPlayer with size " + width + "x" + height);
@@ -1485,6 +1502,20 @@ new file mode 100644
 +    private SurfaceTexture mSurfaceTexture;
 +    private Surface mInputSurface;
 +    private boolean mInitialized = false;
++    private String mCameraId = "1";
++    private int mVideoWidth = 0;
++    private int mVideoHeight = 0;
++    private int mVideoRotation = 0;
++
++    public void setCameraId(String cameraId) {
++        mCameraId = cameraId != null ? cameraId : "1";
++    }
++
++    public void setVideoDimensions(int width, int height, int rotation) {
++        mVideoWidth = width;
++        mVideoHeight = height;
++        mVideoRotation = rotation;
++    }
 +
 +    public VcamRenderer() {
 +        mVertexBuffer = ByteBuffer.allocateDirect(VERTICES.length * 4)
@@ -1636,7 +1667,17 @@ new file mode 100644
 +        try {
 +            mSurfaceTexture.updateTexImage();
 +            mSurfaceTexture.getTransformMatrix(mSTMatrix);
-+            int rotation = VcamConfig.getRotation();
++            int manualRotation = VcamConfig.getRotation();
++            int baseAutoRotation = 0;
++            boolean isPortrait = (mVideoHeight > mVideoWidth && mVideoWidth > 0) || (mVideoRotation == 90 || mVideoRotation == 270);
++            if (isPortrait) {
++                if ("1".equals(mCameraId)) {
++                    baseAutoRotation = 90;
++                } else {
++                    baseAutoRotation = 270;
++                }
++            }
++            int rotation = (baseAutoRotation + manualRotation) % 360;
 +            float zoom = VcamConfig.getZoomScale();
 +            float panX = VcamConfig.getPanX();
 +            float panY = VcamConfig.getPanY();
