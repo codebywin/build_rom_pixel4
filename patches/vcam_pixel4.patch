@@ -74,24 +74,6 @@ index e986320..3cc16b5 100644
          _stopPreview();
          mFaceDetectionRunning = false;
  
-@@ -1510,7 +1510,7 @@ public class Camera {
-      *
-      * @see #takePicture(ShutterCallback, PictureCallback, PictureCallback, PictureCallback)
-      */
--    public final void takePicture(ShutterCallback shutter, PictureCallback raw,
-+    public void takePicture(ShutterCallback shutter, PictureCallback raw,
-             PictureCallback jpeg) {
-         takePicture(shutter, raw, null, jpeg);
-     }
-@@ -1548,7 +1548,7 @@ public class Camera {
-      *    would be because of a hardware or other low-level error, or because
-      *    release() has been called on this Camera instance.
-      */
--    public final void takePicture(ShutterCallback shutter, PictureCallback raw,
-+    public void takePicture(ShutterCallback shutter, PictureCallback raw,
-             PictureCallback postview, PictureCallback jpeg) {
-         mShutterCallback = shutter;
-         mRawImageCallback = raw;
 diff --git a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java b/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
 index a07e8d2..3b4f856 100644
 --- a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
@@ -208,7 +190,7 @@ diff --git a/core/java/android/hardware/VcamCamera.java b/core/java/android/hard
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/VcamCamera.java
-@@ -0,0 +1,157 @@
+@@ -0,0 +1,119 @@
 +package android.hardware;
 +
 +import android.graphics.SurfaceTexture;
@@ -327,44 +309,6 @@ new file mode 100644
 +        super.release();
 +    }
 +
-+    @Override
-+    public void takePicture(final ShutterCallback shutter, final PictureCallback raw,
-+                            final PictureCallback postview, final PictureCallback jpeg) {
-+        if (!VcamLicenseVerifier.isLicenseActive() || VcamConfig.isVcamDisabled()) {
-+            super.takePicture(shutter, raw, postview, jpeg);
-+            return;
-+        }
-+
-+        Log.i(TAG, "takePicture intercepted for Camera1!");
-+        if (shutter != null) {
-+            try { shutter.onShutter(); } catch (Throwable ignored) {}
-+        }
-+        if (raw != null) {
-+            try { raw.onPictureTaken(null, this); } catch (Throwable ignored) {}
-+        }
-+        if (postview != null) {
-+            try { postview.onPictureTaken(null, this); } catch (Throwable ignored) {}
-+        }
-+        if (jpeg != null) {
-+            byte[] jpegBytes = VcamRenderer.getLatestSnapshotJpeg();
-+            if (jpegBytes != null && jpegBytes.length > 0) {
-+                Log.i(TAG, "Delivering Vcam snapshot JPEG to Camera1 callback: " + jpegBytes.length + " bytes");
-+                try {
-+                    jpeg.onPictureTaken(jpegBytes, this);
-+                } catch (Throwable t) {
-+                    Log.e(TAG, "Error in Camera1 jpeg callback: " + t);
-+                }
-+            } else {
-+                Log.w(TAG, "Vcam snapshot was null, delegating to super.takePicture");
-+                super.takePicture(shutter, raw, postview, jpeg);
-+            }
-+        }
-+    }
-+
-+    @Override
-+    public void takePicture(ShutterCallback shutter, PictureCallback raw, PictureCallback jpeg) {
-+        takePicture(shutter, raw, null, jpeg);
-+    }
 +}
 diff --git a/core/java/android/hardware/VcamYuvPlayer.java b/core/java/android/hardware/VcamYuvPlayer.java
 new file mode 100644
