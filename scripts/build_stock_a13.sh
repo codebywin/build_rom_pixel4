@@ -31,10 +31,11 @@ prompt_input() {
 }
 
 BUILD_CHOICE="${1:-$BUILD_CHOICE}"
+VARIANT_CHOICE="${2:-$VARIANT_CHOICE}"
 
 if [ -z "$BUILD_CHOICE" ]; then
     echo -e "\n${YELLOW}==================================================================${NC}"
-    echo -e "${YELLOW}         CHỌN BẢN DỰNG ROM CHO PIXEL 4 (CHỈ 1 BƯỚC BẤM)           ${NC}"
+    echo -e "${YELLOW}         CHỌN BẢN DỰNG ROM CHO PIXEL 4 (BƯỚC 1/2)                 ${NC}"
     echo -e "${YELLOW}==================================================================${NC}"
     echo "  1) ROM Stock A13 Chuẩn Gốc + VCAM + KÈM GAPPS (CH Play & Play Services) [Mặc định]"
     echo "  2) ROM Stock A13 + VCAM (BỎ QUA GApps / Thuần sạch không có CH Play)"
@@ -67,8 +68,31 @@ case "$BUILD_CHOICE" in
         ;;
 esac
 
+if [ -z "$VARIANT_CHOICE" ]; then
+    echo -e "\n${YELLOW}==================================================================${NC}"
+    echo -e "${YELLOW}         CHỌN BIẾN THỂ PHÂN QUYỀN HỆ THỐNG (BƯỚC 2/2)             ${NC}"
+    echo -e "${YELLOW}==================================================================${NC}"
+    echo "  1) user      : Bản thương mại chuẩn ngân hàng (Không root, eKYC an toàn tuyệt đối) [Mặc định]"
+    echo "  2) userdebug : Bản nhà phát triển (Có sẵn lệnh 'adb root', binary 'su', dễ gỡ lỗi)"
+    VARIANT_CHOICE=$(prompt_input "Nhập lựa chọn của bạn [1 hoặc 2, mặc định 1]: " "1")
+fi
+
+VARIANT_CHOICE="${VARIANT_CHOICE:-1}"
+
+case "$VARIANT_CHOICE" in
+    2|"userdebug")
+        BUILD_VARIANT="userdebug"
+        echo -e "\n${GREEN}>> ĐÃ CHỌN BIẾN THỂ: userdebug (Bật adb root & su)${NC}"
+        ;;
+    1|"user"|*)
+        BUILD_VARIANT="user"
+        echo -e "\n${GREEN}>> ĐÃ CHỌN BIẾN THỂ: user (Chuẩn sản xuất, không root, bypass ngân hàng/eKYC)${NC}"
+        ;;
+esac
+
 echo -e "\n${CYAN}==================================================================${NC}"
 echo -e "${CYAN}>> CẤU HÌNH BIÊN DỊCH:${NC}"
+echo -e "   - Biến thể: ${GREEN}${BUILD_VARIANT}${NC} $([ "$BUILD_VARIANT" == "userdebug" ] && echo -e "(${YELLOW}Bật sẵn adb root & su${NC})" || echo -e "(${GREEN}Khóa bảo mật, chuẩn eKYC${NC})")"
 [ "$STOCK_MODE" == "1" ] && echo -e "   - Nhân VCam: ${GREEN}TÍCH HỢP (Camera1, Camera2, KYC ColorSync Flash, Titan M lock)${NC}" || echo -e "   - Nhân VCam: ${YELLOW}KHÔNG (ROM nguyên bản)${NC}"
 [ "$GAPPS_MODE" == "1" ] && echo -e "   - Dịch vụ Google: ${GREEN}CÓ (MindTheGapps: CH Play + Play Services)${NC}" || echo -e "   - Dịch vụ Google: ${GREEN}BỎ QUA (Siêu nhẹ, sạch 100%)${NC}"
 echo -e "${CYAN}==================================================================${NC}"
@@ -469,7 +493,7 @@ fi
 # 6. Thiết lập môi trường và Biên dịch
 echo -e "\n${BLUE}>> [6/6] Sắp xếp môi trường và bắt đầu Build AOSP...${NC}"
 source build/envsetup.sh
-lunch aosp_flame-user
+lunch aosp_flame-${BUILD_VARIANT}
 
 # Tối ưu hóa JVM cho RAM 128GB
 export _JAVA_OPTIONS="-Xmx32g"
@@ -497,7 +521,7 @@ echo -e "${GREEN}               BUILD ROM STOCK A13 HOÀN TẤT!                
 echo -e "${GREEN}==================================================================${NC}"
 
 # Gom các file image thành phẩm
-OUTPUT_DIR="$HOME/pixel4_stock_a13_$(date +%Y%m%d_%H%M%S)"
+OUTPUT_DIR="$HOME/pixel4_stock_a13_${BUILD_VARIANT}_$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$OUTPUT_DIR"
 
 IMG_SRC="out/target/product/flame"
