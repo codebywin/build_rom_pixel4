@@ -2,13 +2,6 @@ diff --git a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp b/s
 index e983aab..69b9593 100644
 --- a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
 +++ b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
-@@ -1,4 +1,5 @@
--N+exx*'*mz!yb䨺iڝ(	^q(ejo߭y?,ݮ}4]ǬƦz&jgjǫ'ׯǷ&z:i-[fLE/*
-+N+exx*'
-+*mz!yb䨺iڝ(	^q(ejo߭y?,ݮ}4]ǬƦz&jgjǫ'ׯǷ&z:i-[fLE/*
-  * Copyright (C) 2019 The Android Open Source Project
-  *
-  * Licensed under the Apache License, Version 2.0 (the "License");
 @@ -464,8 +465,377 @@ bool erasePhysicalCameraIdSet(
      return found;
  }
