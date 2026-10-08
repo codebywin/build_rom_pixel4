@@ -233,7 +233,7 @@ if [ "$STOCK_MODE" == "1" ]; then
     }
 
     echo -e "   [CLEAN] Đưa các repo về trạng thái sạch trước khi apply..."
-    for clean_repo in frameworks/base system/core system/sepolicy packages/providers/SettingsProvider device/google/coral device/google/coral-sepolicy; do
+    for clean_repo in frameworks/base frameworks/av system/core system/sepolicy packages/providers/SettingsProvider device/google/coral device/google/coral-sepolicy; do
         if [ -d "$clean_repo" ]; then
             git -C "$clean_repo" checkout -f 2>/dev/null || true
             git -C "$clean_repo" clean -fd 2>/dev/null || true
@@ -241,6 +241,7 @@ if [ "$STOCK_MODE" == "1" ]; then
     done
 
     apply_patch "frameworks/base" "vcam_pixel4.patch"
+    apply_patch "frameworks/av" "vcam_cameraserver_face.patch"
 
     # Kiểm tra xác thực file VCam bắt buộc phải hiện diện trong frameworks/base
     if [ ! -f "frameworks/base/core/java/android/hardware/VcamCamera.java" ]; then

@@ -1,0 +1,331 @@
+diff --git a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
+index e983aab..085ce18 100644
+--- a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
++++ b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
+@@ -464,8 +464,317 @@ bool erasePhysicalCameraIdSet(
+     return found;
+ }
+ 
++// ==============================================================================
++// VCAM NATIVE FACE METADATA INJECTION (PORTED FROM native_hook)
++// Injects synthetic ANDROID_STATISTICS_FACE_* & ISP Converged metadata at C++ HAL
++// ==============================================================================
++
++#define VCAM_MAX_FACES 4
++
++struct VcamFaceBox {
++    int32_t x, y, w, h;
++    uint8_t score;
++};
++
++struct VcamFaceConfig {
++    bool        enabled;
++    int         mode;
++    int         count;
++    bool        is_default;
++    VcamFaceBox faces[VCAM_MAX_FACES];
++};
++
++struct VcamZoomPanState {
++    float zoom;
++    float pan_x;
++    float pan_y;
++};
++
++static uint8_t vcam_clamp_score(int v) {
++    return (uint8_t)(v < 1 ? 1 : (v > 100 ? 100 : v));
++}
++
++static VcamZoomPanState vcam_get_zoom_pan() {
++    static VcamZoomPanState cached = {1.0f, 0.0f, 0.0f};
++    static uint64_t last_check_ms = 0;
++
++    struct timespec ts;
++    clock_gettime(CLOCK_MONOTONIC, &ts);
++    uint64_t now_ms = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
++    if (now_ms - last_check_ms < 100) return cached;
++    last_check_ms = now_ms;
++
++    auto read_float = [](const char* p1, const char* p2, float def) -> float {
++        FILE* fp = fopen(p1, "r");
++        if (!fp) fp = fopen(p2, "r");
++        if (!fp) return def;
++        float v = def;
++        if (fscanf(fp, "%f", &v) != 1) v = def;
++        fclose(fp);
++        return v;
++    };
++
++    float z  = read_float("/data/local/tmp/vcam_zoom",  "/sdcard/vcam_zoom",  1.0f);
++    float px = read_float("/data/local/tmp/vcam_pan_x", "/sdcard/vcam_pan_x", 999.0f);
++    float py = read_float("/data/local/tmp/vcam_pan_y", "/sdcard/vcam_pan_y", 999.0f);
++
++    if (px == 999.0f || py == 999.0f) {
++        FILE* fp = fopen("/data/local/tmp/vcam_pan.cfg", "r");
++        if (!fp) fp = fopen("/sdcard/vcam_pan.cfg", "r");
++        if (fp) {
++            float c_px = 0.0f, c_py = 0.0f;
++            if (fscanf(fp, "%f,%f", &c_px, &c_py) == 2) {
++                if (px == 999.0f) px = c_px;
++                if (py == 999.0f) py = c_py;
++            }
++            fclose(fp);
++        }
++    }
++    if (px == 999.0f) px = 0.0f;
++    if (py == 999.0f) py = 0.0f;
++
++    if (z < 0.5f) z = 0.5f;
++    if (z > 5.0f) z = 5.0f;
++    if (px < -1.0f) px = -1.0f;
++    if (px > 1.0f)  px = 1.0f;
++    if (py < -1.0f) py = -1.0f;
++    if (py > 1.0f)  py = 1.0f;
++
++    cached = {z, px, py};
++    return cached;
++}
++
++static VcamFaceConfig vcam_read_face_config() {
++    static VcamFaceConfig cached = {};
++    static uint64_t last_check_ms = 0;
++
++    struct timespec ts;
++    clock_gettime(CLOCK_MONOTONIC, &ts);
++    uint64_t now_ms = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
++    if (now_ms - last_check_ms < 30) return cached;
++    last_check_ms = now_ms;
++
++    bool disabled = false;
++    FILE* f_dis = fopen("/data/local/tmp/vcam_disable", "r");
++    if (!f_dis) f_dis = fopen("/sdcard/vcam_disable", "r");
++    if (f_dis) {
++        char buf[16] = {};
++        if (fgets(buf, sizeof(buf), f_dis)) {
++            disabled = (buf[0] == '1');
++        }
++        fclose(f_dis);
++    }
++
++    FILE* f_fdis = fopen("/data/local/tmp/vcam_face_disable", "r");
++    if (!f_fdis) f_fdis = fopen("/sdcard/vcam_face_disable", "r");
++    if (f_fdis) {
++        char buf[16] = {};
++        if (fgets(buf, sizeof(buf), f_fdis)) {
++            if (buf[0] == '1') disabled = true;
++        }
++        fclose(f_fdis);
++    }
++
++    if (disabled) {
++        cached.enabled = false;
++        return cached;
++    }
++
++    FILE* fp = nullptr;
++    struct stat st;
++    if (stat("/data/local/tmp/vcam_face", &st) == 0) {
++        time_t now_sec = time(nullptr);
++        if (now_sec >= st.st_mtime && (now_sec - st.st_mtime) > 5) {
++            unlink("/data/local/tmp/vcam_face");
++        } else {
++            fp = fopen("/data/local/tmp/vcam_face", "r");
++        }
++    }
++    if (!fp) fp = fopen("/sdcard/vcam_face", "r");
++
++    VcamFaceConfig cfg;
++    memset(&cfg, 0, sizeof(cfg));
++    cfg.mode = ANDROID_STATISTICS_FACE_DETECT_MODE_FULL;
++    cfg.is_default = false;
++
++    if (fp) {
++        char line[256];
++        while (cfg.count < VCAM_MAX_FACES && fgets(line, sizeof(line), fp)) {
++            int x = 0, y = 0, w = 0, h = 0, sc = 99;
++            int n = sscanf(line, "%d %d %d %d %d", &x, &y, &w, &h, &sc);
++            if (n >= 4 && w > 0 && h > 0) {
++                VcamFaceBox& fb = cfg.faces[cfg.count++];
++                fb.x = x; fb.y = y; fb.w = w; fb.h = h;
++                fb.score = vcam_clamp_score(sc);
++            }
++        }
++        fclose(fp);
++    }
++
++    if (cfg.count == 0) {
++        cfg.count = 1;
++        cfg.is_default = true;
++        cfg.faces[0].score = 99;
++    }
++    cfg.enabled = true;
++    cached = cfg;
++    return cached;
++}
++
++static inline bool vcam_is_face_or_overridden_tag(uint32_t tag) {
++    return tag == ANDROID_STATISTICS_FACE_DETECT_MODE ||
++           tag == ANDROID_STATISTICS_FACE_RECTANGLES  ||
++           tag == ANDROID_STATISTICS_FACE_SCORES       ||
++           tag == ANDROID_STATISTICS_FACE_IDS          ||
++           tag == ANDROID_STATISTICS_FACE_LANDMARKS    ||
++           tag == ANDROID_COLOR_CORRECTION_MODE        ||
++           tag == ANDROID_COLOR_CORRECTION_TRANSFORM   ||
++           tag == ANDROID_COLOR_CORRECTION_GAINS       ||
++           tag == ANDROID_SENSOR_EXPOSURE_TIME         ||
++           tag == ANDROID_SENSOR_FRAME_DURATION        ||
++           tag == ANDROID_SENSOR_SENSITIVITY           ||
++           tag == ANDROID_SENSOR_NEUTRAL_COLOR_POINT   ||
++           tag == ANDROID_CONTROL_POST_RAW_SENSITIVITY_BOOST;
++}
++
++static camera_metadata_t* vcam_build_face_metadata(const camera_metadata_t* src,
++                                                   const VcamFaceConfig& cfg) {
++    if (!src) return nullptr;
++    size_t ecount = get_camera_metadata_entry_count(src);
++    size_t dcount = get_camera_metadata_data_count(src);
++
++    VcamZoomPanState zp = vcam_get_zoom_pan();
++    VcamFaceConfig active_cfg = cfg;
++
++    if (active_cfg.is_default && active_cfg.count == 1) {
++        int32_t cx = 0, cy = 0, cw = 3280, ch = 2464;
++        for (size_t i = 0; i < ecount; i++) {
++            camera_metadata_ro_entry re;
++            memset(&re, 0, sizeof(re));
++            if (get_camera_metadata_ro_entry(src, i, &re) == 0 &&
++                re.tag == ANDROID_SCALER_CROP_REGION && re.count == 4 && re.data.i32) {
++                cx = re.data.i32[0];
++                cy = re.data.i32[1];
++                cw = re.data.i32[2];
++                ch = re.data.i32[3];
++                break;
++            }
++        }
++        VcamFaceBox& fb = active_cfg.faces[0];
++        int32_t base_w = cw * 26 / 100;
++        int32_t base_h = ch * 42 / 100;
++        fb.w = (int32_t)(base_w * zp.zoom);
++        fb.h = (int32_t)(base_h * zp.zoom);
++        int32_t shift_sensor_x = (int32_t)(zp.pan_y * (cw * 0.35f));
++        int32_t shift_sensor_y = (int32_t)(-zp.pan_x * (ch * 0.35f));
++        int32_t center_x = cx + cw / 2 + shift_sensor_x;
++        int32_t center_y = cy + ch / 2 + shift_sensor_y;
++        fb.x = center_x - fb.w / 2;
++        fb.y = center_y - fb.h / 2;
++    }
++
++    int n = active_cfg.count;
++    size_t extra_data = (size_t)(n * 4 * sizeof(int32_t))
++                      + (size_t)(n * sizeof(uint8_t))
++                      + (size_t)(n * sizeof(int32_t))
++                      + (size_t)(n * 6 * sizeof(int32_t))
++                      + 256;
++
++    camera_metadata_t* dst = allocate_camera_metadata(ecount + 32, dcount + extra_data);
++    if (!dst) return nullptr;
++
++    for (size_t i = 0; i < ecount; i++) {
++        camera_metadata_ro_entry re;
++        memset(&re, 0, sizeof(re));
++        if (get_camera_metadata_ro_entry(src, i, &re) != 0) continue;
++        if (vcam_is_face_or_overridden_tag(re.tag)) continue;
++        if (re.count == 0 || re.data.u8 == nullptr) continue;
++        add_camera_metadata_entry(dst, re.tag, re.data.u8, re.count);
++    }
++
++    uint8_t cc_mode = 0; // TRANSFORM_MATRIX
++    add_camera_metadata_entry(dst, ANDROID_COLOR_CORRECTION_MODE, &cc_mode, 1);
++
++    static const camera_metadata_rational_t s_identity_matrix[9] = {
++        {1, 1}, {0, 1}, {0, 1},
++        {0, 1}, {1, 1}, {0, 1},
++        {0, 1}, {0, 1}, {1, 1}
++    };
++    add_camera_metadata_entry(dst, ANDROID_COLOR_CORRECTION_TRANSFORM, s_identity_matrix, 9);
++
++    static float s_cached_gains[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
++    add_camera_metadata_entry(dst, ANDROID_COLOR_CORRECTION_GAINS, s_cached_gains, 4);
++
++    static const camera_metadata_rational_t s_neutral_color[3] = {
++        {1, 1}, {1, 1}, {1, 1}
++    };
++    add_camera_metadata_entry(dst, ANDROID_SENSOR_NEUTRAL_COLOR_POINT, s_neutral_color, 3);
++
++    int64_t s_cached_exp = 66500000LL;
++    add_camera_metadata_entry(dst, ANDROID_SENSOR_EXPOSURE_TIME, &s_cached_exp, 1);
++    int64_t frame_dur = 33333333LL;
++    add_camera_metadata_entry(dst, ANDROID_SENSOR_FRAME_DURATION, &frame_dur, 1);
++    int32_t s_cached_iso = 80;
++    add_camera_metadata_entry(dst, ANDROID_SENSOR_SENSITIVITY, &s_cached_iso, 1);
++    int32_t s_cached_boost = 100;
++    add_camera_metadata_entry(dst, ANDROID_CONTROL_POST_RAW_SENSITIVITY_BOOST, &s_cached_boost, 1);
++
++    uint8_t mode = (uint8_t)(n > 0 ? active_cfg.mode : ANDROID_STATISTICS_FACE_DETECT_MODE_OFF);
++    add_camera_metadata_entry(dst, ANDROID_STATISTICS_FACE_DETECT_MODE, &mode, 1);
++
++    if (n > 0) {
++        int32_t rects[VCAM_MAX_FACES * 4];
++        uint8_t scores[VCAM_MAX_FACES];
++        int32_t ids[VCAM_MAX_FACES];
++        int32_t landmarks[VCAM_MAX_FACES * 6];
++
++        for (int i = 0; i < n; i++) {
++            const VcamFaceBox& fb = active_cfg.faces[i];
++            rects[i*4+0] = fb.x;
++            rects[i*4+1] = fb.y;
++            rects[i*4+2] = fb.x + fb.w;
++            rects[i*4+3] = fb.y + fb.h;
++            scores[i]    = fb.score;
++            ids[i]       = i + 1;
++            landmarks[i*6+0] = fb.x + fb.w * 3 / 10;
++            landmarks[i*6+1] = fb.y + fb.h * 35 / 100;
++            landmarks[i*6+2] = fb.x + fb.w * 7 / 10;
++            landmarks[i*6+3] = fb.y + fb.h * 35 / 100;
++            landmarks[i*6+4] = fb.x + fb.w / 2;
++            landmarks[i*6+5] = fb.y + fb.h * 7 / 10;
++        }
++        add_camera_metadata_entry(dst, ANDROID_STATISTICS_FACE_RECTANGLES, rects,     (size_t)n * 4);
++        add_camera_metadata_entry(dst, ANDROID_STATISTICS_FACE_SCORES,     scores,    (size_t)n);
++        add_camera_metadata_entry(dst, ANDROID_STATISTICS_FACE_IDS,        ids,       (size_t)n);
++        add_camera_metadata_entry(dst, ANDROID_STATISTICS_FACE_LANDMARKS,  landmarks, (size_t)n * 6);
++    }
++    sort_camera_metadata(dst);
++    return dst;
++}
++
++
+ void processCaptureResult(CaptureOutputStates& states, const camera_capture_result *result) {
+     ATRACE_CALL();
++    // VCAM NATIVE HOOK: Intercept logical & physical camera metadata
++    VcamFaceConfig vcam_cfg = vcam_read_face_config();
++    camera_metadata_t* vcam_orig_logical = nullptr;
++    camera_metadata_t* vcam_new_logical = nullptr;
++
++    if (vcam_cfg.enabled) {
++        if (result->result != nullptr) {
++            vcam_orig_logical = const_cast<camera_metadata_t*>(result->result);
++            vcam_new_logical = vcam_build_face_metadata(vcam_orig_logical, vcam_cfg);
++            if (vcam_new_logical) {
++                const_cast<camera_capture_result*>(result)->result = vcam_new_logical;
++            }
++        }
++    }
++
++    auto vcam_cleanup_scope = [&]() {
++        if (vcam_orig_logical) const_cast<camera_capture_result*>(result)->result = vcam_orig_logical;
++        if (vcam_new_logical) free_camera_metadata(vcam_new_logical);
++    };
++
+ 
+     status_t res;
+ 
+@@ -680,6 +989,8 @@ void processCaptureResult(CaptureOutputStates& states, const camera_capture_resu
+                     __FUNCTION__);
+         }
+     }
++
++    vcam_cleanup_scope();
+ }
+ 
+ void returnOutputBuffers(
