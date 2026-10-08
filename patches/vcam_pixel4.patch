@@ -2159,7 +2159,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamFaceMetadata.java b/cor
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamFaceMetadata.java
-@@ -0,0 +1,305 @@
+@@ -0,0 +1,310 @@
 +package android.hardware.camera2.impl;
 +
 +import android.graphics.Point;
@@ -2388,7 +2388,12 @@ new file mode 100644
 +            }
 +            if (crop == null && device != null) {
 +                try {
-+                    crop = device.getCharacteristics().get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
++                    java.lang.reflect.Method mChar = device.getClass().getDeclaredMethod("getCharacteristics");
++                    mChar.setAccessible(true);
++                    CameraCharacteristics chars = (CameraCharacteristics) mChar.invoke(device);
++                    if (chars != null) {
++                        crop = chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
++                    }
 +                } catch (Throwable ignored) {}
 +            }
 +            if (crop != null && crop.width() > 0 && crop.height() > 0) {
