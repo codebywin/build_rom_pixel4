@@ -2,7 +2,7 @@ diff --git a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp b/s
 index e983aab..69b9593 100644
 --- a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
 +++ b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
-@@ -464,8 +465,377 @@ bool erasePhysicalCameraIdSet(
+@@ -464,8 +464,385 @@ bool erasePhysicalCameraIdSet(
      return found;
  }
  
@@ -219,6 +219,8 @@ index e983aab..69b9593 100644
 +        int32_t center_y = cy + ch / 2 + shift_sensor_y;
 +        fb.x = center_x - fb.w / 2;
 +        fb.y = center_y - fb.h / 2;
++        ALOGE("VCAM-CS: computed default face crop=[%d,%d,%d,%d] zoom=%.2f pan=(%.2f,%.2f) -> rect=[%d,%d,%d,%d]",
++              cx, cy, cw, ch, zp.zoom, zp.pan_x, zp.pan_y, fb.x, fb.y, fb.w, fb.h);
 +    }
 +
 +    int n = active_cfg.count;
@@ -324,6 +326,12 @@ index e983aab..69b9593 100644
 +            static uint32_t sLogCounter = 0;
 +            bool should_log = ((++sLogCounter % 30) == 1);
 +
++            if (should_log) {
++                ALOGE("VCAM-CS: pcr call #%u src_logical=%p num_phys=%u phys_arr=%p",
++                      sLogCounter, (const void*)res->result,
++                      res->num_physcam_metadata, (const void*)res->physcam_metadata);
++            }
++
 +            // 1. Intercept logical metadata
 +            if (res->result != nullptr) {
 +                orig_logical = const_cast<camera_metadata_t*>(res->result);
@@ -331,8 +339,8 @@ index e983aab..69b9593 100644
 +                if (new_logical) {
 +                    res->result = new_logical;
 +                    if (should_log) {
-+                        ALOGE("VCAM-CS: Injected Face Metadata into logical camera! (faces=%d, rect=[%d,%d,%d,%d])",
-+                              cfg.count, cfg.faces[0].x, cfg.faces[0].y, cfg.faces[0].w, cfg.faces[0].h);
++                        ALOGE("VCAM-CS: Injected Face Metadata into logical camera! (faces=%d)",
++                              cfg.count);
 +                    }
 +                }
 +            }
