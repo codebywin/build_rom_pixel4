@@ -111,15 +111,15 @@ index a07e8d2..3b4f856 100644
              if (mClosing.getAndSet(true)) {
                  return;
              }
-@@ -2218,6 +2223,8 @@ public class CameraDeviceImpl extends CameraDevice
-                 }
- 
- 
+@@ -2185,6 +2185,8 @@ public class CameraDeviceImpl extends CameraDevice
+                 final CaptureCallbackHolder holder =
+                         CameraDeviceImpl.this.mCaptureCallbackMap.get(requestId);
+                 final CaptureRequest request = holder.getRequest(resultExtras.getSubsequenceId());
 +                android.hardware.camera2.impl.VcamEngine.injectCaptureResult(CameraDeviceImpl.this, result, request);
 +
-                 Runnable resultDispatch = null;
  
-                 CaptureResult finalResult;
+                 boolean isPartialResult =
+                         (resultExtras.getPartialResultCount() < mTotalPartialCount);
 diff --git a/media/java/android/media/ImageReader.java b/media/java/android/media/ImageReader.java
 index 472586b..d34169e 100644
 --- a/media/java/android/media/ImageReader.java
@@ -2480,9 +2480,10 @@ new file mode 100644
 +}
 diff --git a/core/java/android/hardware/camera2/impl/VcamFaceMetadata.java b/core/java/android/hardware/camera2/impl/VcamFaceMetadata.java
 new file mode 100644
+index 0000000..1234567
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamFaceMetadata.java
-@@ -0,0 +1,310 @@
+@@ -0,0 +1,360 @@
 +package android.hardware.camera2.impl;
 +
 +import android.graphics.Point;
@@ -2501,10 +2502,11 @@ new file mode 100644
 +import java.util.List;
 +
 +/**
-+ * VcamFaceMetadata — Tu dong tong hop va inject face metadata (Face detection + ISP Sensor stats)
-+ * vao CaptureResult / TotalCaptureResult trong AOSP Camera framework.
++ * VcamFaceMetadata - Tu dong tong hop va inject face metadata (Face detection + ISP Sensor stats)
++ * vao CameraMetadataNative trong AOSP Camera framework.
 + *
-+ * Giup cac ung dung camera va xac thuc khuon mat nhan dien tu nhien tu video gia lap VCAM.
++ * Dong bo hoa 100% tu logic face_metadata_hook.cpp cua du an native_hook:
++ * Injects Face Rectangles, Scores, IDs, Landmarks va 3A Converged states cho moi CaptureResult.
 + */
 +public class VcamFaceMetadata {
 +    private static final String TAG = "VcamFaceMetadata";
@@ -2540,6 +2542,7 @@ new file mode 100644
 +    private static volatile long sCachedExpTime = 66500000L; // ~1/15s
 +    private static volatile int sCachedIso = 80;
 +    private static volatile long sLastExpCheckMs = 0;
++    private static volatile long sLastLogTime = 0;
 +
 +    // Reflection cache for Face constructors
 +    private static volatile Constructor<Face> sFaceFullCtor = null;
@@ -2730,9 +2733,11 @@ new file mode 100644
 +            List<FaceBox> customList = readCustomFaces();
 +            List<Face> faceList = new ArrayList<>();
 +
++            int fx = 0, fy = 0, fw = 0, fh = 0;
 +            if (customList != null && !customList.isEmpty()) {
 +                int id = 1;
 +                for (FaceBox fb : customList) {
++                    fx = fb.x; fy = fb.y; fw = fb.w; fh = fb.h;
 +                    Point leftEye = new Point(fb.x + fb.w * 3 / 10, fb.y + fb.h * 35 / 100);
 +                    Point rightEye = new Point(fb.x + fb.w * 7 / 10, fb.y + fb.h * 35 / 100);
 +                    Point mouth = new Point(fb.x + fb.w / 2, fb.y + fb.h * 7 / 10);
@@ -2740,7 +2745,7 @@ new file mode 100644
 +                    if (f != null) faceList.add(f);
 +                }
 +            } else {
-+                // Tinh toan tu dong theo Zoom / Pan cua Vcam
++                // Tinh toan tu dong theo Zoom / Pan cua Vcam (chuan theo native_hook)
 +                float zoom = VcamConfig.getZoomScale();
 +                if (zoom < 0.5f) zoom = 0.5f;
 +                if (zoom > 5.0f) zoom = 5.0f;
@@ -2758,41 +2763,87 @@ new file mode 100644
 +                int centerX = cx + cw / 2 + shiftSensorX;
 +                int centerY = cy + ch / 2 + shiftSensorY;
 +
-+                int fx = centerX - baseW / 2;
-+                int fy = centerY - baseH / 2;
++                fx = centerX - baseW / 2;
++                fy = centerY - baseH / 2;
++                fw = baseW;
++                fh = baseH;
 +
 +                if (fx < cx) fx = cx;
 +                if (fy < cy) fy = cy;
-+                if (fx + baseW > cx + cw) baseW = cx + cw - fx;
-+                if (fy + baseH > cy + ch) baseH = cy + ch - fy;
++                if (fx + fw > cx + cw) fw = cx + cw - fx;
++                if (fy + fh > cy + ch) fh = cy + ch - fy;
 +
-+                Point leftEye = new Point(fx + baseW * 3 / 10, fy + baseH * 35 / 100);
-+                Point rightEye = new Point(fx + baseW * 7 / 10, fy + baseH * 35 / 100);
-+                Point mouth = new Point(fx + baseW / 2, fy + baseH * 7 / 10);
++                Point leftEye = new Point(fx + fw * 3 / 10, fy + fh * 35 / 100);
++                Point rightEye = new Point(fx + fw * 7 / 10, fy + fh * 35 / 100);
++                Point mouth = new Point(fx + fw / 2, fy + fh * 7 / 10);
 +
-+                Face f = createFace(new Rect(fx, fy, fx + baseW, fy + baseH), 99, 1, leftEye, rightEye, mouth);
++                Face f = createFace(new Rect(fx, fy, fx + fw, fy + fh), 99, 1, leftEye, rightEye, mouth);
 +                if (f != null) faceList.add(f);
 +            }
 +
 +            Face[] faces = faceList.toArray(new Face[faceList.size()]);
 +
-+            // 3. Inject Face metadata
++            // 3. Inject tat ca cac tag Face metadata chuan (dong bo theo face_metadata_hook.cpp)
 +            result.set(CaptureResult.STATISTICS_FACE_DETECT_MODE, Integer.valueOf(CameraMetadata.STATISTICS_FACE_DETECT_MODE_FULL));
 +            result.set(CaptureResult.STATISTICS_FACES, faces);
 +
-+            // 4. Inject Sensor & ISP stats
++            int n = faceList.size();
++            if (n > 0) {
++                int[] rects = new int[n * 4];
++                byte[] scores = new byte[n];
++                int[] ids = new int[n];
++                int[] landmarks = new int[n * 6];
++
++                for (int i = 0; i < n; i++) {
++                    Face f = faceList.get(i);
++                    Rect b = f.getBounds();
++                    rects[i * 4 + 0] = b.left;
++                    rects[i * 4 + 1] = b.top;
++                    rects[i * 4 + 2] = b.right;
++                    rects[i * 4 + 3] = b.bottom;
++                    scores[i] = (byte) f.getScore();
++                    ids[i] = f.getId();
++
++                    Point le = f.getLeftEyePosition();
++                    Point re = f.getRightEyePosition();
++                    Point m = f.getMouthPosition();
++                    landmarks[i * 6 + 0] = (le != null) ? le.x : (b.left + b.width() * 3 / 10);
++                    landmarks[i * 6 + 1] = (le != null) ? le.y : (b.top + b.height() * 35 / 100);
++                    landmarks[i * 6 + 2] = (re != null) ? re.x : (b.left + b.width() * 7 / 10);
++                    landmarks[i * 6 + 3] = (re != null) ? re.y : (b.top + b.height() * 35 / 100);
++                    landmarks[i * 6 + 4] = (m != null) ? m.x : (b.left + b.width() / 2);
++                    landmarks[i * 6 + 5] = (m != null) ? m.y : (b.top + b.height() * 7 / 10);
++                }
++
++                result.set(CaptureResult.STATISTICS_FACE_RECTANGLES, rects);
++                result.set(CaptureResult.STATISTICS_FACE_SCORES, scores);
++                result.set(CaptureResult.STATISTICS_FACE_IDS, ids);
++                result.set(CaptureResult.STATISTICS_FACE_LANDMARKS, landmarks);
++            }
++
++            // 4. Inject Sensor, 3A Converged states & ISP stats (giup eKYC pass kiem tra do sang / on dinh)
 +            updateSensorExposure();
 +            result.set(CaptureResult.SENSOR_EXPOSURE_TIME, Long.valueOf(sCachedExpTime));
 +            result.set(CaptureResult.SENSOR_SENSITIVITY, Integer.valueOf(sCachedIso));
 +            result.set(CaptureResult.SENSOR_FRAME_DURATION, Long.valueOf(33333333L));
 +            result.set(CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST, Integer.valueOf(100));
-+            result.set(CaptureResult.COLOR_CORRECTION_MODE, Integer.valueOf(0));
++            result.set(CaptureResult.COLOR_CORRECTION_MODE, Integer.valueOf(0)); // TRANSFORM_MATRIX
++            result.set(CaptureResult.CONTROL_AE_STATE, Integer.valueOf(CaptureResult.CONTROL_AE_STATE_CONVERGED));
++            result.set(CaptureResult.CONTROL_AWB_STATE, Integer.valueOf(CaptureResult.CONTROL_AWB_STATE_CONVERGED));
++            result.set(CaptureResult.CONTROL_SCENE_MODE, Integer.valueOf(CaptureResult.CONTROL_SCENE_MODE_FACE_PRIORITY));
++
++            long now = System.currentTimeMillis();
++            if (now - sLastLogTime > 3000) {
++                sLastLogTime = now;
++                Log.i(TAG, "Injected Face Metadata: count=" + n + ", rect=[" + fx + "," + fy + "," + fw + "," + fh + "]");
++            }
 +
 +        } catch (Throwable t) {
 +            Log.w(TAG, "inject error: " + t);
 +        }
 +    }
 +}
++
 diff --git a/core/java/android/hardware/camera2/impl/VcamStillCapture.java b/core/java/android/hardware/camera2/impl/VcamStillCapture.java
 new file mode 100644
 --- /dev/null
