@@ -2845,7 +2845,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamStillCapture.java b/cor
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamStillCapture.java
-@@ -0,0 +1,154 @@
+@@ -0,0 +1,210 @@
 +package android.hardware.camera2.impl;
 +
 +import android.graphics.ImageFormat;
@@ -2861,11 +2861,13 @@ new file mode 100644
 + * 1. Still Photo Capture (Format JPEG 256 / BLOB 33): Injects 100% full-res JPEG snapshot.
 + * 2. Computer Vision / Face Recognition (Format YUV_420_888 35 / NV21 17):
 + *    Injects real-time live YUV frames directly into ImageReader ByteBuffers (< 0.5ms).
-+ *    This allows Google ML Kit, OpenCV, and KYC biometric SDKs to detect faces seamlessly.
++ *    Optimized for Google ML Kit, OpenCV, and Banking KYC Face Recognition (BlazeFace).
++ *    Supports Sensor Orientation Mapping (Rotation 90/270 deg) for front/back cameras.
 + */
 +public class VcamStillCapture {
 +    private static final String TAG = "VCAM-StillCapture";
 +    private static long sLastLogTime = 0;
++    private static long sLastInjectTime = 0;
 +
 +    public static void intercept(Image image, ImageReader reader) {
 +        if (image == null || reader == null) return;
@@ -2911,6 +2913,13 @@ new file mode 100644
 +
 +    private static void injectLiveYuv(Image image) {
 +        try {
++            long now = System.currentTimeMillis();
++            // Throttle to max 30 fps (at least 30ms interval) to completely prevent CPU ANR
++            if (now - sLastInjectTime < 30) {
++                return;
++            }
++            sLastInjectTime = now;
++
 +            byte[] srcY = VcamRenderer.getLiveYData();
 +            byte[] srcU = VcamRenderer.getLiveUData();
 +            byte[] srcV = VcamRenderer.getLiveVData();
@@ -2937,13 +2946,59 @@ new file mode 100644
 +            int uPixStride = planes[1].getPixelStride();
 +            int vPixStride = planes[2].getPixelStride();
 +
-+            // ── Fill Y plane ──────────────────────────────────────────────────────────
-+            if (srcW == dstW && srcH == dstH && yRowStride == dstW) {
-+                yBuf.position(0);
-+                yBuf.put(srcY, 0, Math.min(srcY.length, yBuf.capacity()));
++            // Detect if dst is landscape while src is portrait
++            // Pixel 4 Front camera sensor orientation = 270 deg.
++            // When ML Kit receives landscape 1920x1080 buffer, it applies 270 deg counter-clockwise rotation.
++            // To produce an upright face for BlazeFace/ML Kit, the buffer MUST be rotated 90 deg clockwise!
++            boolean needRotate90CW = (dstW > dstH && srcH > srcW);
++
++            if (needRotate90CW) {
++                // Rotate 90 deg CW: (x_src, y_src) -> (x_dst, y_dst)
++                byte[] rowBuf = new byte[dstW];
++                for (int r = 0; r < dstH; r++) {
++                    int dstPos = r * yRowStride;
++                    if (dstPos + dstW > yBuf.capacity()) break;
++                    int sx = (r * srcW) / dstH;
++                    if (sx >= srcW) sx = srcW - 1;
++
++                    for (int c = 0; c < dstW; c++) {
++                        int sy = ((dstW - 1 - c) * srcH) / dstW;
++                        if (sy >= srcH) sy = srcH - 1;
++                        rowBuf[c] = srcY[sy * srcW + sx];
++                    }
++                    yBuf.position(dstPos);
++                    yBuf.put(rowBuf, 0, dstW);
++                }
++
++                int dstUvH = dstH / 2;
++                int dstUvW = dstW / 2;
++                int srcUvW = srcW / 2;
++                int srcUvH = srcH / 2;
++
++                for (int r = 0; r < dstUvH; r++) {
++                    int uRowPos = r * uRowStride;
++                    int vRowPos = r * vRowStride;
++                    int sx = (r * srcUvW) / dstUvH;
++                    if (sx >= srcUvW) sx = srcUvW - 1;
++
++                    for (int c = 0; c < dstUvW; c++) {
++                        int sy = ((dstUvW - 1 - c) * srcUvH) / dstUvW;
++                        if (sy >= srcUvH) sy = srcUvH - 1;
++                        int srcIdx = sy * srcUvW + sx;
++                        if (srcIdx >= srcU.length) break;
++
++                        int uPos = uRowPos + c * uPixStride;
++                        int vPos = vRowPos + c * vPixStride;
++                        if (uPos < uBuf.capacity()) uBuf.put(uPos, srcU[srcIdx]);
++                        if (vPos < vBuf.capacity()) vBuf.put(vPos, srcV[srcIdx]);
++                    }
++                }
 +            } else {
++                // Direct mapping (same orientation)
++                byte[] rowBuf = new byte[dstW];
 +                for (int r = 0; r < dstH; r++) {
 +                    int sy = (r * srcH) / dstH;
++                    if (sy >= srcH) sy = srcH - 1;
 +                    int srcRowStart = sy * srcW;
 +                    int dstPos = r * yRowStride;
 +                    if (dstPos + dstW > yBuf.capacity()) break;
@@ -2954,45 +3009,43 @@ new file mode 100644
 +                    } else {
 +                        for (int c = 0; c < dstW; c++) {
 +                            int sx = (c * srcW) / dstW;
-+                            yBuf.put(dstPos + c, srcY[srcRowStart + sx]);
++                            if (sx >= srcW) sx = srcW - 1;
++                            rowBuf[c] = srcY[srcRowStart + sx];
 +                        }
++                        yBuf.position(dstPos);
++                        yBuf.put(rowBuf, 0, dstW);
++                    }
++                }
++
++                int dstUvH = dstH / 2;
++                int dstUvW = dstW / 2;
++                int srcUvW = srcW / 2;
++                int srcUvH = srcH / 2;
++
++                for (int r = 0; r < dstUvH; r++) {
++                    int sy = (r * srcUvH) / dstUvH;
++                    if (sy >= srcUvH) sy = srcUvH - 1;
++                    int srcUvRowStart = sy * srcUvW;
++                    int uRowPos = r * uRowStride;
++                    int vRowPos = r * vRowStride;
++
++                    for (int c = 0; c < dstUvW; c++) {
++                        int sx = (c * srcUvW) / dstUvW;
++                        if (sx >= srcUvW) sx = srcUvW - 1;
++                        int srcIdx = srcUvRowStart + sx;
++                        if (srcIdx >= srcU.length) break;
++
++                        int uPos = uRowPos + c * uPixStride;
++                        int vPos = vRowPos + c * vPixStride;
++                        if (uPos < uBuf.capacity()) uBuf.put(uPos, srcU[srcIdx]);
++                        if (vPos < vBuf.capacity()) vBuf.put(vPos, srcV[srcIdx]);
 +                    }
 +                }
 +            }
 +
-+            // ── Fill U and V planes ───────────────────────────────────────────────────
-+            int dstUvH = dstH / 2;
-+            int dstUvW = dstW / 2;
-+            int srcUvW = srcW / 2;
-+            int srcUvH = srcH / 2;
-+
-+            for (int r = 0; r < dstUvH; r++) {
-+                int sy = (r * srcUvH) / dstUvH;
-+                int srcUvRowStart = sy * srcUvW;
-+                int uRowPos = r * uRowStride;
-+                int vRowPos = r * vRowStride;
-+
-+                for (int c = 0; c < dstUvW; c++) {
-+                    int sx = (c * srcUvW) / dstUvW;
-+                    int srcIdx = srcUvRowStart + sx;
-+                    if (srcIdx >= srcU.length) break;
-+
-+                    int uPos = uRowPos + c * uPixStride;
-+                    int vPos = vRowPos + c * vPixStride;
-+
-+                    if (uPos < uBuf.capacity()) {
-+                        uBuf.put(uPos, srcU[srcIdx]);
-+                    }
-+                    if (vPos < vBuf.capacity()) {
-+                        vBuf.put(vPos, srcV[srcIdx]);
-+                    }
-+                }
-+            }
-+
-+            long now = System.currentTimeMillis();
 +            if (now - sLastLogTime > 3000) {
 +                sLastLogTime = now;
-+                Log.i(TAG, "Successfully injected Live YUV frame (" + dstW + "x" + dstH + ") into ImageReader for Face ML!");
++                Log.i(TAG, "Successfully injected Live YUV frame (" + dstW + "x" + dstH + ", rotated90CW=" + needRotate90CW + ") for Face ML!");
 +            }
 +
 +        } catch (Throwable t) {
