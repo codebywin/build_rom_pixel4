@@ -2483,7 +2483,7 @@ new file mode 100644
 index 0000000..1234567
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamFaceMetadata.java
-@@ -0,0 +1,360 @@
+@@ -0,0 +1,357 @@
 +package android.hardware.camera2.impl;
 +
 +import android.graphics.Point;
@@ -2789,7 +2789,7 @@ index 0000000..1234567
 +
 +            int n = faceList.size();
 +            if (n > 0) {
-+                int[] rects = new int[n * 4];
++                Rect[] rects = new Rect[n];
 +                byte[] scores = new byte[n];
 +                int[] ids = new int[n];
 +                int[] landmarks = new int[n * 6];
@@ -2797,10 +2797,7 @@ index 0000000..1234567
 +                for (int i = 0; i < n; i++) {
 +                    Face f = faceList.get(i);
 +                    Rect b = f.getBounds();
-+                    rects[i * 4 + 0] = b.left;
-+                    rects[i * 4 + 1] = b.top;
-+                    rects[i * 4 + 2] = b.right;
-+                    rects[i * 4 + 3] = b.bottom;
++                    rects[i] = b;
 +                    scores[i] = (byte) f.getScore();
 +                    ids[i] = f.getId();
 +
