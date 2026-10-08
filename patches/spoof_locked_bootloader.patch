@@ -18,17 +18,18 @@
          return native_get(key, def);
      }
  
-@@ -177,6 +181,9 @@
+@@ -177,6 +181,10 @@
      @SystemApi
      public static int getInt(@NonNull String key, int def) {
          if (TRACK_KEY_ACCESS) onKeyAccess(key);
 +        if ("ro.boot.flash.locked".equals(key)) return 1;
 +        if ("ro.debuggable".equals(key)) return 0;
 +        if ("ro.secure".equals(key)) return 1;
++        if ("service.adb.tcp.port".equals(key)) return -1;
          return native_get_int(key, def);
      }
  
-@@ -212,6 +219,9 @@
+@@ -212,6 +220,9 @@
      @SystemApi
      public static boolean getBoolean(@NonNull String key, boolean def) {
          if (TRACK_KEY_ACCESS) onKeyAccess(key);
@@ -38,7 +39,7 @@
          return native_get_boolean(key, def);
      }
  
-@@ -382,4 +392,41 @@
+@@ -382,4 +393,42 @@
              mNativeHandle = nativeHandle;
          }
      }
@@ -54,6 +55,7 @@
 +        if ("ro.secure".equals(key)) return "1";
 +        if ("init.svc.adbd".equals(key)) return "stopped";
 +        if ("persist.sys.usb.config".equals(key) || "sys.usb.config".equals(key) || "sys.usb.state".equals(key)) return "none";
++        if ("service.adb.tcp.port".equals(key) || "service.adb.listen_type".equals(key)) return "-1";
 +
 +        if (key != null && (key.startsWith("ro.lineage.") || key.startsWith("ro.modversion") || key.startsWith("ro.cm."))) {
 +            return "";

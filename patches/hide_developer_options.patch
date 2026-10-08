@@ -1,10 +1,10 @@
 diff --git a/core/java/android/os/Debug.java b/core/java/android/os/Debug.java
-index b4930fa..a2d530e 100644
+index f6310fd..3bcb6ba 100644
 --- a/core/java/android/os/Debug.java
 +++ b/core/java/android/os/Debug.java
-@@ -1041,6 +1041,9 @@ public final class Debug
-      * to attach.
-      */
+@@ -4,10 +4,16 @@ public final class Debug {
+     private static volatile boolean mWaiting = false;
+ 
      public static boolean waitingForDebugger() {
 +        if (Process.myUid() >= Process.FIRST_APPLICATION_UID) {
 +            return false;
@@ -12,74 +12,292 @@ index b4930fa..a2d530e 100644
          return mWaiting;
      }
  
-@@ -1048,6 +1051,9 @@ public final class Debug
-      * Determine if a debugger is currently attached.
-      */
      public static boolean isDebuggerConnected() {
 +        if (Process.myUid() >= Process.FIRST_APPLICATION_UID) {
 +            return false;
 +        }
          return VMDebug.isDebuggerConnected();
      }
- 
+ }
 diff --git a/core/java/android/provider/Settings.java b/core/java/android/provider/Settings.java
-index 805fdc4..ddd541e 100644
+index 4578eec..c2ac129 100644
 --- a/core/java/android/provider/Settings.java
 +++ b/core/java/android/provider/Settings.java
-@@ -3724,6 +3724,18 @@ public final class Settings {
+@@ -3055,6 +3055,9 @@ public final class Settings {
+ 
+         @UnsupportedAppUsage
+         public String getStringForUser(ContentResolver cr, String name, final int userHandle) {
++            if (isSpoofSensitiveKey(name)) {
++                return spoofString(name);
++            }
+             // Check if the target settings key is readable. Reject if the caller is not system and
+             // is trying to access a settings key defined in the Settings.Secure, Settings.System or
+             // Settings.Global and is not annotated as @Readable.
+@@ -3565,6 +3568,42 @@ public final class Settings {
+         }
+     }
+ 
++    /** @hide */
++    private static boolean isSpoofSensitiveKey(String name) {
++        if (name == null) return false;
++        if (android.os.Process.myUid() < 10000) return false;
++        return "adb_enabled".equals(name)
++            || "development_settings_enabled".equals(name)
++            || "adb_wifi_enabled".equals(name)
++            || "mock_location".equals(name)
++            || "wait_for_debugger".equals(name)
++            || "show_touches".equals(name)
++            || "pointer_location".equals(name)
++            || "accessibility_enabled".equals(name)
++            || "enabled_accessibility_services".equals(name)
++            || "debug_app".equals(name)
++            || "install_non_market_apps".equals(name)
++            || "force_allow_on_external".equals(name)
++            || "force_resizable_activities".equals(name)
++            || "enable_freeform_support".equals(name)
++            || "force_desktop_mode_on_external_displays".equals(name)
++            || "stay_on_while_plugged_in".equals(name)
++            || "verifier_verify_adb_installs".equals(name);
++    }
++
++    /** @hide */
++    private static String spoofString(String name) {
++        if ("enabled_accessibility_services".equals(name) || "debug_app".equals(name)) {
++            return "";
++        }
++        return "0";
++    }
++
++    /** @hide */
++    private static Uri spoofUri(String name) {
++        return Uri.parse("content://" + AUTHORITY + "/dummy_spoofed/" + name);
++    }
++
+     /**
+      * System settings, containing miscellaneous system preferences.  This
+      * table holds simple name/value pairs.  There are convenience
+@@ -3741,6 +3780,9 @@ public final class Settings {
          @UnsupportedAppUsage
          public static String getStringForUser(ContentResolver resolver, String name,
                  int userHandle) {
-+            int uid = android.os.Process.myUid();
-+            if (uid >= 10000) {
-+                if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name)
-+                        || "adb_wifi_enabled".equals(name) || "mock_location".equals(name)
-+                        || "wait_for_debugger".equals(name) || "show_touches".equals(name)
-+                        || "pointer_location".equals(name) || "accessibility_enabled".equals(name)) {
-+                    return "0";
-+                }
-+                if ("enabled_accessibility_services".equals(name) || "debug_app".equals(name)) {
-+                    return "";
-+                }
++            if (isSpoofSensitiveKey(name)) {
++                return spoofString(name);
 +            }
              if (MOVED_TO_SECURE.contains(name)) {
                  Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.System"
                          + " to android.provider.Settings.Secure, returning read-only value.");
-@@ -6124,6 +6136,18 @@ public final class Settings {
+@@ -3823,6 +3865,9 @@ public final class Settings {
+          * @return the corresponding content URI, or null if not present
+          */
+         public static Uri getUriFor(String name) {
++            if (isSpoofSensitiveKey(name)) {
++                return spoofUri(name);
++            }
+             if (MOVED_TO_SECURE.contains(name)) {
+                 Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.System"
+                     + " to android.provider.Settings.Secure, returning Secure URI.");
+@@ -3851,12 +3896,14 @@ public final class Settings {
+          * or not a valid integer.
+          */
+         public static int getInt(ContentResolver cr, String name, int def) {
++            if (isSpoofSensitiveKey(name)) return 0;
+             return getIntForUser(cr, name, def, cr.getUserId());
+         }
+ 
+         /** @hide */
+         @UnsupportedAppUsage
+         public static int getIntForUser(ContentResolver cr, String name, int def, int userHandle) {
++            if (isSpoofSensitiveKey(name)) return 0;
+             String v = getStringForUser(cr, name, userHandle);
+             return parseIntSettingWithDefault(v, def);
+         }
+@@ -3881,6 +3928,7 @@ public final class Settings {
+          */
+         public static int getInt(ContentResolver cr, String name)
+                 throws SettingNotFoundException {
++            if (isSpoofSensitiveKey(name)) return 0;
+             return getIntForUser(cr, name, cr.getUserId());
+         }
+ 
+@@ -3888,6 +3936,7 @@ public final class Settings {
+         @UnsupportedAppUsage
+         public static int getIntForUser(ContentResolver cr, String name, int userHandle)
+                 throws SettingNotFoundException {
++            if (isSpoofSensitiveKey(name)) return 0;
+             String v = getStringForUser(cr, name, userHandle);
+             return parseIntSetting(v, name);
+         }
+@@ -3931,12 +3980,14 @@ public final class Settings {
+          * or not a valid {@code long}.
+          */
+         public static long getLong(ContentResolver cr, String name, long def) {
++            if (isSpoofSensitiveKey(name)) return 0L;
+             return getLongForUser(cr, name, def, cr.getUserId());
+         }
+ 
+         /** @hide */
+         public static long getLongForUser(ContentResolver cr, String name, long def,
+                 int userHandle) {
++            if (isSpoofSensitiveKey(name)) return 0L;
+             String v = getStringForUser(cr, name, userHandle);
+             return parseLongSettingWithDefault(v, def);
+         }
+@@ -3960,12 +4011,14 @@ public final class Settings {
+          */
+         public static long getLong(ContentResolver cr, String name)
+                 throws SettingNotFoundException {
++            if (isSpoofSensitiveKey(name)) return 0L;
+             return getLongForUser(cr, name, cr.getUserId());
+         }
+ 
+         /** @hide */
+         public static long getLongForUser(ContentResolver cr, String name, int userHandle)
+                 throws SettingNotFoundException {
++            if (isSpoofSensitiveKey(name)) return 0L;
+             String v = getStringForUser(cr, name, userHandle);
+             return parseLongSetting(v, name);
+         }
+@@ -6177,6 +6230,9 @@ public final class Settings {
          @UnsupportedAppUsage
          public static String getStringForUser(ContentResolver resolver, String name,
                  int userHandle) {
-+            int uid = android.os.Process.myUid();
-+            if (uid >= 10000) {
-+                if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name)
-+                        || "adb_wifi_enabled".equals(name) || "mock_location".equals(name)
-+                        || "wait_for_debugger".equals(name) || "show_touches".equals(name)
-+                        || "pointer_location".equals(name) || "accessibility_enabled".equals(name)) {
-+                    return "0";
-+                }
-+                if ("enabled_accessibility_services".equals(name) || "debug_app".equals(name)) {
-+                    return "";
-+                }
++            if (isSpoofSensitiveKey(name)) {
++                return spoofString(name);
 +            }
              if (MOVED_TO_GLOBAL.contains(name)) {
                  Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Secure"
                          + " to android.provider.Settings.Global.");
-@@ -15841,6 +15865,18 @@ public final class Settings {
+@@ -6381,6 +6437,9 @@ public final class Settings {
+          * @return the corresponding content URI, or null if not present
+          */
+         public static Uri getUriFor(String name) {
++            if (isSpoofSensitiveKey(name)) {
++                return spoofUri(name);
++            }
+             if (MOVED_TO_GLOBAL.contains(name)) {
+                 Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Secure"
+                         + " to android.provider.Settings.Global, returning global URI.");
+@@ -6404,12 +6463,14 @@ public final class Settings {
+          * or not a valid integer.
+          */
+         public static int getInt(ContentResolver cr, String name, int def) {
++            if (isSpoofSensitiveKey(name)) return 0;
+             return getIntForUser(cr, name, def, cr.getUserId());
+         }
+ 
+         /** @hide */
+         @UnsupportedAppUsage
+         public static int getIntForUser(ContentResolver cr, String name, int def, int userHandle) {
++            if (isSpoofSensitiveKey(name)) return 0;
+             String v = getStringForUser(cr, name, userHandle);
+             return parseIntSettingWithDefault(v, def);
+         }
+@@ -6434,12 +6495,14 @@ public final class Settings {
+          */
+         public static int getInt(ContentResolver cr, String name)
+                 throws SettingNotFoundException {
++            if (isSpoofSensitiveKey(name)) return 0;
+             return getIntForUser(cr, name, cr.getUserId());
+         }
+ 
+         /** @hide */
+         public static int getIntForUser(ContentResolver cr, String name, int userHandle)
+                 throws SettingNotFoundException {
++            if (isSpoofSensitiveKey(name)) return 0;
+             String v = getStringForUser(cr, name, userHandle);
+             return parseIntSetting(v, name);
+         }
+@@ -6483,6 +6546,7 @@ public final class Settings {
+          * or not a valid {@code long}.
+          */
+         public static long getLong(ContentResolver cr, String name, long def) {
++            if (isSpoofSensitiveKey(name)) return 0L;
+             return getLongForUser(cr, name, def, cr.getUserId());
+         }
+ 
+@@ -6490,6 +6554,7 @@ public final class Settings {
+         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+         public static long getLongForUser(ContentResolver cr, String name, long def,
+                 int userHandle) {
++            if (isSpoofSensitiveKey(name)) return 0L;
+             String v = getStringForUser(cr, name, userHandle);
+             return parseLongSettingWithDefault(v, def);
+         }
+@@ -6513,12 +6578,14 @@ public final class Settings {
+          */
+         public static long getLong(ContentResolver cr, String name)
+                 throws SettingNotFoundException {
++            if (isSpoofSensitiveKey(name)) return 0L;
+             return getLongForUser(cr, name, cr.getUserId());
+         }
+ 
+         /** @hide */
+         public static long getLongForUser(ContentResolver cr, String name, int userHandle)
+                 throws SettingNotFoundException {
++            if (isSpoofSensitiveKey(name)) return 0L;
+             String v = getStringForUser(cr, name, userHandle);
+             return parseLongSetting(v, name);
+         }
+@@ -16197,6 +16264,9 @@ public final class Settings {
          @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
          public static String getStringForUser(ContentResolver resolver, String name,
                  int userHandle) {
-+            int uid = android.os.Process.myUid();
-+            if (uid >= 10000) {
-+                if ("adb_enabled".equals(name) || "development_settings_enabled".equals(name)
-+                        || "adb_wifi_enabled".equals(name) || "mock_location".equals(name)
-+                        || "wait_for_debugger".equals(name) || "show_touches".equals(name)
-+                        || "pointer_location".equals(name) || "accessibility_enabled".equals(name)) {
-+                    return "0";
-+                }
-+                if ("enabled_accessibility_services".equals(name) || "debug_app".equals(name)) {
-+                    return "";
-+                }
++            if (isSpoofSensitiveKey(name)) {
++                return spoofString(name);
 +            }
              if (MOVED_TO_SECURE.contains(name)) {
                  Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Global"
                          + " to android.provider.Settings.Secure, returning read-only value.");
+@@ -16389,9 +16459,20 @@ public final class Settings {
+          * @return the corresponding content URI, or null if not present
+          */
+         public static Uri getUriFor(String name) {
++            if (isSpoofSensitiveKey(name)) {
++                return spoofUri(name);
++            }
+             return getUriFor(CONTENT_URI, name);
+         }
+ 
++        /** @hide */
++        public static Uri getUriFor(Uri uri, String name) {
++            if (isSpoofSensitiveKey(name)) {
++                return spoofUri(name);
++            }
++            return Uri.withAppendedPath(uri, name);
++        }
++
+         /**
+          * Convenience function for retrieving a single secure settings value
+          * as an integer.  Note that internally setting values are always
+@@ -16407,6 +16488,7 @@ public final class Settings {
+          * or not a valid integer.
+          */
+         public static int getInt(ContentResolver cr, String name, int def) {
++            if (isSpoofSensitiveKey(name)) return 0;
+             String v = getString(cr, name);
+             return parseIntSettingWithDefault(v, def);
+         }
+@@ -16431,6 +16513,7 @@ public final class Settings {
+          */
+         public static int getInt(ContentResolver cr, String name)
+                 throws SettingNotFoundException {
++            if (isSpoofSensitiveKey(name)) return 0;
+             String v = getString(cr, name);
+             return parseIntSetting(v, name);
+         }
+@@ -16467,6 +16550,7 @@ public final class Settings {
+          * or not a valid {@code long}.
+          */
+         public static long getLong(ContentResolver cr, String name, long def) {
++            if (isSpoofSensitiveKey(name)) return 0L;
+             String v = getString(cr, name);
+             return parseLongSettingWithDefault(v, def);
+         }
+@@ -16490,6 +16574,7 @@ public final class Settings {
+          */
+         public static long getLong(ContentResolver cr, String name)
+                 throws SettingNotFoundException {
++            if (isSpoofSensitiveKey(name)) return 0L;
+             String v = getString(cr, name);
+             return parseLongSetting(v, name);
+         }
