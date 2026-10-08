@@ -1,11 +1,16 @@
 diff --git a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
-index e983aab..085ce18 100644
+index e983aab..4b90df8 100644
 --- a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
 +++ b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
-@@ -464,8 +464,317 @@ bool erasePhysicalCameraIdSet(
+@@ -464,8 +464,323 @@ bool erasePhysicalCameraIdSet(
      return found;
  }
  
++#include <sys/stat.h>
++#include <unistd.h>
++#include <time.h>
++#include <stdio.h>
++
 +// ==============================================================================
 +// VCAM NATIVE FACE METADATA INJECTION (PORTED FROM native_hook)
 +// Injects synthetic ANDROID_STATISTICS_FACE_* & ISP Converged metadata at C++ HAL
@@ -295,6 +300,7 @@ index e983aab..085ce18 100644
 +}
 +
 +
++
  void processCaptureResult(CaptureOutputStates& states, const camera_capture_result *result) {
      ATRACE_CALL();
 +    // VCAM NATIVE HOOK: Intercept logical & physical camera metadata
@@ -320,7 +326,7 @@ index e983aab..085ce18 100644
  
      status_t res;
  
-@@ -680,6 +989,8 @@ void processCaptureResult(CaptureOutputStates& states, const camera_capture_resu
+@@ -680,6 +995,8 @@ void processCaptureResult(CaptureOutputStates& states, const camera_capture_resu
                      __FUNCTION__);
          }
      }
