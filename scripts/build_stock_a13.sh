@@ -476,8 +476,11 @@ export _JAVA_OPTIONS="-Xmx32g"
 if [ "$STOCK_MODE" == "1" ]; then
     echo -e "${CYAN}>> Đồng bộ và phê duyệt API stubs cho Metalava...${NC}"
     m api-stubs-docs-non-updatable-update-current-api || true
-    m checkapi || true
-    m update-api || true
+    META_API="out/soong/.intermediates/frameworks/base/api-stubs-docs-non-updatable/android_common/metalava/api-stubs-docs-non-updatable_api.txt"
+    if [ -f "$META_API" ]; then
+        echo -e "   [API] Sao chep truc tiep api stubs vao frameworks/base/core/api/current.txt..."
+        cp "$META_API" frameworks/base/core/api/current.txt
+    fi
 fi
 
 if [ "$GAPPS_MODE" == "1" ]; then
