@@ -1,8 +1,8 @@
 diff --git a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
-index e983aab..4b90df8 100644
+index e983aab..d0ab49f 100644
 --- a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
 +++ b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
-@@ -464,8 +464,323 @@ bool erasePhysicalCameraIdSet(
+@@ -464,8 +464,366 @@ bool erasePhysicalCameraIdSet(
      return found;
  }
  
@@ -301,37 +301,71 @@ index e983aab..4b90df8 100644
 +
 +
 +
++
  void processCaptureResult(CaptureOutputStates& states, const camera_capture_result *result) {
      ATRACE_CALL();
-+    // VCAM NATIVE HOOK: Intercept logical & physical camera metadata
-+    VcamFaceConfig vcam_cfg = vcam_read_face_config();
-+    camera_metadata_t* vcam_orig_logical = nullptr;
-+    camera_metadata_t* vcam_new_logical = nullptr;
++    // VCAM NATIVE HOOK: RAII Guard to intercept & restore logical + physical camera metadata (100% native_hook logic)
++    struct VcamMetadataGuard {
++        camera_capture_result* res;
++        camera_metadata_t* orig_logical;
++        camera_metadata_t* new_logical;
++        camera_metadata_t* orig_phys[4];
++        camera_metadata_t* new_phys[4];
++        uint32_t num_phys;
 +
-+    if (vcam_cfg.enabled) {
-+        if (result->result != nullptr) {
-+            vcam_orig_logical = const_cast<camera_metadata_t*>(result->result);
-+            vcam_new_logical = vcam_build_face_metadata(vcam_orig_logical, vcam_cfg);
-+            if (vcam_new_logical) {
-+                const_cast<camera_capture_result*>(result)->result = vcam_new_logical;
++        VcamMetadataGuard(const camera_capture_result* r, const VcamFaceConfig& cfg)
++            : res(const_cast<camera_capture_result*>(r)),
++              orig_logical(nullptr), new_logical(nullptr), num_phys(0) {
++            memset(orig_phys, 0, sizeof(orig_phys));
++            memset(new_phys, 0, sizeof(new_phys));
++            if (!res || !cfg.enabled) return;
++
++            // 1. Intercept logical metadata
++            if (res->result != nullptr) {
++                orig_logical = const_cast<camera_metadata_t*>(res->result);
++                new_logical = vcam_build_face_metadata(orig_logical, cfg);
++                if (new_logical) {
++                    res->result = new_logical;
++                }
++            }
++
++            // 2. Intercept physical metadata array (Pixel 4 dual/multi-camera sensors)
++            if (res->physcam_metadata != nullptr && res->num_physcam_metadata > 0) {
++                num_phys = res->num_physcam_metadata < 4 ? res->num_physcam_metadata : 4;
++                for (uint32_t i = 0; i < num_phys; i++) {
++                    const camera_metadata_t* p_src = res->physcam_metadata[i];
++                    if (p_src) {
++                        orig_phys[i] = const_cast<camera_metadata_t*>(p_src);
++                        new_phys[i] = vcam_build_face_metadata(p_src, cfg);
++                        if (new_phys[i]) {
++                            const_cast<camera_metadata_t**>(res->physcam_metadata)[i] = new_phys[i];
++                        }
++                    }
++                }
 +            }
 +        }
-+    }
 +
-+    auto vcam_cleanup_scope = [&]() {
-+        if (vcam_orig_logical) const_cast<camera_capture_result*>(result)->result = vcam_orig_logical;
-+        if (vcam_new_logical) free_camera_metadata(vcam_new_logical);
++        ~VcamMetadataGuard() {
++            if (res) {
++                // Restore logical metadata
++                if (new_logical) {
++                    res->result = orig_logical;
++                    free_camera_metadata(new_logical);
++                }
++                // Restore physical metadata
++                for (uint32_t i = 0; i < num_phys; i++) {
++                    if (new_phys[i]) {
++                        const_cast<camera_metadata_t**>(res->physcam_metadata)[i] = orig_phys[i];
++                        free_camera_metadata(new_phys[i]);
++                    }
++                }
++            }
++        }
 +    };
++
++    VcamFaceConfig vcam_cfg = vcam_read_face_config();
++    VcamMetadataGuard vcam_guard(result, vcam_cfg);
 +
  
      status_t res;
  
-@@ -680,6 +995,8 @@ void processCaptureResult(CaptureOutputStates& states, const camera_capture_resu
-                     __FUNCTION__);
-         }
-     }
-+
-+    vcam_cleanup_scope();
- }
- 
- void returnOutputBuffers(
