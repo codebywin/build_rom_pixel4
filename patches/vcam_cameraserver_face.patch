@@ -2,7 +2,7 @@ diff --git a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp b/s
 index e983aab..69b9593 100644
 --- a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
 +++ b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
-@@ -464,8 +464,385 @@ bool erasePhysicalCameraIdSet(
+@@ -464,8 +464,392 @@ bool erasePhysicalCameraIdSet(
      return found;
  }
  
@@ -162,6 +162,10 @@ index e983aab..69b9593 100644
 +    if (cfg.count == 0) {
 +        cfg.count = 1;
 +        cfg.is_default = true;
++        cfg.faces[0].x = 1214;
++        cfg.faces[0].y = 715;
++        cfg.faces[0].w = 852;
++        cfg.faces[0].h = 1034;
 +        cfg.faces[0].score = 99;
 +    }
 +    cfg.enabled = true;
@@ -219,6 +223,9 @@ index e983aab..69b9593 100644
 +        int32_t center_y = cy + ch / 2 + shift_sensor_y;
 +        fb.x = center_x - fb.w / 2;
 +        fb.y = center_y - fb.h / 2;
++        if (fb.w <= 0 || fb.h <= 0) {
++            fb.x = 1214; fb.y = 715; fb.w = 852; fb.h = 1034; fb.score = 99;
++        }
 +        ALOGE("VCAM-CS: computed default face crop=[%d,%d,%d,%d] zoom=%.2f pan=(%.2f,%.2f) -> rect=[%d,%d,%d,%d]",
 +              cx, cy, cw, ch, zp.zoom, zp.pan_x, zp.pan_y, fb.x, fb.y, fb.w, fb.h);
 +    }

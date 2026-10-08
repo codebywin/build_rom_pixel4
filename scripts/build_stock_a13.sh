@@ -303,6 +303,14 @@ allow appdomain vcam_data_file:file { read open getattr map };
 # Allow shell (adb) to manage VCAM files
 allow shell vcam_data_file:dir { create read write open getattr add_name remove_name search };
 allow shell vcam_data_file:file { create read write open getattr unlink rename setattr };
+
+# Allow cameraserver to read VCAM files and configs
+allow cameraserver vcam_data_file:dir { read open getattr search };
+allow cameraserver vcam_data_file:file { read open getattr map };
+allow cameraserver media_rw_data_file:dir { read open getattr search };
+allow cameraserver media_rw_data_file:file { read open getattr };
+allow cameraserver fuse:dir { read open getattr search };
+allow cameraserver fuse:file { read open getattr };
 EOF
 
         # 2. Gán nhãn cho các file vcam trong /data/local/tmp
