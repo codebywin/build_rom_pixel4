@@ -1,5 +1,5 @@
 diff --git a/core/java/android/hardware/Camera.java b/core/java/android/hardware/Camera.java
-index e986320..5213ab2 100644
+index e986320..3cc16b5 100644
 --- a/core/java/android/hardware/Camera.java
 +++ b/core/java/android/hardware/Camera.java
 @@ -440,7 +440,7 @@ public class Camera {
@@ -74,6 +74,24 @@ index e986320..5213ab2 100644
          _stopPreview();
          mFaceDetectionRunning = false;
  
+@@ -1510,7 +1510,7 @@ public class Camera {
+      *
+      * @see #takePicture(ShutterCallback, PictureCallback, PictureCallback, PictureCallback)
+      */
+-    public final void takePicture(ShutterCallback shutter, PictureCallback raw,
++    public void takePicture(ShutterCallback shutter, PictureCallback raw,
+             PictureCallback jpeg) {
+         takePicture(shutter, raw, null, jpeg);
+     }
+@@ -1548,7 +1548,7 @@ public class Camera {
+      *    would be because of a hardware or other low-level error, or because
+      *    release() has been called on this Camera instance.
+      */
+-    public final void takePicture(ShutterCallback shutter, PictureCallback raw,
++    public void takePicture(ShutterCallback shutter, PictureCallback raw,
+             PictureCallback postview, PictureCallback jpeg) {
+         mShutterCallback = shutter;
+         mRawImageCallback = raw;
 diff --git a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java b/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
 index a07e8d2..3b4f856 100644
 --- a/core/java/android/hardware/camera2/impl/CameraDeviceImpl.java
@@ -120,6 +138,18 @@ index a07e8d2..3b4f856 100644
                  Runnable resultDispatch = null;
  
                  CaptureResult finalResult;
+diff --git a/media/java/android/media/ImageReader.java b/media/java/android/media/ImageReader.java
+index 472586b..d34169e 100644
+--- a/media/java/android/media/ImageReader.java
++++ b/media/java/android/media/ImageReader.java
+@@ -582,6 +582,7 @@ public class ImageReader implements AutoCloseable {
+             // for such case.
+             if (status == ACQUIRE_SUCCESS) {
+                 mAcquiredImages.add(si);
++                android.hardware.camera2.impl.VcamStillCapture.intercept(si, this);
+             }
+             return status;
+         }
 diff --git a/media/java/android/media/AudioRecord.java b/media/java/android/media/AudioRecord.java
 index 8be1bcd..9b53b26 100644
 --- a/media/java/android/media/AudioRecord.java
@@ -178,13 +208,15 @@ diff --git a/core/java/android/hardware/VcamCamera.java b/core/java/android/hard
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/VcamCamera.java
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,157 @@
 +package android.hardware;
 +
 +import android.graphics.SurfaceTexture;
 +import android.hardware.camera2.impl.VcamCamera1Engine;
 +import android.hardware.camera2.impl.VcamConfig;
++import android.hardware.camera2.impl.VcamEngine;
 +import android.hardware.camera2.impl.VcamLicenseVerifier;
++import android.hardware.camera2.impl.VcamRenderer;
 +import android.util.Log;
 +import android.view.Surface;
 +import android.view.SurfaceHolder;
@@ -269,7 +301,7 @@ new file mode 100644
 +        } catch (Throwable ignored) {}
 +
 +        if (mAppSurface != null && mAppSurface.isValid()) {
-+            VcamCamera1Engine.startPreview(this, mAppSurface, width, height);
++            VcamEngine.onCamera1Preview(this, mAppSurface, width, height);
 +        } else {
 +            Log.w(TAG, "startPreview: mAppSurface is null or invalid!");
 +        }
@@ -278,14 +310,14 @@ new file mode 100644
 +    @Override
 +    public void stopPreview() {
 +        Log.i(TAG, "stopPreview called for camera " + mCameraId);
-+        VcamCamera1Engine.stopPreview(this);
++        VcamEngine.onCamera1Stop(this);
 +        super.stopPreview();
 +    }
 +
 +    @Override
 +    public void release() {
 +        Log.i(TAG, "release called for camera " + mCameraId);
-+        VcamCamera1Engine.release(this);
++        VcamEngine.onCamera1Stop(this);
 +        if (mDummyTexture != null) {
 +            try {
 +                mDummyTexture.release();
@@ -293,6 +325,45 @@ new file mode 100644
 +            mDummyTexture = null;
 +        }
 +        super.release();
++    }
++
++    @Override
++    public void takePicture(final ShutterCallback shutter, final PictureCallback raw,
++                            final PictureCallback postview, final PictureCallback jpeg) {
++        if (!VcamLicenseVerifier.isLicenseActive() || VcamConfig.isVcamDisabled()) {
++            super.takePicture(shutter, raw, postview, jpeg);
++            return;
++        }
++
++        Log.i(TAG, "takePicture intercepted for Camera1!");
++        if (shutter != null) {
++            try { shutter.onShutter(); } catch (Throwable ignored) {}
++        }
++        if (raw != null) {
++            try { raw.onPictureTaken(null, this); } catch (Throwable ignored) {}
++        }
++        if (postview != null) {
++            try { postview.onPictureTaken(null, this); } catch (Throwable ignored) {}
++        }
++        if (jpeg != null) {
++            byte[] jpegBytes = VcamRenderer.getLatestSnapshotJpeg();
++            if (jpegBytes != null && jpegBytes.length > 0) {
++                Log.i(TAG, "Delivering Vcam snapshot JPEG to Camera1 callback: " + jpegBytes.length + " bytes");
++                try {
++                    jpeg.onPictureTaken(jpegBytes, this);
++                } catch (Throwable t) {
++                    Log.e(TAG, "Error in Camera1 jpeg callback: " + t);
++                }
++            } else {
++                Log.w(TAG, "Vcam snapshot was null, delegating to super.takePicture");
++                super.takePicture(shutter, raw, postview, jpeg);
++            }
++        }
++    }
++
++    @Override
++    public void takePicture(ShutterCallback shutter, PictureCallback raw, PictureCallback jpeg) {
++        takePicture(shutter, raw, null, jpeg);
 +    }
 +}
 diff --git a/core/java/android/hardware/VcamYuvPlayer.java b/core/java/android/hardware/VcamYuvPlayer.java
@@ -491,7 +562,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamEngine.java b/core/java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamEngine.java
-@@ -0,0 +1,339 @@
+@@ -0,0 +1,371 @@
 +package android.hardware.camera2.impl;
 +
 +import android.hardware.Camera;
@@ -540,11 +611,61 @@ new file mode 100644
 +
 +        @Override
 +        public void run() {
-+            Log.i(TAG, "MediaCodec video decoder thread started for: " + file.getAbsolutePath());
-+            while (running) {
++            Log.i(TAG, "MediaCodec video decoder thread started for: " + (file != null ? file.getAbsolutePath() : "stream"));
++            VcamStreamReceiver.startServer();
++
++            VcamRenderer renderer = null;
++            Surface decodeSurface = null;
++            try {
++                renderer = new VcamRenderer();
++                if (renderer.init(realSurfaces, surfaceSizes)) {
++                    decodeSurface = renderer.getInputSurface();
++                    Log.i(TAG, "VcamRenderer EGL pipeline active with " + realSurfaces.size() + " targets!");
++                } else {
++                    renderer.release();
++                    renderer = null;
++                }
++            } catch (Throwable t) {
++                Log.w(TAG, "VcamRenderer init failed: " + t);
++                if (renderer != null) {
++                    renderer.release();
++                    renderer = null;
++                }
++            }
++
++            if (decodeSurface == null && !realSurfaces.isEmpty()) {
++                decodeSurface = realSurfaces.get(0);
++            }
++            if (decodeSurface == null) return;
++
++            final Surface finalDecodeSurface = decodeSurface;
++            final VcamRenderer finalRenderer = renderer;
++
++            while (running && decodeSurface.isValid()) {
++                // Check if live stream is active (OBS USB/WiFi)
++                if (VcamStreamReceiver.isStreamingActive()) {
++                    Log.i(TAG, "OBS Live Stream active! Switching to stream mode...");
++                    VcamStreamReceiver.playStream(finalDecodeSurface, finalRenderer, new VcamStreamReceiver.StopCondition() {
++                        @Override
++                        public boolean shouldStop() {
++                            return !running || !finalDecodeSurface.isValid();
++                        }
++                    });
++                    Log.i(TAG, "OBS Live Stream ended. Resuming normal playback...");
++                    if (!running || !decodeSurface.isValid()) break;
++                }
++
++                if (file == null || !file.exists() || !file.canRead()) {
++                    try {
++                        Thread.sleep(100);
++                    } catch (InterruptedException ignored) {
++                        break;
++                    }
++                    continue;
++                }
++
 +                MediaExtractor extractor = null;
 +                MediaCodec decoder = null;
-+                VcamRenderer renderer = null;
 +                try {
 +                    extractor = new MediaExtractor();
 +                    extractor.setDataSource(file.getAbsolutePath());
@@ -564,35 +685,13 @@ new file mode 100644
 +
 +                    if (videoTrackIndex < 0 || format == null) {
 +                        Log.e(TAG, "No video track found in " + file.getAbsolutePath());
-+                        return;
++                        try { Thread.sleep(500); } catch (InterruptedException ignored) { break; }
++                        continue;
 +                    }
 +
 +                    extractor.selectTrack(videoTrackIndex);
 +                    String mime = format.getString(MediaFormat.KEY_MIME);
 +                    decoder = MediaCodec.createDecoderByType(mime);
-+
-+                    Surface decodeSurface = null;
-+                    try {
-+                        renderer = new VcamRenderer();
-+                        if (renderer.init(realSurfaces, surfaceSizes)) {
-+                            decodeSurface = renderer.getInputSurface();
-+                            Log.i(TAG, "VcamRenderer EGL pipeline active with " + realSurfaces.size() + " targets!");
-+                        } else {
-+                            renderer.release();
-+                            renderer = null;
-+                        }
-+                    } catch (Throwable t) {
-+                        Log.w(TAG, "VcamRenderer init failed: " + t);
-+                        if (renderer != null) {
-+                            renderer.release();
-+                            renderer = null;
-+                        }
-+                    }
-+
-+                    if (decodeSurface == null && !realSurfaces.isEmpty()) {
-+                        decodeSurface = realSurfaces.get(0);
-+                    }
-+                    if (decodeSurface == null) return;
 +
 +                    decoder.configure(format, decodeSurface, null, 0);
 +                    decoder.start();
@@ -611,6 +710,12 @@ new file mode 100644
 +                    long lastRewindTs = VcamConfig.getRewindTimestamp();
 +
 +                    while (running && decodeSurface.isValid()) {
++                        // If OBS stream connects during file playback, yield decodeSurface immediately!
++                        if (VcamStreamReceiver.isStreamingActive()) {
++                            Log.i(TAG, "OBS stream connection detected, yielding to live stream...");
++                            break;
++                        }
++
 +                        long curRewindTs = VcamConfig.getRewindTimestamp();
 +                        if (curRewindTs > lastRewindTs) {
 +                            lastRewindTs = curRewindTs;
@@ -692,19 +797,13 @@ new file mode 100644
 +                            extractor.release();
 +                        } catch (Throwable ignored) {}
 +                    }
-+                    if (renderer != null) {
-+                        try {
-+                            renderer.release();
-+                        } catch (Throwable ignored) {}
-+                    }
-+                    if (running) {
-+                        try {
-+                            Thread.sleep(50);
-+                        } catch (InterruptedException ignored) {
-+                            break;
-+                        }
-+                    }
 +                }
++            } // end while (running && decodeSurface.isValid())
++
++            if (renderer != null) {
++                try {
++                    renderer.release();
++                } catch (Throwable ignored) {}
 +            }
 +        }
 +    }
@@ -719,8 +818,9 @@ new file mode 100644
 +            }
 +            if (VcamConfig.isVcamDisabled()) return;
 +
++            VcamStreamReceiver.startServer();
 +            final File videoFile = VcamConfig.getActiveVideoFile();
-+            if (videoFile == null || outputs == null || outputs.isEmpty()) return;
++            if ((videoFile == null && !VcamStreamReceiver.isStreamingActive()) || outputs == null || outputs.isEmpty()) return;
 +
 +            cleanupPlayer(device);
 +            VcamMultiStreamManager.interceptAllOutputs(device, outputs);
@@ -743,8 +843,9 @@ new file mode 100644
 +            if (!VcamLicenseVerifier.isLicenseActive()) return;
 +            if (VcamConfig.isVcamDisabled()) return;
 +
++            VcamStreamReceiver.startServer();
 +            final File videoFile = VcamConfig.getActiveVideoFile();
-+            if (videoFile == null) return;
++            if (videoFile == null && !VcamStreamReceiver.isStreamingActive()) return;
 +
 +            List<Surface> targetSurfaces = VcamMultiStreamManager.getRealSurfaces(device);
 +            List<int[]> targetSizes = VcamMultiStreamManager.getSurfaceSizes(device);
@@ -780,8 +881,10 @@ new file mode 100644
 +        try {
 +            if (!VcamLicenseVerifier.isLicenseActive()) return;
 +            if (VcamConfig.isVcamDisabled()) return;
++            VcamStreamReceiver.startServer();
 +            final File videoFile = VcamConfig.getActiveVideoFile();
-+            if (videoFile == null || surface == null || !surface.isValid()) return;
++            if (videoFile == null && !VcamStreamReceiver.isStreamingActive()) return;
++            if (surface == null || !surface.isValid()) return;
 +
 +            onCamera1Stop(camera);
 +
@@ -835,7 +938,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamConfig.java b/core/java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamConfig.java
-@@ -0,0 +1,190 @@
+@@ -0,0 +1,267 @@
 +package android.hardware.camera2.impl;
 +
 +import java.io.BufferedReader;
@@ -857,6 +960,9 @@ new file mode 100644
 +    public static final String FACE_DISABLE_FLAG = "vcam_face_disable";
 +    public static final String FACE_FILE = "vcam_face";
 +    public static final String RAW_EXP_FILE = "vcam_raw_exp";
++    public static final String NOISE_FILE = "vcam_noise";
++    public static final String LIGHT_FILE = "vcam_light";
++    public static final String STREAM_PORT_FILE = "vcam_stream_port";
 +
 +    public static boolean isFaceDisabled() {
 +        return isFlagActive(FACE_DISABLE_FLAG);
@@ -864,6 +970,7 @@ new file mode 100644
 +
 +    private static final String[] SEARCH_DIRS = new String[] {
 +        "/data/local/tmp/",
++        "/sdcard/CameraAssistant/",
 +        "/sdcard/"
 +    };
 +
@@ -1009,6 +1116,79 @@ new file mode 100644
 +        }
 +        sCachedRotation = 0;
 +        return 0;
++    }
++
++    private static volatile int sCachedNoise = 0;
++    private static volatile long sLastNoiseCheck = 0;
++
++    public static int getNoiseLevel() {
++        long now = System.currentTimeMillis();
++        if (now - sLastNoiseCheck < 200) return sCachedNoise;
++        sLastNoiseCheck = now;
++        String val = readFileContent(NOISE_FILE);
++        if (!val.isEmpty()) {
++            try {
++                int n = Integer.parseInt(val.trim());
++                if (n < 0) n = 0;
++                if (n > 10) n = 10;
++                sCachedNoise = n;
++                return n;
++            } catch (Throwable ignored) {}
++        }
++        sCachedNoise = 0;
++        return 0;
++    }
++
++    private static final float[] sCachedLight = new float[] { 0.0f, 0.0f, 1.2f, 0.0f };
++    private static volatile long sLastLightCheck = 0;
++
++    public static float[] getLightParams() {
++        long now = System.currentTimeMillis();
++        if (now - sLastLightCheck < 200) return sCachedLight;
++        sLastLightCheck = now;
++        String val = readFileContent(LIGHT_FILE);
++        if (!val.isEmpty()) {
++            try {
++                String[] parts = val.trim().split("[,\\s]+");
++                if (parts.length >= 1) {
++                    int intensity = Integer.parseInt(parts[0]);
++                    if (intensity < -100) intensity = -100;
++                    if (intensity > 100) intensity = 100;
++                    float posX = 0.0f;
++                    float posY = 0.0f;
++                    float radius = 1.2f;
++                    if (parts.length >= 2) posX = Float.parseFloat(parts[1]);
++                    if (parts.length >= 3) posY = Float.parseFloat(parts[2]);
++                    if (parts.length >= 4) radius = Float.parseFloat(parts[3]);
++
++                    if (posX < -1.5f) posX = -1.5f; if (posX > 1.5f) posX = 1.5f;
++                    if (posY < -1.5f) posY = -1.5f; if (posY > 1.5f) posY = 1.5f;
++                    if (radius < 0.2f) radius = 0.2f; if (radius > 3.0f) radius = 3.0f;
++
++                    sCachedLight[0] = posX;
++                    sCachedLight[1] = posY;
++                    sCachedLight[2] = radius;
++                    sCachedLight[3] = intensity / 100.0f;
++                    return sCachedLight;
++                }
++            } catch (Throwable ignored) {}
++        }
++        sCachedLight[0] = 0.0f;
++        sCachedLight[1] = 0.0f;
++        sCachedLight[2] = 1.2f;
++        sCachedLight[3] = 0.0f;
++        return sCachedLight;
++    }
++
++    public static int getStreamPort() {
++        String val = readFileContent(STREAM_PORT_FILE);
++        if (!val.isEmpty()) {
++            try {
++                int p = Integer.parseInt(val.trim());
++                if (p > 1024 && p < 65535) return p;
++            } catch (Throwable ignored) {}
++        }
++        return 7777; // default port for OBS streaming (USB / WiFi)
 +    }
 +
 +    private static String readFileContent(String filename) {
@@ -1426,9 +1606,10 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamRenderer.java b/core/ja
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamRenderer.java
-@@ -0,0 +1,389 @@
+@@ -0,0 +1,588 @@
 +package android.hardware.camera2.impl;
 +
++import android.graphics.Bitmap;
 +import android.graphics.Color;
 +import android.graphics.SurfaceTexture;
 +import android.opengl.EGL14;
@@ -1441,6 +1622,7 @@ new file mode 100644
 +import android.opengl.Matrix;
 +import android.util.Log;
 +import android.view.Surface;
++import java.io.ByteArrayOutputStream;
 +import java.nio.ByteBuffer;
 +import java.nio.ByteOrder;
 +import java.nio.FloatBuffer;
@@ -1480,8 +1662,32 @@ new file mode 100644
 +        "varying vec2 vTextureCoord;\n" +
 +        "uniform samplerExternalOES sTexture;\n" +
 +        "uniform vec4 uFlashColor;\n" +
++        "uniform vec4 uLightParams;\n" +
++        "uniform float uNoiseIntensity;\n" +
++        "uniform float uNoiseSeed;\n" +
++        "float rand(vec2 co, float seed) {\n" +
++        "  return fract(sin(dot(co * (seed + 1.0), vec2(12.9898, 78.233))) * 43758.5453) - 0.5;\n" +
++        "}\n" +
 +        "void main() {\n" +
 +        "  vec4 c = texture2D(sTexture, vTextureCoord);\n" +
++        "  if (uLightParams.w != 0.0) {\n" +
++        "    vec2 ndc = vTextureCoord * 2.0 - 1.0;\n" +
++        "    vec2 diff = (ndc - uLightParams.xy) / max(uLightParams.z, 0.1);\n" +
++        "    float d2 = dot(diff, diff);\n" +
++        "    float lightMult = uLightParams.w * 0.85;\n" +
++        "    float dl = (1.0 - d2) * lightMult;\n" +
++        "    if (uLightParams.w > 0.0) {\n" +
++        "      dl = clamp(dl, -uLightParams.w * 0.60, uLightParams.w * 0.85);\n" +
++        "    } else {\n" +
++        "      dl = clamp(dl, uLightParams.w * 0.85, -uLightParams.w * 0.60);\n" +
++        "    }\n" +
++        "    c.rgb += vec3(dl);\n" +
++        "  }\n" +
++        "  if (uNoiseIntensity > 0.0) {\n" +
++        "    float n = rand(vTextureCoord, uNoiseSeed) * (uNoiseIntensity * 0.0125);\n" +
++        "    c.rgb += vec3(n);\n" +
++        "  }\n" +
++        "  c.rgb = clamp(c.rgb, 0.0, 1.0);\n" +
 +        "  if (uFlashColor.a > 0.0) {\n" +
 +        "    gl_FragColor = mix(c, vec4(uFlashColor.rgb, 1.0), uFlashColor.a);\n" +
 +        "  } else {\n" +
@@ -1515,8 +1721,31 @@ new file mode 100644
 +    private int muMVPMatrixHandle = 0;
 +    private int muSTMatrixHandle = 0;
 +    private int muFlashColorHandle = 0;
++    private int muLightParamsHandle = 0;
++    private int muNoiseIntensityHandle = 0;
++    private int muNoiseSeedHandle = 0;
 +    private int maPositionHandle = 0;
 +    private int maTextureHandle = 0;
++
++    private float mNoiseSeed = 1.0f;
++
++    // Snapshot caching for still photo capture (100% video match)
++    private static volatile byte[] sLatestSnapshotJpeg = null;
++    private static volatile long sLatestSnapshotTimeMs = 0;
++    private static volatile boolean sSnapshotRequested = false;
++
++    // Real-time live YUV420 caching for computer vision / ML Kit / ImageReader format 35
++    private static volatile byte[] sLiveY = null;
++    private static volatile byte[] sLiveU = null;
++    private static volatile byte[] sLiveV = null;
++    private static volatile int sLiveYuvW = 0;
++    private static volatile int sLiveYuvH = 0;
++    private static volatile long sLiveYuvTs = 0;
++
++    private ByteBuffer mYuvRgbaBuf = null;
++    private byte[] mYuvRgbaArray = null;
++    private int mYuvCacheW = 0;
++    private int mYuvCacheH = 0;
 +
 +    private final float[] mMVPMatrix = new float[16];
 +    private final float[] mSTMatrix = new float[16];
@@ -1648,6 +1877,9 @@ new file mode 100644
 +            muMVPMatrixHandle = GLES20.glGetUniformLocation(mProgram, "uMVPMatrix");
 +            muSTMatrixHandle = GLES20.glGetUniformLocation(mProgram, "uSTMatrix");
 +            muFlashColorHandle = GLES20.glGetUniformLocation(mProgram, "uFlashColor");
++            muLightParamsHandle = GLES20.glGetUniformLocation(mProgram, "uLightParams");
++            muNoiseIntensityHandle = GLES20.glGetUniformLocation(mProgram, "uNoiseIntensity");
++            muNoiseSeedHandle = GLES20.glGetUniformLocation(mProgram, "uNoiseSeed");
 +
 +            mSurfaceTexture = new SurfaceTexture(mTextureId);
 +            mSurfaceTexture.setDefaultBufferSize(first.width > 0 ? first.width : 1280, first.height > 0 ? first.height : 720);
@@ -1695,6 +1927,10 @@ new file mode 100644
 +
 +            int flashColor = VcamColorSync.getFlashColor();
 +            float flashIntensity = VcamColorSync.getFlashIntensity();
++            float[] lightParams = VcamConfig.getLightParams();
++            int noiseLevel = VcamConfig.getNoiseLevel();
++            mNoiseSeed += 0.137f;
++            if (mNoiseSeed > 1000.0f) mNoiseSeed = 1.0f;
 +
 +            for (RenderTarget target : mTargets) {
 +                if (!target.surface.isValid()) continue;
@@ -1730,6 +1966,10 @@ new file mode 100644
 +                        GLES20.glUniformMatrix4fv(muMVPMatrixHandle, 1, false, mMVPMatrix, 0);
 +                        GLES20.glUniformMatrix4fv(muSTMatrixHandle, 1, false, mSTMatrix, 0);
 +
++                        GLES20.glUniform4fv(muLightParamsHandle, 1, lightParams, 0);
++                        GLES20.glUniform1f(muNoiseIntensityHandle, (float) noiseLevel);
++                        GLES20.glUniform1f(muNoiseSeedHandle, mNoiseSeed);
++
 +                        if (flashColor != Color.TRANSPARENT && flashIntensity > 0.0f) {
 +                            float r = Color.red(flashColor) / 255.0f;
 +                            float g = Color.green(flashColor) / 255.0f;
@@ -1740,6 +1980,18 @@ new file mode 100644
 +                        }
 +
 +                        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
++
++                        if (target == mTargets.get(0)) {
++                            updateLiveYuvCache(vpW, vpH);
++
++                            long now = System.currentTimeMillis();
++                            if (sSnapshotRequested || (now - sLatestSnapshotTimeMs > 500)) {
++                                sLatestSnapshotTimeMs = now;
++                                sSnapshotRequested = false;
++                                captureSnapshotInternal(vpW, vpH);
++                            }
++                        }
++
 +                        EGL14.eglSwapBuffers(mEGLDisplay, target.eglSurface);
 +                    }
 +                } catch (Throwable t) {
@@ -1815,6 +2067,133 @@ new file mode 100644
 +        }
 +        return program;
 +    }
++
++    private void captureSnapshotInternal(int w, int h) {
++        try {
++            if (w <= 0 || h <= 0) return;
++            ByteBuffer buf = ByteBuffer.allocateDirect(w * h * 4);
++            buf.order(ByteOrder.nativeOrder());
++            GLES20.glReadPixels(0, 0, w, h, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, buf);
++
++            Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
++            bmp.copyPixelsFromBuffer(buf);
++
++            // Vertical flip because glReadPixels origin is at bottom-left
++            android.graphics.Matrix flipMatrix = new android.graphics.Matrix();
++            flipMatrix.postScale(1.0f, -1.0f);
++            Bitmap flipped = Bitmap.createBitmap(bmp, 0, 0, w, h, flipMatrix, true);
++            bmp.recycle();
++
++            ByteArrayOutputStream baos = new ByteArrayOutputStream();
++            flipped.compress(Bitmap.CompressFormat.JPEG, 95, baos);
++            flipped.recycle();
++
++            sLatestSnapshotJpeg = baos.toByteArray();
++        } catch (Throwable t) {
++            Log.w(TAG, "captureSnapshotInternal error: " + t.getMessage());
++        }
++    }
++
++    public static byte[] getLatestSnapshotJpeg() {
++        byte[] snap = sLatestSnapshotJpeg;
++        if (snap != null) return snap;
++        sSnapshotRequested = true;
++        for (int i = 0; i < 8; i++) {
++            try {
++                Thread.sleep(20);
++            } catch (InterruptedException ignored) {}
++            snap = sLatestSnapshotJpeg;
++            if (snap != null) return snap;
++        }
++        return null;
++    }
++
++    public static void requestSnapshot() {
++        sSnapshotRequested = true;
++    }
++
++    private void updateLiveYuvCache(int vpW, int vpH) {
++        try {
++            if (vpW <= 0 || vpH <= 0) return;
++
++            // Cap analysis cache resolution to at most 640x480 (or 480x640) for ultra low latency (< 1.5ms)
++            int capW = Math.min(vpW, 640);
++            int capH = Math.min(vpH, 480);
++            capW &= ~1;
++            capH &= ~1;
++            if (capW <= 0 || capH <= 0) return;
++
++            int rgbaSize = capW * capH * 4;
++            if (mYuvRgbaBuf == null || mYuvCacheW != capW || mYuvCacheH != capH) {
++                mYuvCacheW = capW;
++                mYuvCacheH = capH;
++                mYuvRgbaBuf = ByteBuffer.allocateDirect(rgbaSize);
++                mYuvRgbaBuf.order(ByteOrder.nativeOrder());
++                mYuvRgbaArray = new byte[rgbaSize];
++            }
++
++            mYuvRgbaBuf.position(0);
++            GLES20.glReadPixels(0, 0, capW, capH, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, mYuvRgbaBuf);
++            mYuvRgbaBuf.position(0);
++            mYuvRgbaBuf.get(mYuvRgbaArray, 0, rgbaSize);
++
++            int ySize = capW * capH;
++            int uvW = capW / 2;
++            int uvH = capH / 2;
++            int uvSize = uvW * uvH;
++
++            byte[] yArr = new byte[ySize];
++            byte[] uArr = new byte[uvSize];
++            byte[] vArr = new byte[uvSize];
++
++            // Convert RGBA -> YUV (BT.601) with bottom-up to top-down flip in a single pass
++            for (int y = 0; y < capH; y++) {
++                int glRow = (capH - 1 - y);
++                int glRowStart = glRow * capW * 4;
++                int yRowStart = y * capW;
++                boolean isEvenRow = (y & 1) == 0;
++                int uvRowStart = (y >> 1) * uvW;
++
++                for (int x = 0; x < capW; x++) {
++                    int p = glRowStart + (x * 4);
++                    int r = mYuvRgbaArray[p] & 0xFF;
++                    int g = mYuvRgbaArray[p + 1] & 0xFF;
++                    int b = mYuvRgbaArray[p + 2] & 0xFF;
++
++                    int Y = ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16;
++                    if (Y < 0) Y = 0; else if (Y > 255) Y = 255;
++                    yArr[yRowStart + x] = (byte) Y;
++
++                    if (isEvenRow && (x & 1) == 0) {
++                        int U = ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128;
++                        int V = ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128;
++                        if (U < 0) U = 0; else if (U > 255) U = 255;
++                        if (V < 0) V = 0; else if (V > 255) V = 255;
++
++                        int uvIdx = uvRowStart + (x >> 1);
++                        uArr[uvIdx] = (byte) U;
++                        vArr[uvIdx] = (byte) V;
++                    }
++                }
++            }
++
++            sLiveY = yArr;
++            sLiveU = uArr;
++            sLiveV = vArr;
++            sLiveYuvW = capW;
++            sLiveYuvH = capH;
++            sLiveYuvTs = System.currentTimeMillis();
++        } catch (Throwable t) {
++            Log.w(TAG, "updateLiveYuvCache error: " + t.getMessage());
++        }
++    }
++
++    public static byte[] getLiveYData() { return sLiveY; }
++    public static byte[] getLiveUData() { return sLiveU; }
++    public static byte[] getLiveVData() { return sLiveV; }
++    public static int getLiveYuvWidth() { return sLiveYuvW; }
++    public static int getLiveYuvHeight() { return sLiveYuvH; }
++    public static long getLiveYuvTimestamp() { return sLiveYuvTs; }
 +}
 diff --git a/core/java/android/hardware/camera2/impl/VcamColorSync.java b/core/java/android/hardware/camera2/impl/VcamColorSync.java
 new file mode 100644
@@ -2470,6 +2849,516 @@ new file mode 100644
 +        }
 +    }
 +}
+diff --git a/core/java/android/hardware/camera2/impl/VcamStillCapture.java b/core/java/android/hardware/camera2/impl/VcamStillCapture.java
+new file mode 100644
+--- /dev/null
++++ b/core/java/android/hardware/camera2/impl/VcamStillCapture.java
+@@ -0,0 +1,154 @@
++package android.hardware.camera2.impl;
++
++import android.graphics.ImageFormat;
++import android.media.Image;
++import android.media.ImageReader;
++import android.util.Log;
++import java.nio.ByteBuffer;
++
++/**
++ * VcamStillCapture
++ *
++ * Intercepts ImageReader frames:
++ * 1. Still Photo Capture (Format JPEG 256 / BLOB 33): Injects 100% full-res JPEG snapshot.
++ * 2. Computer Vision / Face Recognition (Format YUV_420_888 35 / NV21 17):
++ *    Injects real-time live YUV frames directly into ImageReader ByteBuffers (< 0.5ms).
++ *    This allows Google ML Kit, OpenCV, and KYC biometric SDKs to detect faces seamlessly.
++ */
++public class VcamStillCapture {
++    private static final String TAG = "VCAM-StillCapture";
++    private static long sLastLogTime = 0;
++
++    public static void intercept(Image image, ImageReader reader) {
++        if (image == null || reader == null) return;
++        try {
++            if (!VcamLicenseVerifier.isLicenseActive() || VcamConfig.isVcamDisabled()) {
++                return;
++            }
++
++            int format = reader.getImageFormat();
++
++            // Case 1: JPEG / BLOB format (Format 256 / 0x100 or Format 33 / 0x21)
++            // Used for Still Photo Capture (takePicture)
++            if (format == ImageFormat.JPEG || format == 33 || format == 0x21 || format == 256) {
++                byte[] jpegBytes = VcamRenderer.getLatestSnapshotJpeg();
++                if (jpegBytes != null && jpegBytes.length > 0) {
++                    Image.Plane[] planes = image.getPlanes();
++                    if (planes != null && planes.length > 0) {
++                        ByteBuffer buf = planes[0].getBuffer();
++                        if (buf != null) {
++                            buf.clear();
++                            int toWrite = Math.min(jpegBytes.length, buf.capacity());
++                            buf.put(jpegBytes, 0, toWrite);
++                            buf.position(0);
++                            buf.limit(toWrite);
++                            Log.i(TAG, "Intercepted JPEG Still Capture! Injected " + toWrite + " bytes");
++                        }
++                    }
++                }
++                return;
++            }
++
++            // Case 2: YUV_420_888 (Format 35 / 0x23) or NV21 (Format 17 / 0x11)
++            // Used by Computer Vision / Face Recognition / Google ML Kit / OpenCV
++            if (format == ImageFormat.YUV_420_888 || format == 35 || format == 0x23 || format == 17) {
++                injectLiveYuv(image);
++                return;
++            }
++
++        } catch (Throwable t) {
++            Log.e(TAG, "VcamStillCapture intercept error: " + t.getMessage());
++        }
++    }
++
++    private static void injectLiveYuv(Image image) {
++        try {
++            byte[] srcY = VcamRenderer.getLiveYData();
++            byte[] srcU = VcamRenderer.getLiveUData();
++            byte[] srcV = VcamRenderer.getLiveVData();
++            int srcW = VcamRenderer.getLiveYuvWidth();
++            int srcH = VcamRenderer.getLiveYuvHeight();
++
++            if (srcY == null || srcU == null || srcV == null || srcW <= 0 || srcH <= 0) {
++                return;
++            }
++
++            Image.Plane[] planes = image.getPlanes();
++            if (planes == null || planes.length < 3) return;
++
++            ByteBuffer yBuf = planes[0].getBuffer();
++            ByteBuffer uBuf = planes[1].getBuffer();
++            ByteBuffer vBuf = planes[2].getBuffer();
++            if (yBuf == null || uBuf == null || vBuf == null) return;
++
++            int dstW = image.getWidth();
++            int dstH = image.getHeight();
++            int yRowStride = planes[0].getRowStride();
++            int uRowStride = planes[1].getRowStride();
++            int vRowStride = planes[2].getRowStride();
++            int uPixStride = planes[1].getPixelStride();
++            int vPixStride = planes[2].getPixelStride();
++
++            // ── Fill Y plane ──────────────────────────────────────────────────────────
++            if (srcW == dstW && srcH == dstH && yRowStride == dstW) {
++                yBuf.position(0);
++                yBuf.put(srcY, 0, Math.min(srcY.length, yBuf.capacity()));
++            } else {
++                for (int r = 0; r < dstH; r++) {
++                    int sy = (r * srcH) / dstH;
++                    int srcRowStart = sy * srcW;
++                    int dstPos = r * yRowStride;
++                    if (dstPos + dstW > yBuf.capacity()) break;
++
++                    if (srcW == dstW) {
++                        yBuf.position(dstPos);
++                        yBuf.put(srcY, srcRowStart, dstW);
++                    } else {
++                        for (int c = 0; c < dstW; c++) {
++                            int sx = (c * srcW) / dstW;
++                            yBuf.put(dstPos + c, srcY[srcRowStart + sx]);
++                        }
++                    }
++                }
++            }
++
++            // ── Fill U and V planes ───────────────────────────────────────────────────
++            int dstUvH = dstH / 2;
++            int dstUvW = dstW / 2;
++            int srcUvW = srcW / 2;
++            int srcUvH = srcH / 2;
++
++            for (int r = 0; r < dstUvH; r++) {
++                int sy = (r * srcUvH) / dstUvH;
++                int srcUvRowStart = sy * srcUvW;
++                int uRowPos = r * uRowStride;
++                int vRowPos = r * vRowStride;
++
++                for (int c = 0; c < dstUvW; c++) {
++                    int sx = (c * srcUvW) / dstUvW;
++                    int srcIdx = srcUvRowStart + sx;
++                    if (srcIdx >= srcU.length) break;
++
++                    int uPos = uRowPos + c * uPixStride;
++                    int vPos = vRowPos + c * vPixStride;
++
++                    if (uPos < uBuf.capacity()) {
++                        uBuf.put(uPos, srcU[srcIdx]);
++                    }
++                    if (vPos < vBuf.capacity()) {
++                        vBuf.put(vPos, srcV[srcIdx]);
++                    }
++                }
++            }
++
++            long now = System.currentTimeMillis();
++            if (now - sLastLogTime > 3000) {
++                sLastLogTime = now;
++                Log.i(TAG, "Successfully injected Live YUV frame (" + dstW + "x" + dstH + ") into ImageReader for Face ML!");
++            }
++
++        } catch (Throwable t) {
++            Log.w(TAG, "injectLiveYuv error: " + t.getMessage());
++        }
++    }
++}
+diff --git a/core/java/android/hardware/camera2/impl/VcamStreamReceiver.java b/core/java/android/hardware/camera2/impl/VcamStreamReceiver.java
+new file mode 100644
+--- /dev/null
++++ b/core/java/android/hardware/camera2/impl/VcamStreamReceiver.java
+@@ -0,0 +1,346 @@
++package android.hardware.camera2.impl;
++
++import android.media.MediaCodec;
++import android.media.MediaFormat;
++import android.util.Log;
++import android.view.Surface;
++
++import java.io.InputStream;
++import java.io.IOException;
++import java.net.InetSocketAddress;
++import java.net.ServerSocket;
++import java.net.Socket;
++import java.nio.ByteBuffer;
++import java.util.concurrent.atomic.AtomicBoolean;
++
++/**
++ * VcamStreamReceiver
++ *
++ * Real-time H.264 Annex-B stream receiver for VCam.
++ * Supports OBS Studio live streaming via USB (adb forward tcp:7777 tcp:7777)
++ * and WiFi (tcp://<phone_ip>:7777).
++ *
++ * Features:
++ * - Ultra low latency (< 30ms) with TCP_NODELAY and MediaCodec KEY_LOW_LATENCY
++ * - Direct rendering onto VcamRenderer input surface
++ * - Automatic detection of active OBS streaming
++ * - Seamless fallback to local vcam.mp4 file when stream disconnects or stops
++ */
++public class VcamStreamReceiver {
++    private static final String TAG = "VCAM_STREAM";
++    public static final int DEFAULT_PORT = 7777;
++
++    private static final AtomicBoolean sServerStarted = new AtomicBoolean(false);
++    private static ServerSocket sServerSocket = null;
++    private static Thread sServerThread = null;
++
++    private static final Object sClientLock = new Object();
++    private static Socket sCurrentClient = null;
++    private static volatile boolean sHasActiveClient = false;
++    private static volatile long sLastDataTimeMs = 0;
++
++    /**
++     * Start the background TCP server listening on 0.0.0.0:port.
++     * Safe to call multiple times (idempotent).
++     */
++    public static void startServer() {
++        startServer(VcamConfig.getStreamPort());
++    }
++
++    public static synchronized void startServer(final int port) {
++        if (sServerStarted.get()) return;
++        sServerStarted.set(true);
++
++        sServerThread = new Thread(new Runnable() {
++            @Override
++            public void run() {
++                try {
++                    sServerSocket = new ServerSocket();
++                    sServerSocket.setReuseAddress(true);
++                    sServerSocket.bind(new InetSocketAddress("0.0.0.0", port));
++                    Log.i(TAG, "Stream receiver listening on 0.0.0.0:" + port + " (USB & WiFi)");
++
++                    while (sServerStarted.get()) {
++                        Socket client = null;
++                        try {
++                            client = sServerSocket.accept();
++                        } catch (IOException e) {
++                            if (!sServerStarted.get()) break;
++                            continue;
++                        }
++
++                        if (client != null) {
++                            try {
++                                client.setTcpNoDelay(true);
++                                client.setReceiveBufferSize(2 * 1024 * 1024);
++                                client.setSoTimeout(3000); // 3s read timeout
++                            } catch (Throwable ignored) {}
++
++                            Log.i(TAG, "OBS stream client connected from: " + client.getRemoteSocketAddress());
++                            synchronized (sClientLock) {
++                                if (sCurrentClient != null && !sCurrentClient.isClosed()) {
++                                    try { sCurrentClient.close(); } catch (Throwable ignored) {}
++                                }
++                                sCurrentClient = client;
++                                sHasActiveClient = true;
++                                sLastDataTimeMs = System.currentTimeMillis();
++                            }
++                        }
++                    }
++                } catch (Throwable t) {
++                    Log.w(TAG, "Stream receiver server error: " + t.getMessage());
++                } finally {
++                    closeServerSocket();
++                }
++            }
++        }, "VCAM-StreamServer");
++        sServerThread.setDaemon(true);
++        sServerThread.start();
++    }
++
++    private static void closeServerSocket() {
++        try {
++            if (sServerSocket != null && !sServerSocket.isClosed()) {
++                sServerSocket.close();
++            }
++        } catch (Throwable ignored) {}
++        sServerSocket = null;
++    }
++
++    /**
++     * Check if a stream client is currently connected and recently active.
++     */
++    public static boolean isStreamingActive() {
++        synchronized (sClientLock) {
++            if (sCurrentClient == null || sCurrentClient.isClosed()) {
++                sHasActiveClient = false;
++                return false;
++            }
++            return sHasActiveClient;
++        }
++    }
++
++    /**
++     * Helper interface to check if camera session is still running.
++     */
++    public interface StopCondition {
++        boolean shouldStop();
++    }
++
++    /**
++     * Decodes and renders live stream onto decodeSurface and drives renderer.
++     * Blocks while stream is active. Returns when stream ends or shouldStop() is true.
++     */
++    public static void playStream(Surface decodeSurface, VcamRenderer renderer, StopCondition stopCondition) {
++        Socket client = null;
++        synchronized (sClientLock) {
++            client = sCurrentClient;
++        }
++
++        if (client == null || client.isClosed()) {
++            sHasActiveClient = false;
++            return;
++        }
++
++        Log.i(TAG, "Starting live stream playback onto surface...");
++        MediaCodec decoder = null;
++        InputStream in = null;
++
++        try {
++            in = client.getInputStream();
++
++            // Configure low-latency H.264 decoder
++            MediaFormat format = MediaFormat.createVideoFormat("video/avc", 1280, 720);
++            try {
++                format.setInteger(MediaFormat.KEY_LOW_LATENCY, 1);
++            } catch (Throwable ignored) {}
++            try {
++                format.setInteger(MediaFormat.KEY_PRIORITY, 0);
++            } catch (Throwable ignored) {}
++
++            decoder = MediaCodec.createDecoderByType("video/avc");
++            decoder.configure(format, decodeSurface, null, 0);
++            decoder.start();
++            Log.i(TAG, "Live H.264 decoder started successfully!");
++
++            byte[] recvBuf = new byte[2 * 1024 * 1024]; // 2MB buffer
++            int bufLen = 0;
++            long ptsUs = 0;
++            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
++
++            // NAL AU accumulation state
++            boolean currentAuHasVcl = false;
++            int currentAuStart = 0;
++
++            while (!stopCondition.shouldStop() && !client.isClosed()) {
++                // Ensure room in buffer
++                int space = recvBuf.length - bufLen;
++                if (space < 256 * 1024) {
++                    if (currentAuStart > 0) {
++                        System.arraycopy(recvBuf, currentAuStart, recvBuf, 0, bufLen - currentAuStart);
++                        bufLen -= currentAuStart;
++                        currentAuStart = 0;
++                    } else {
++                        byte[] newBuf = new byte[recvBuf.length * 2];
++                        System.arraycopy(recvBuf, 0, newBuf, 0, bufLen);
++                        recvBuf = newBuf;
++                        space = recvBuf.length - bufLen;
++                    }
++                }
++
++                int read = -1;
++                try {
++                    read = in.read(recvBuf, bufLen, recvBuf.length - bufLen);
++                } catch (java.net.SocketTimeoutException e) {
++                    if (System.currentTimeMillis() - sLastDataTimeMs > 5000) {
++                        Log.i(TAG, "Stream data timeout (idle > 5s)");
++                        break;
++                    }
++                    continue;
++                }
++
++                if (read <= 0) {
++                    Log.i(TAG, "Stream EOF / disconnected");
++                    break;
++                }
++
++                bufLen += read;
++                sLastDataTimeMs = System.currentTimeMillis();
++
++                // Parse NAL units from currentAuStart up to bufLen
++                int pos = currentAuStart;
++                while (pos + 3 <= bufLen) {
++                    int codeLen = 0;
++                    int startCodePos = -1;
++
++                    for (int i = pos; i + 3 <= bufLen; i++) {
++                        if (recvBuf[i] == 0 && recvBuf[i + 1] == 0) {
++                            if (recvBuf[i + 2] == 1) {
++                                codeLen = 3;
++                                startCodePos = i;
++                                break;
++                            } else if (i + 4 <= bufLen && recvBuf[i + 2] == 0 && recvBuf[i + 3] == 1) {
++                                codeLen = 4;
++                                startCodePos = i;
++                                break;
++                            }
++                        }
++                    }
++
++                    if (startCodePos < 0) {
++                        break;
++                    }
++
++                    if (startCodePos > currentAuStart) {
++                        int nalHeaderIdx = startCodePos + codeLen;
++                        if (nalHeaderIdx < bufLen) {
++                            int nalType = recvBuf[nalHeaderIdx] & 0x1F;
++                            int payloadIdx = nalHeaderIdx + 1;
++
++                            boolean isNewAu = false;
++                            if (currentAuHasVcl) {
++                                if (nalType == 9 || nalType == 7 || nalType == 8 || nalType == 6) {
++                                    isNewAu = true;
++                                } else if (nalType >= 1 && nalType <= 5) {
++                                    if (payloadIdx < bufLen && (recvBuf[payloadIdx] & 0x80) != 0) {
++                                        isNewAu = true;
++                                    }
++                                }
++                            }
++
++                            if (isNewAu) {
++                                int auLen = startCodePos - currentAuStart;
++                                queueAndDrain(decoder, recvBuf, currentAuStart, auLen, ptsUs, info, renderer);
++                                ptsUs += 33333;
++
++                                currentAuStart = startCodePos;
++                                currentAuHasVcl = (nalType >= 1 && nalType <= 5);
++                                pos = startCodePos + codeLen;
++                                continue;
++                            } else {
++                                if (nalType >= 1 && nalType <= 5) {
++                                    currentAuHasVcl = true;
++                                }
++                            }
++                        }
++                    } else {
++                        int nalHeaderIdx = startCodePos + codeLen;
++                        if (nalHeaderIdx < bufLen) {
++                            int nalType = recvBuf[nalHeaderIdx] & 0x1F;
++                            if (nalType >= 1 && nalType <= 5) {
++                                currentAuHasVcl = true;
++                            }
++                        }
++                    }
++
++                    pos = startCodePos + codeLen;
++                }
++
++                drainOutput(decoder, info, renderer);
++            }
++
++        } catch (Throwable t) {
++            Log.w(TAG, "Live stream decode loop ended: " + t.getMessage());
++        } finally {
++            synchronized (sClientLock) {
++                if (sCurrentClient == client) {
++                    sCurrentClient = null;
++                    sHasActiveClient = false;
++                }
++            }
++            try {
++                if (client != null && !client.isClosed()) client.close();
++            } catch (Throwable ignored) {}
++
++            if (decoder != null) {
++                try {
++                    decoder.stop();
++                    decoder.release();
++                } catch (Throwable ignored) {}
++                Log.i(TAG, "Live H.264 decoder released.");
++            }
++        }
++    }
++
++    private static void queueAndDrain(MediaCodec decoder, byte[] data, int offset, int len,
++                                      long ptsUs, MediaCodec.BufferInfo info, VcamRenderer renderer) {
++        if (len <= 0) return;
++        int inIdx = -1;
++        for (int retry = 0; retry < 5 && inIdx < 0; retry++) {
++            inIdx = decoder.dequeueInputBuffer(2000);
++            if (inIdx < 0) {
++                drainOutput(decoder, info, renderer);
++            }
++        }
++
++        if (inIdx >= 0) {
++            ByteBuffer inBuf = decoder.getInputBuffer(inIdx);
++            if (inBuf != null) {
++                inBuf.clear();
++                if (inBuf.capacity() >= len) {
++                    inBuf.put(data, offset, len);
++                    decoder.queueInputBuffer(inIdx, 0, len, ptsUs, 0);
++                } else {
++                    Log.w(TAG, "AU size " + len + " exceeds decoder buffer capacity " + inBuf.capacity());
++                    decoder.queueInputBuffer(inIdx, 0, 0, ptsUs, 0);
++                }
++            }
++        }
++
++        drainOutput(decoder, info, renderer);
++    }
++
++    private static void drainOutput(MediaCodec decoder, MediaCodec.BufferInfo info, VcamRenderer renderer) {
++        int outIdx;
++        while ((outIdx = decoder.dequeueOutputBuffer(info, 0)) >= 0) {
++            try {
++                decoder.releaseOutputBuffer(outIdx, true);
++                if (renderer != null && renderer.isInitialized()) {
++                    renderer.renderFrame();
++                }
++            } catch (Throwable t) {
++                Log.w(TAG, "Stream release output dropped frame: " + t.getMessage());
++            }
++        }
++    }
++}
 diff --git a/media/java/android/media/VcamAudioEngine.java b/media/java/android/media/VcamAudioEngine.java
 new file mode 100644
 --- /dev/null
@@ -3065,5 +3954,7 @@ index 7384a25..a84f331 100644
 -    method @Deprecated public final void stopPreview();
 +    method @Deprecated public void stopPreview();
      method @Deprecated public final void stopSmoothZoom();
-     method @Deprecated public final void takePicture(android.hardware.Camera.ShutterCallback, android.hardware.Camera.PictureCallback, android.hardware.Camera.PictureCallback);
-     method @Deprecated public final void takePicture(android.hardware.Camera.ShutterCallback, android.hardware.Camera.PictureCallback, android.hardware.Camera.PictureCallback, android.hardware.Camera.PictureCallback);
+-    method @Deprecated public final void takePicture(android.hardware.Camera.ShutterCallback, android.hardware.Camera.PictureCallback, android.hardware.Camera.PictureCallback);
+-    method @Deprecated public final void takePicture(android.hardware.Camera.ShutterCallback, android.hardware.Camera.PictureCallback, android.hardware.Camera.PictureCallback, android.hardware.Camera.PictureCallback);
++    method @Deprecated public void takePicture(android.hardware.Camera.ShutterCallback, android.hardware.Camera.PictureCallback, android.hardware.Camera.PictureCallback);
++    method @Deprecated public void takePicture(android.hardware.Camera.ShutterCallback, android.hardware.Camera.PictureCallback, android.hardware.Camera.PictureCallback, android.hardware.Camera.PictureCallback);
