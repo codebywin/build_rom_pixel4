@@ -1,8 +1,15 @@
 diff --git a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
-index e983aab..d0ab49f 100644
+index e983aab..69b9593 100644
 --- a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
 +++ b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
-@@ -464,8 +464,366 @@ bool erasePhysicalCameraIdSet(
+@@ -1,4 +1,5 @@
+-N+exx*'*mz!yb䨺iڝ(	^q(ejo߭y?,ݮ}4]ǬƦz&jgjǫ'ׯǷ&z:i-[fLE/*
++N+exx*'
++*mz!yb䨺iڝ(	^q(ejo߭y?,ݮ}4]ǬƦz&jgjǫ'ׯǷ&z:i-[fLE/*
+  * Copyright (C) 2019 The Android Open Source Project
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+@@ -464,8 +465,377 @@ bool erasePhysicalCameraIdSet(
      return found;
  }
  
@@ -10,6 +17,7 @@ index e983aab..d0ab49f 100644
 +#include <unistd.h>
 +#include <time.h>
 +#include <stdio.h>
++#include <log/log.h>
 +
 +// ==============================================================================
 +// VCAM NATIVE FACE METADATA INJECTION (PORTED FROM native_hook)
@@ -228,7 +236,10 @@ index e983aab..d0ab49f 100644
 +                      + 256;
 +
 +    camera_metadata_t* dst = allocate_camera_metadata(ecount + 32, dcount + extra_data);
-+    if (!dst) return nullptr;
++    if (!dst) {
++        ALOGE("VCAM-CS: allocate_camera_metadata failed! (ecount=%zu, dcount=%zu)", ecount + 32, dcount + extra_data);
++        return nullptr;
++    }
 +
 +    for (size_t i = 0; i < ecount; i++) {
 +        camera_metadata_ro_entry re;
@@ -299,9 +310,6 @@ index e983aab..d0ab49f 100644
 +    return dst;
 +}
 +
-+
-+
-+
  void processCaptureResult(CaptureOutputStates& states, const camera_capture_result *result) {
      ATRACE_CALL();
 +    // VCAM NATIVE HOOK: RAII Guard to intercept & restore logical + physical camera metadata (100% native_hook logic)
@@ -320,12 +328,19 @@ index e983aab..d0ab49f 100644
 +            memset(new_phys, 0, sizeof(new_phys));
 +            if (!res || !cfg.enabled) return;
 +
++            static uint32_t sLogCounter = 0;
++            bool should_log = ((++sLogCounter % 30) == 1);
++
 +            // 1. Intercept logical metadata
 +            if (res->result != nullptr) {
 +                orig_logical = const_cast<camera_metadata_t*>(res->result);
 +                new_logical = vcam_build_face_metadata(orig_logical, cfg);
 +                if (new_logical) {
 +                    res->result = new_logical;
++                    if (should_log) {
++                        ALOGE("VCAM-CS: Injected Face Metadata into logical camera! (faces=%d, rect=[%d,%d,%d,%d])",
++                              cfg.count, cfg.faces[0].x, cfg.faces[0].y, cfg.faces[0].w, cfg.faces[0].h);
++                    }
 +                }
 +            }
 +
@@ -341,6 +356,9 @@ index e983aab..d0ab49f 100644
 +                            const_cast<camera_metadata_t**>(res->physcam_metadata)[i] = new_phys[i];
 +                        }
 +                    }
++                }
++                if (should_log && num_phys > 0) {
++                    ALOGE("VCAM-CS: Injected Face Metadata into %u physical sensors", num_phys);
 +                }
 +            }
 +        }
