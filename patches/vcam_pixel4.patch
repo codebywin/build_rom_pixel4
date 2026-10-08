@@ -3923,38 +3923,3 @@ new file mode 100644
 +        }
 +    }
 +}
-
-diff --git a/core/api/current.txt b/core/api/current.txt
-index 7384a25..a84f331 100644
---- a/core/api/current.txt
-+++ b/core/api/current.txt
-@@ -16571,7 +16571,7 @@
-     method @Deprecated public static android.hardware.Camera open(int);
-     method @Deprecated public static android.hardware.Camera open();
-     method @Deprecated public final void reconnect() throws java.io.IOException;
--    method @Deprecated public final void release();
-+    method @Deprecated public void release();
-     method @Deprecated public void setAutoFocusMoveCallback(android.hardware.Camera.AutoFocusMoveCallback);
-     method @Deprecated public final void setDisplayOrientation(int);
-     method @Deprecated public final void setErrorCallback(android.hardware.Camera.ErrorCallback);
-@@ -16580,14 +16580,14 @@
-     method @Deprecated public void setParameters(android.hardware.Camera.Parameters);
-     method @Deprecated public final void setPreviewCallback(android.hardware.Camera.PreviewCallback);
-     method @Deprecated public final void setPreviewCallbackWithBuffer(android.hardware.Camera.PreviewCallback);
--    method @Deprecated public final void setPreviewDisplay(android.view.SurfaceHolder) throws java.io.IOException;
--    method @Deprecated public final void setPreviewTexture(android.graphics.SurfaceTexture) throws java.io.IOException;
-+    method @Deprecated public void setPreviewDisplay(android.view.SurfaceHolder) throws java.io.IOException;
-+    method @Deprecated public void setPreviewTexture(android.graphics.SurfaceTexture) throws java.io.IOException;
-     method @Deprecated public final void setZoomChangeListener(android.hardware.Camera.OnZoomChangeListener);
-     method @Deprecated public final void startFaceDetection();
--    method @Deprecated public final void startPreview();
-+    method @Deprecated public void startPreview();
-     method @Deprecated public final void startSmoothZoom(int);
-     method @Deprecated public final void stopFaceDetection();
--    method @Deprecated public final void stopPreview();
-+    method @Deprecated public void stopPreview();
-     method @Deprecated public final void stopSmoothZoom();
--    method @Deprecated public final void takePicture(android.hardware.Camera.ShutterCallback, android.hardware.Camera.PictureCallback, android.hardware.Camera.PictureCallback);
--    method @Deprecated public final void takePicture(android.hardware.Camera.ShutterCallback, android.hardware.Camera.PictureCallback, android.hardware.Camera.PictureCallback, android.hardware.Camera.PictureCallback);
-+    method @Deprecated public void takePicture(android.hardware.Camera.ShutterCallback, android.hardware.Camera.PictureCallback, android.hardware.Camera.PictureCallback);
-+    method @Deprecated public void takePicture(android.hardware.Camera.ShutterCallback, android.hardware.Camera.PictureCallback, android.hardware.Camera.PictureCallback, android.hardware.Camera.PictureCallback);
