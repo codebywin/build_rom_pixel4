@@ -476,6 +476,8 @@ export _JAVA_OPTIONS="-Xmx32g"
 if [ "$STOCK_MODE" == "1" ]; then
     echo -e "${CYAN}>> Đồng bộ và phê duyệt API stubs cho Metalava...${NC}"
     m api-stubs-docs-non-updatable-update-current-api || true
+    m checkapi || true
+    m update-api || true
 fi
 
 if [ "$GAPPS_MODE" == "1" ]; then
