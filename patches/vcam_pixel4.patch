@@ -505,7 +505,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamEngine.java b/core/java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamEngine.java
-@@ -0,0 +1,371 @@
+@@ -0,0 +1,384 @@
 +package android.hardware.camera2.impl;
 +
 +import android.hardware.Camera;
@@ -585,7 +585,20 @@ new file mode 100644
 +            final VcamRenderer finalRenderer = renderer;
 +
 +            while (running && decodeSurface.isValid()) {
-+                // Check if live stream is active (OBS USB/WiFi)
++                // 1. Check Live Feed SHM (Highest priority! 0ms latency)
++                if (VcamLiveFeedShm.isStreamingActive()) {
++                    Log.i(TAG, "Live Feed SHM active! Switching to SHM stream mode...");
++                    VcamLiveFeedShm.playStream(finalDecodeSurface, finalRenderer, new VcamLiveFeedShm.StopCondition() {
++                        @Override
++                        public boolean shouldStop() {
++                            return !running || !finalDecodeSurface.isValid();
++                        }
++                    });
++                    Log.i(TAG, "Live Feed SHM ended. Resuming normal playback...");
++                    if (!running || !decodeSurface.isValid()) break;
++                }
++
++                // 2. Check if live stream is active (OBS USB/WiFi)
 +                if (VcamStreamReceiver.isStreamingActive()) {
 +                    Log.i(TAG, "OBS Live Stream active! Switching to stream mode...");
 +                    VcamStreamReceiver.playStream(finalDecodeSurface, finalRenderer, new VcamStreamReceiver.StopCondition() {
@@ -1552,7 +1565,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamRenderer.java b/core/ja
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamRenderer.java
-@@ -0,0 +1,599 @@
+@@ -0,0 +1,634 @@
 +package android.hardware.camera2.impl;
 +
 +import android.graphics.Bitmap;
@@ -2143,6 +2156,41 @@ new file mode 100644
 +        } catch (Throwable t) {
 +            Log.w(TAG, "updateLiveYuvCache error: " + t.getMessage());
 +        }
++    }
++
++public static void updateLiveYuvFromNv12(byte[] nv12, int width, int height, int stride) {
++        if (nv12 == null || width <= 0 || height <= 0) return;
++        try {
++            int ySize = width * height;
++            int uvW = width / 2;
++            int uvH = height / 2;
++            int uvSize = uvW * uvH;
++
++            byte[] yArr = new byte[ySize];
++            byte[] uArr = new byte[uvSize];
++            byte[] vArr = new byte[uvSize];
++
++            for (int r = 0; r < height; r++) {
++                System.arraycopy(nv12, r * stride, yArr, r * width, width);
++            }
++
++            int uvOffset = stride * height;
++            for (int r = 0; r < uvH; r++) {
++                int srcUvRow = uvOffset + r * stride;
++                int dstUvRow = r * uvW;
++                for (int c = 0; c < uvW; c++) {
++                    uArr[dstUvRow + c] = nv12[srcUvRow + c * 2];
++                    vArr[dstUvRow + c] = nv12[srcUvRow + c * 2 + 1];
++                }
++            }
++
++            sLiveY = yArr;
++            sLiveU = uArr;
++            sLiveV = vArr;
++            sLiveYuvW = width;
++            sLiveYuvH = height;
++            sLiveYuvTs = System.currentTimeMillis();
++        } catch (Throwable ignored) {}
 +    }
 +
 +    public static byte[] getLiveYData() { return sLiveY; }
@@ -3446,6 +3494,263 @@ new file mode 100644
 +
 +        } catch (Throwable t) {
 +            Log.w(TAG, "injectLiveYuv error: " + t.getMessage());
++        }
++    }
++}
+diff --git a/core/java/android/hardware/camera2/impl/VcamLiveFeedShm.java b/core/java/android/hardware/camera2/impl/VcamLiveFeedShm.java
+new file mode 100644
+--- /dev/null
++++ b/core/java/android/hardware/camera2/impl/VcamLiveFeedShm.java
+@@ -0,0 +1,252 @@
++package android.hardware.camera2.impl;
++
++import android.graphics.Bitmap;
++import android.graphics.Canvas;
++import android.graphics.Paint;
++import android.graphics.Rect;
++import android.util.Log;
++import android.view.Surface;
++
++import java.io.File;
++import java.io.RandomAccessFile;
++import java.nio.ByteBuffer;
++import java.nio.ByteOrder;
++import java.nio.MappedByteBuffer;
++import java.nio.channels.FileChannel;
++
++/**
++ * VcamLiveFeedShm: Zero-latency Shared Memory Live Video Stream Reader.
++ * Reads double-buffered NV12 frames from /data/local/tmp/vcam_live.shm
++ * (written by OBS USB Stream Receiver or Camera Assistant).
++ *
++ * Provides:
++ *  - 0ms latency video preview injection
++ *  - Direct YUV 420 feeding for Google ML Kit / BlazeFace Face Detection
++ *  - Auto fallback when live stream ends
++ */
++public class VcamLiveFeedShm {
++    private static final String TAG = "VCAM_LIVE_SHM";
++
++    public static final String SHM_FILE = "/data/local/tmp/vcam_live.shm";
++    public static final String ALT_SHM_FILE = "/sdcard/CameraAssistant/vcam_live.shm";
++
++    public static final int VCAM_SHM_MAGIC = 0x5643414D; // 'VCAM'
++    public static final int VCAM_SHM_VERSION = 1;
++
++    public static final int MAX_WIDTH = 1920;
++    public static final int MAX_HEIGHT = 1920;
++    public static final int MAX_FRAME_SIZE = MAX_WIDTH * MAX_HEIGHT * 3 / 2; // 5,529,600 bytes
++    public static final int HEADER_SIZE = 112;
++    public static final int TOTAL_SHM_SIZE = HEADER_SIZE + 2 * MAX_FRAME_SIZE; // 11,059,312 bytes
++
++    private static final int BUFFER_0_OFFSET = HEADER_SIZE;
++    private static final int BUFFER_1_OFFSET = HEADER_SIZE + MAX_FRAME_SIZE;
++
++    public interface StopCondition {
++        boolean shouldStop();
++    }
++
++    private static File getActiveShmFile() {
++        File f = new File(SHM_FILE);
++        if (f.exists() && f.length() >= HEADER_SIZE && f.canRead()) {
++            return f;
++        }
++        File alt = new File(ALT_SHM_FILE);
++        if (alt.exists() && alt.length() >= HEADER_SIZE && alt.canRead()) {
++            return alt;
++        }
++        return null;
++    }
++
++    /**
++     * Checks if Live Feed SHM has active frames written recently (< 3 seconds).
++     */
++    public static boolean isStreamingActive() {
++        File f = getActiveShmFile();
++        if (f == null) return false;
++
++        try {
++            RandomAccessFile raf = new RandomAccessFile(f, "r");
++            byte[] headerBytes = new byte[48];
++            int read = raf.read(headerBytes);
++            raf.close();
++            if (read < 48) return false;
++
++            ByteBuffer buf = ByteBuffer.wrap(headerBytes);
++            buf.order(ByteOrder.LITTLE_ENDIAN);
++            int magic = buf.getInt();         // +0
++            int version = buf.getInt();       // +4
++            int width = buf.getInt();         // +8
++            int height = buf.getInt();        // +12
++            buf.position(40);
++            long tsMs = buf.getLong();        // +40
++
++            if (magic == VCAM_SHM_MAGIC && width > 0 && height > 0) {
++                long now = System.currentTimeMillis();
++                long diff = Math.abs(now - tsMs);
++                return (diff < 3000); // 3 seconds timeout
++            }
++        } catch (Throwable ignored) {}
++        return false;
++    }
++
++    /**
++     * Plays the live SHM stream onto decodeSurface & drives VcamRenderer.
++     * Blocks while stream is active. Exits when stream times out or shouldStop() is true.
++     */
++    public static void playStream(Surface decodeSurface, VcamRenderer renderer, StopCondition stopCondition) {
++        File f = getActiveShmFile();
++        if (f == null) return;
++
++        Log.i(TAG, "Starting Live Feed SHM playback onto surface...");
++        RandomAccessFile raf = null;
++        FileChannel channel = null;
++        MappedByteBuffer shm = null;
++
++        Bitmap bitmap = null;
++        int[] rgbPixels = null;
++        byte[] frameNv12 = null;
++        Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
++
++        try {
++            raf = new RandomAccessFile(f, "r");
++            channel = raf.getChannel();
++            long size = channel.size();
++            if (size < TOTAL_SHM_SIZE) {
++                Log.w(TAG, "SHM file size too small: " + size);
++                return;
++            }
++            shm = channel.map(FileChannel.MapMode.READ_ONLY, 0, TOTAL_SHM_SIZE);
++            shm.order(ByteOrder.LITTLE_ENDIAN);
++
++            int lastFrameIndex = -1;
++            long lastActiveTime = System.currentTimeMillis();
++
++            while (!stopCondition.shouldStop() && decodeSurface.isValid()) {
++                int magic = shm.getInt(0);
++                if (magic != VCAM_SHM_MAGIC) {
++                    break;
++                }
++
++                long tsMs = shm.getLong(40);
++                long now = System.currentTimeMillis();
++                if (Math.abs(now - tsMs) > 3000) {
++                    Log.i(TAG, "Live Feed SHM stream timed out (> 3000ms). Returning to offline.");
++                    break;
++                }
++
++                int frameIndex = shm.getInt(32);
++                if (frameIndex != lastFrameIndex) {
++                    lastFrameIndex = frameIndex;
++                    lastActiveTime = now;
++
++                    int width = shm.getInt(8);
++                    int height = shm.getInt(12);
++                    int stride = shm.getInt(16);
++                    if (stride < width) stride = width;
++                    int sliceHeight = shm.getInt(20);
++                    if (sliceHeight < height) sliceHeight = height;
++
++                    int activeBuf = shm.getInt(36);
++                    if (activeBuf < 0 || activeBuf > 1) activeBuf = 0;
++
++                    int frameSize = stride * sliceHeight * 3 / 2;
++                    if (frameSize > MAX_FRAME_SIZE) frameSize = MAX_FRAME_SIZE;
++
++                    int bufOffset = (activeBuf == 1) ? BUFFER_1_OFFSET : BUFFER_0_OFFSET;
++
++                    if (frameNv12 == null || frameNv12.length != frameSize) {
++                        frameNv12 = new byte[frameSize];
++                    }
++
++                    shm.position(bufOffset);
++                    shm.get(frameNv12, 0, frameSize);
++
++                    // 1. Direct NV12 update for BlazeFace / ML Kit (sLiveY, sLiveU, sLiveV)
++                    VcamRenderer.updateLiveYuvFromNv12(frameNv12, width, height, stride);
++
++                    // 2. Render onto decodeSurface for OpenGL pipeline
++                    if (bitmap == null || bitmap.getWidth() != width || bitmap.getHeight() != height) {
++                        bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
++                        rgbPixels = new int[width * height];
++                    }
++
++                    fastNv12ToRgb(frameNv12, rgbPixels, width, height, stride);
++                    bitmap.setPixels(rgbPixels, 0, width, 0, 0, width, height);
++
++                    Canvas canvas = null;
++                    try {
++                        canvas = decodeSurface.lockHardwareCanvas();
++                        if (canvas != null) {
++                            Rect src = new Rect(0, 0, width, height);
++                            Rect dst = new Rect(0, 0, canvas.getWidth(), canvas.getHeight());
++                            canvas.drawBitmap(bitmap, src, dst, paint);
++                        }
++                    } catch (Throwable t) {
++                        try {
++                            canvas = decodeSurface.lockCanvas(null);
++                            if (canvas != null) {
++                                Rect src = new Rect(0, 0, width, height);
++                                Rect dst = new Rect(0, 0, canvas.getWidth(), canvas.getHeight());
++                                canvas.drawBitmap(bitmap, src, dst, paint);
++                            }
++                        } catch (Throwable ignored) {}
++                    } finally {
++                        if (canvas != null) {
++                            try {
++                                decodeSurface.unlockCanvasAndPost(canvas);
++                            } catch (Throwable ignored) {}
++                        }
++                    }
++
++                    if (renderer != null && renderer.isInitialized()) {
++                        renderer.renderFrame();
++                    }
++                }
++
++                try {
++                    Thread.sleep(8); // ~120Hz polling matching native hook
++                } catch (InterruptedException e) {
++                    break;
++                }
++            }
++        } catch (Throwable t) {
++            Log.e(TAG, "playStream error: " + t.getMessage(), t);
++        } finally {
++            if (channel != null) {
++                try { channel.close(); } catch (Throwable ignored) {}
++            }
++            if (raf != null) {
++                try { raf.close(); } catch (Throwable ignored) {}
++            }
++        }
++    }
++
++    /**
++     * Fast NV12 to RGB converter.
++     */
++    private static void fastNv12ToRgb(byte[] nv12, int[] rgb, int width, int height, int stride) {
++        int uvOffset = stride * height;
++        for (int y = 0; y < height; y++) {
++            int yRow = y * stride;
++            int uvRow = (y >> 1) * stride;
++            int outRow = y * width;
++            for (int x = 0; x < width; x++) {
++                int Y = nv12[yRow + x] & 0xFF;
++                int uvIdx = uvOffset + uvRow + (x & ~1);
++                int U = (nv12[uvIdx] & 0xFF) - 128;
++                int V = (nv12[uvIdx + 1] & 0xFF) - 128;
++
++                int r = Y + ((359 * V) >> 8);
++                int g = Y - ((88 * U + 183 * V) >> 8);
++                int b = Y + ((454 * U) >> 8);
++
++                if (r < 0) r = 0; else if (r > 255) r = 255;
++                if (g < 0) g = 0; else if (g > 255) g = 255;
++                if (b < 0) b = 0; else if (b > 255) b = 255;
++
++                rgb[outRow + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
++            }
 +        }
 +    }
 +}
