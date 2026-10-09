@@ -1,11 +1,19 @@
 diff --git a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
-index e983aab..69b9593 100644
+index e983aab..27ca91a 100644
 --- a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
 +++ b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
-@@ -464,8 +464,385 @@ bool erasePhysicalCameraIdSet(
+@@ -1,4 +1,5 @@
+-N+exx*'*mz!yb䨺iڝ(	^q(ejo߭y?,ݮ}4]ǬƦz&jgjǫ'ׯǷ&z:i-[fLE/*
++N+exx*'
++*mz!yb䨺iڝ(	^q(ejo߭y?,ݮ}4]ǬƦz&jgjǫ'ׯǷ&z:i-[fLE/*
+  * Copyright (C) 2019 The Android Open Source Project
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+@@ -464,9 +465,387 @@ bool erasePhysicalCameraIdSet(
      return found;
  }
  
++++ b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
 +#include <sys/stat.h>
 +#include <unistd.h>
 +#include <time.h>
@@ -305,8 +313,6 @@ index e983aab..69b9593 100644
 +    return dst;
 +}
 +
- void processCaptureResult(CaptureOutputStates& states, const camera_capture_result *result) {
-     ATRACE_CALL();
 +    // VCAM NATIVE HOOK: RAII Guard to intercept & restore logical + physical camera metadata (100% native_hook logic)
 +    struct VcamMetadataGuard {
 +        camera_capture_result* res;
@@ -382,8 +388,12 @@ index e983aab..69b9593 100644
 +        }
 +    };
 +
+ void processCaptureResult(CaptureOutputStates& states, const camera_capture_result *result) {
+     ATRACE_CALL();
+ 
 +    VcamFaceConfig vcam_cfg = vcam_read_face_config();
 +    VcamMetadataGuard vcam_guard(result, vcam_cfg);
 +
- 
      status_t res;
+ 
+     uint32_t frameNumber = result->frame_number;
