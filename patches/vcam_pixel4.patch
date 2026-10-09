@@ -1048,18 +1048,21 @@ new file mode 100644
 +        long now = System.currentTimeMillis();
 +        if (now - sLastRotationCheck < 150) return sCachedRotation;
 +        sLastRotationCheck = now;
++        int userRot = 0;
 +        String val = readFileContent(ROTATION_FILE);
++        if (val.isEmpty()) {
++            val = readFileContent("vcam_rotate");
++        }
 +        if (!val.isEmpty()) {
 +            try {
-+                int r = Integer.parseInt(val.trim());
-+                if (r == 0 || r == 90 || r == 180 || r == 270) {
-+                    sCachedRotation = r;
-+                    return r;
-+                }
++                userRot = Integer.parseInt(val.trim());
 +            } catch (Throwable ignored) {}
 +        }
-+        sCachedRotation = 0;
-+        return 0;
++        // Base 180 deg to mirror native_hook camera_hook.cpp behavior exactly
++        int totalRot = (180 + userRot) % 360;
++        if (totalRot < 0) totalRot += 360;
++        sCachedRotation = totalRot;
++        return totalRot;
 +    }
 +
 +    private static volatile int sCachedNoise = 0;
