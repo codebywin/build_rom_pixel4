@@ -2060,11 +2060,9 @@ new file mode 100644
 +        try {
 +            if (vpW <= 0 || vpH <= 0) return;
 +
-+            // Cap analysis cache resolution to at most 640x480 (or 480x640) for ultra low latency (< 1.5ms)
-+            int capW = Math.min(vpW, 640);
-+            int capH = Math.min(vpH, 480);
-+            capW &= ~1;
-+            capH &= ~1;
++            float scale = Math.min(1.0f, Math.min(640.0f / vpW, 480.0f / vpH));
++            int capW = Math.max(2, ((int) (vpW * scale)) & ~1);
++            int capH = Math.max(2, ((int) (vpH * scale)) & ~1);
 +            if (capW <= 0 || capH <= 0) return;
 +
 +            int rgbaSize = capW * capH * 4;
@@ -2077,7 +2075,14 @@ new file mode 100644
 +            }
 +
 +            mYuvRgbaBuf.position(0);
-+            GLES20.glReadPixels(0, 0, capW, capH, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, mYuvRgbaBuf);
++            GLES20.glViewport(0, 0, capW, capH);
++            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
++            try {
++                GLES20.glReadPixels(0, 0, capW, capH, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, mYuvRgbaBuf);
++            } finally {
++                GLES20.glViewport(0, 0, vpW, vpH);
++                GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
++            }
 +            mYuvRgbaBuf.position(0);
 +            mYuvRgbaBuf.get(mYuvRgbaArray, 0, rgbaSize);
 +
