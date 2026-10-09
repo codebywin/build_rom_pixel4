@@ -432,6 +432,9 @@ on post-fs-data
     chmod 0666 /data/local/tmp/vcam_color_val
     chmod 0666 /data/local/tmp/vcam.mp4
     chmod 0666 /data/local/tmp/vcam.wav
+    chmod 0666 /data/local/tmp/vcam_live.shm
+    chmod 0666 /data/local/tmp/vcam_flash.shm
+    chmod 0666 /data/local/tmp/vcam_flash.cfg
 EOF
     fi
 else
