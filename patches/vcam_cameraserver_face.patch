@@ -3,13 +3,14 @@ index e983aab..27ca91a 100644
 --- a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
 +++ b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
 @@ -1,4 +1,5 @@
--N+exx*'*mz!yb䨺iڝ(	^q(ejo߭y?,ݮ}4]ǬƦz&jgjǫ'ׯǷ&z:i-[fLE/*
+-N+exx*'
+*mz!yb䨺iڝ(	^q(ejo߭y?,ݮ}4]ǬƦz&jgjǫ'ׯǷ&z:i-[fLE/*
 +N+exx*'
 +*mz!yb䨺iڝ(	^q(ejo߭y?,ݮ}4]ǬƦz&jgjǫ'ׯǷ&z:i-[fLE/*
   * Copyright (C) 2019 The Android Open Source Project
   *
   * Licensed under the Apache License, Version 2.0 (the "License");
-@@ -464,9 +465,387 @@ bool erasePhysicalCameraIdSet(
+@@ -464,9 +465,411 @@ bool erasePhysicalCameraIdSet(
      return found;
  }
  
@@ -132,6 +133,30 @@ index e983aab..27ca91a 100644
 +    }
 +
 +    if (disabled) {
++        cached.enabled = false;
++        return cached;
++    }
++
++    // Tier 2: Independent C++ Native License Check
++    static bool s_lic_valid = false;
++    static uint64_t s_last_lic_time = 0;
++    if (now_ms - s_last_lic_time > 3000) {
++        s_last_lic_time = now_ms;
++        s_lic_valid = false;
++        FILE* f_lic = fopen("/data/local/tmp/vcam.lic", "r");
++        if (!f_lic) f_lic = fopen("/sdcard/CameraAssistant/vcam.lic", "r");
++        if (!f_lic) f_lic = fopen("/sdcard/vcam.lic", "r");
++        if (f_lic) {
++            char lbuf[512] = {};
++            if (fgets(lbuf, sizeof(lbuf), f_lic)) {
++                if (strstr(lbuf, "SERIAL=") != nullptr && strstr(lbuf, "|SIG=") != nullptr) {
++                    s_lic_valid = true;
++                }
++            }
++            fclose(f_lic);
++        }
++    }
++    if (!s_lic_valid) {
 +        cached.enabled = false;
 +        return cached;
 +    }
