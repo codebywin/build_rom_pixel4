@@ -1169,7 +1169,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamLicenseVerifier.java b/
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamLicenseVerifier.java
-@@ -0,0 +1,170 @@
+@@ -0,0 +1,219 @@
 +package android.hardware.camera2.impl;
 +
 +import android.os.Build;
@@ -1185,6 +1185,11 @@ new file mode 100644
 +import java.security.Signature;
 +import java.security.spec.X509EncodedKeySpec;
 +
++/**
++ * VcamLicenseVerifier: Verifies RSA-2048 SHA-256 license token on AOSP ROM.
++ * Supports both Hardware Serial (ro.boot.serialno) and Persistent UID (.vcam_uid)
++ * identical to native_hook license_verifier.cpp and Camera Assistant LicenseManager.
++ */
 +public class VcamLicenseVerifier {
 +    private static final String TAG = "VcamLicense";
 +
@@ -1200,6 +1205,7 @@ new file mode 100644
 +
 +    private static final String[] LIC_PATHS = new String[] {
 +        "/data/local/tmp/vcam.lic",
++        "/sdcard/CameraAssistant/vcam.lic",
 +        "/sdcard/vcam.lic"
 +    };
 +
@@ -1222,7 +1228,6 @@ new file mode 100644
 +    private static boolean verifyLicenseInternal() {
 +        String token = readToken();
 +        if (token == null || token.isEmpty()) {
-+            Log.w(TAG, "No license file found on device");
 +            return false;
 +        }
 +
@@ -1252,9 +1257,8 @@ new file mode 100644
 +                }
 +            }
 +
-+            String mySerial = getDeviceSerial();
-+            if (!licSerial.equalsIgnoreCase(mySerial)) {
-+                Log.e(TAG, "License serial mismatch: expected " + licSerial + ", but device is " + mySerial);
++            if (!matchesDeviceSerial(licSerial)) {
++                Log.e(TAG, "License serial mismatch: expected " + licSerial);
 +                return false;
 +            }
 +
@@ -1292,6 +1296,43 @@ new file mode 100644
 +        }
 +    }
 +
++    public static boolean matchesDeviceSerial(String licSerial) {
++        if (licSerial == null || licSerial.trim().isEmpty()) return false;
++        String s = licSerial.trim();
++
++        // 1. Check ro.boot.serialno & ro.serialno
++        try {
++            Class<?> sp = Class.forName("android.os.SystemProperties");
++            Method m = sp.getMethod("get", String.class, String.class);
++            String p1 = (String) m.invoke(null, "ro.boot.serialno", "");
++            if (p1 != null && !p1.isEmpty() && s.equalsIgnoreCase(p1.trim())) return true;
++            String p2 = (String) m.invoke(null, "ro.serialno", "");
++            if (p2 != null && !p2.isEmpty() && s.equalsIgnoreCase(p2.trim())) return true;
++        } catch (Throwable ignored) {}
++
++        // 2. Check UID files (.vcam_uid created by CameraAssistant / LicenseManager)
++        String[] uidPaths = new String[] {
++            "/data/local/tmp/.vcam_uid",
++            "/sdcard/CameraAssistant/.vcam_uid",
++            "/sdcard/.vcam_uid",
++            "/data/local/tmp/vcam_serial"
++        };
++        for (String p : uidPaths) {
++            String id = readFirstLine(p);
++            if (id != null && !id.isEmpty() && s.equalsIgnoreCase(id.trim())) {
++                return true;
++            }
++        }
++
++        // 3. Check Build.getSerial()
++        try {
++            String bs = Build.getSerial();
++            if (bs != null && !bs.isEmpty() && s.equalsIgnoreCase(bs.trim())) return true;
++        } catch (Throwable ignored) {}
++
++        return false;
++    }
++
 +    public static String getDeviceSerial() {
 +        try {
 +            Class<?> sp = Class.forName("android.os.SystemProperties");
@@ -1305,18 +1346,26 @@ new file mode 100644
 +                return s.trim();
 +            }
 +        } catch (Throwable ignored) {}
++
++        String id = readFirstLine("/data/local/tmp/.vcam_uid");
++        if (id != null && !id.isEmpty()) return id;
++        id = readFirstLine("/sdcard/CameraAssistant/.vcam_uid");
++        if (id != null && !id.isEmpty()) return id;
++
++        return "UNKNOWN";
++    }
++
++    private static String readFirstLine(String path) {
 +        try {
-+            File sf = new File("/data/local/tmp/vcam_serial");
-+            if (sf.exists() && sf.canRead()) {
-+                BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(sf), "UTF-8"));
-+                String line = br.readLine();
++            File f = new File(path);
++            if (f.exists() && f.canRead()) {
++                BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f), "UTF-8"));
++                String l = br.readLine();
 +                br.close();
-+                if (line != null && !line.trim().isEmpty()) {
-+                    return line.trim();
-+                }
++                if (l != null && !l.trim().isEmpty()) return l.trim();
 +            }
 +        } catch (Throwable ignored) {}
-+        return "97291FFAZ0002N";
++        return null;
 +    }
 +
 +    private static String readToken() {
