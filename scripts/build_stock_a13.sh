@@ -282,6 +282,7 @@ if [ "$STOCK_MODE" == "1" ]; then
     apply_patch "frameworks/base" "hide_accessibility_services.patch"
     apply_patch "frameworks/base" "bypass_overlay_tapjacking.patch"
     apply_patch "frameworks/base" "hide_sensitive_packages.patch"
+    apply_patch "frameworks/base" "fake_gps_system.patch"
 
     # Cấu hình SELinux cho các file Virtual Camera & Virtual Mic trong /data/local/tmp
     echo -e "   [SEPOLICY] Cấu hình quyền SELinux cho VCam trong system/sepolicy..."
