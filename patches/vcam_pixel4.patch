@@ -2950,7 +2950,7 @@ new file mode 100644
 +            // Pixel 4 Front camera sensor orientation = 270 deg.
 +            // When ML Kit receives landscape 1920x1080 buffer, it applies 270 deg counter-clockwise rotation.
 +            // To produce an upright face for BlazeFace/ML Kit, the buffer MUST be rotated 90 deg clockwise!
-+            boolean needRotate90CW = (dstW > dstH && srcH > srcW);
++            boolean needRotate90CW = (dstW > dstH);
 +
 +            if (needRotate90CW) {
 +                // Rotate 90 deg CW: (x_src, y_src) -> (x_dst, y_dst)
