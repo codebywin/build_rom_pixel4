@@ -16,7 +16,7 @@ new file mode 100644
 index 0000000..c20ae0e
 --- /dev/null
 +++ b/sepolicy/private/vcam.te
-@@ -0,0 +1,18 @@
+@@ -0,0 +1,10 @@
 +# Private platform data type for VCam (internal to Android framework)
 +type vcam_data_file, file_type, data_file_type, core_data_file_type;
 +
@@ -27,12 +27,3 @@ index 0000000..c20ae0e
 +# Allow shell (adb) to manage VCAM files
 +allow shell vcam_data_file:dir { create read write open getattr add_name remove_name search };
 +allow shell vcam_data_file:file { create read write open getattr unlink rename setattr };
-+
-+# Allow cameraserver to read VCAM files and configs
-+allow cameraserver vcam_data_file:dir { read open getattr search };
-+allow cameraserver vcam_data_file:file { read open getattr map };
-+allow cameraserver media_rw_data_file:dir { read open getattr search };
-+allow cameraserver media_rw_data_file:file { read open getattr };
-+allow cameraserver fuse:dir { read open getattr search };
-+allow cameraserver fuse:file { read open getattr };
-+

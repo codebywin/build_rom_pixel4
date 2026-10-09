@@ -61,4 +61,3 @@
 +        }
          return getApplicationInfoAsUser(packageName, flags, getUserId());
      }
- 

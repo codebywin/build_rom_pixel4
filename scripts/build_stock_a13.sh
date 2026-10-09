@@ -304,18 +304,15 @@ allow appdomain vcam_data_file:file { read open getattr map };
 allow shell vcam_data_file:dir { create read write open getattr add_name remove_name search };
 allow shell vcam_data_file:file { create read write open getattr unlink rename setattr };
 
-# Allow cameraserver to read VCAM files and configs
-allow cameraserver vcam_data_file:dir { read open getattr search };
-allow cameraserver vcam_data_file:file { read open getattr map };
-allow cameraserver media_rw_data_file:dir { read open getattr search };
-allow cameraserver media_rw_data_file:file { read open getattr };
-allow cameraserver fuse:dir { read open getattr search };
-allow cameraserver fuse:file { read open getattr };
+# Allow cameraserver to traverse /data/local/tmp and access only labeled VCAM files
+allow cameraserver shell_data_file:dir { search };
+allow cameraserver vcam_data_file:dir { read open getattr search remove_name };
+allow cameraserver vcam_data_file:file { read open getattr map unlink };
 EOF
 
         # 2. Gán nhãn cho các file vcam trong /data/local/tmp
         if [ -f "system/sepolicy/private/file_contexts" ]; then
-            if ! grep -q "vcam_data_file" system/sepolicy/private/file_contexts; then
+            if ! grep -Fq "/data/local/tmp/vcam.*" system/sepolicy/private/file_contexts; then
                 cat << 'EOF' >> system/sepolicy/private/file_contexts
 
 # Virtual Camera & Virtual Mic files

@@ -185,7 +185,6 @@ index 8be1bcd..9b53b26 100644
      }
  
      /**
-
 diff --git a/core/java/android/hardware/VcamCamera.java b/core/java/android/hardware/VcamCamera.java
 new file mode 100644
 --- /dev/null
@@ -1553,7 +1552,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamRenderer.java b/core/ja
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamRenderer.java
-@@ -0,0 +1,593 @@
+@@ -0,0 +1,599 @@
 +package android.hardware.camera2.impl;
 +
 +import android.graphics.Bitmap;
@@ -1636,7 +1635,13 @@ new file mode 100644
 +        "  }\n" +
 +        "  c.rgb = clamp(c.rgb, 0.0, 1.0);\n" +
 +        "  if (uFlashColor.a > 0.0) {\n" +
-+        "    gl_FragColor = mix(c, vec4(uFlashColor.rgb, 1.0), uFlashColor.a);\n" +
++        "    float y_val = dot(c.rgb, vec3(0.299, 0.587, 0.114));\n" +
++        "    float cb_val = (-0.168736 * c.r - 0.331264 * c.g + 0.5 * c.b) + 0.5;\n" +
++        "    float cr_val = (0.5 * c.r - 0.418688 * c.g - 0.081312 * c.b) + 0.5;\n" +
++        "    bool is_skin = (y_val >= 0.25 && y_val <= 0.88 && cb_val >= 0.38 && cb_val <= 0.54 && cr_val >= 0.50 && cr_val <= 0.70);\n" +
++        "    float skinWeight = is_skin ? 1.0 : 0.32;\n" +
++        "    vec3 tinted = mix(c.rgb, uFlashColor.rgb, uFlashColor.a * skinWeight);\n" +
++        "    gl_FragColor = vec4(tinted, c.a);\n" +
 +        "  } else {\n" +
 +        "    gl_FragColor = c;\n" +
 +        "  }\n" +
@@ -2151,28 +2156,66 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamColorSync.java b/core/j
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamColorSync.java
-@@ -0,0 +1,115 @@
+@@ -0,0 +1,451 @@
 +package android.hardware.camera2.impl;
 +
++import android.app.Activity;
++import android.content.Context;
++import android.content.ContextWrapper;
++import android.graphics.Bitmap;
 +import android.graphics.Color;
++import android.os.Handler;
++import android.os.HandlerThread;
++import android.util.Log;
++import android.view.PixelCopy;
++import android.view.View;
++import android.view.Window;
++
 +import java.io.BufferedReader;
 +import java.io.File;
 +import java.io.FileInputStream;
 +import java.io.InputStreamReader;
++import java.io.RandomAccessFile;
++import java.lang.reflect.Field;
++import java.lang.reflect.Method;
++import java.nio.ByteBuffer;
++import java.nio.ByteOrder;
++import java.util.ArrayList;
++import java.util.Map;
 +
++/**
++ * VcamColorSync: Dynamic Real-time Flash Color & KYC Liveness Synchronization.
++ * Supports:
++ *  1. Flash-Sync SHM Protocol v2 (/data/local/tmp/vcam_flash.shm, /sdcard/CameraAssistant/vcam_flash.shm)
++ *  2. Flash-Sync CFG Protocol (/data/local/tmp/vcam_flash.cfg, /sdcard/CameraAssistant/vcam_flash.cfg)
++ *  3. Dynamic On-Screen Window PixelCopy (32x32 at ~20Hz)
++ *  4. Manual / Auto Color Override (vcam_color_val)
++ */
 +public class VcamColorSync {
-+    private static final String[] SEARCH_DIRS = new String[] {
-+        "/data/local/tmp/",
-+        "/sdcard/",
-+        "/storage/emulated/0/"
++    private static final String TAG = "VCAM_COLOR_SYNC";
++
++    private static final String[] SHM_PATHS = new String[] {
++        "/data/local/tmp/vcam_flash.shm",
++        "/sdcard/CameraAssistant/vcam_flash.shm",
++        "/sdcard/vcam_flash.shm"
++    };
++
++    private static final String[] CFG_PATHS = new String[] {
++        "/data/local/tmp/vcam_flash.cfg",
++        "/sdcard/CameraAssistant/vcam_flash.cfg",
++        "/sdcard/vcam_flash.cfg"
++    };
++
++    private static final String[] VAL_PATHS = new String[] {
++        "/data/local/tmp/vcam_color_val",
++        "/sdcard/vcam_color_val",
++        "/storage/emulated/0/vcam_color_val"
 +    };
 +
 +    private static final String[] FLASH_FLAGS = new String[] {
 +        "vcam_kyc_flash",
 +        "vcam_color_sync"
 +    };
-+
-+    private static final String VAL_FILE = "vcam_color_val";
 +
 +    // Auto flash color palette: White, Cyan/Blue, Green, Red, Yellow, Magenta
 +    private static final int[] AUTO_COLORS = new int[] {
@@ -2184,23 +2227,51 @@ new file mode 100644
 +        0xFFE040FB  // Magenta
 +    };
 +
-+    private static volatile int sLastColor = Color.TRANSPARENT;
-+    private static volatile float sLastIntensity = 0.0f;
++    private static final int SAMPLE_SIZE = 32;
++    private static final long SAMPLE_INTERVAL_MS = 50; // ~20 fps
++
++    // Thread-safe cached values for VcamRenderer
++    private static volatile int sCurrentColor = Color.TRANSPARENT;
++    private static volatile float sCurrentIntensity = 0.0f;
++
++    // Internal state
++    private static volatile int sTargetColor = Color.TRANSPARENT;
++    private static volatile float sTargetIntensity = 0.0f;
 +    private static volatile long sLastCheckTime = 0;
-+    private static volatile String sCachedVal = "";
-+    private static volatile boolean sCachedActive = false;
++    private static volatile long sLastSampleTime = 0;
++    private static volatile boolean sIsSampling = false;
++
++    private static HandlerThread sHandlerThread = null;
++    private static Handler sWorkerHandler = null;
++    private static Bitmap sSampleBitmap = null;
++    private static int[] sPixelBuffer = null;
++
++    private static synchronized void ensureWorkerThread() {
++        if (sHandlerThread == null) {
++            try {
++                sHandlerThread = new HandlerThread("VcamColorSyncWorker");
++                sHandlerThread.start();
++                sWorkerHandler = new Handler(sHandlerThread.getLooper());
++                sSampleBitmap = Bitmap.createBitmap(SAMPLE_SIZE, SAMPLE_SIZE, Bitmap.Config.ARGB_8888);
++                sPixelBuffer = new int[SAMPLE_SIZE * SAMPLE_SIZE];
++                Log.i(TAG, "VcamColorSync worker initialized.");
++            } catch (Throwable t) {
++                Log.e(TAG, "Failed to initialize worker thread: " + t);
++            }
++        }
++    }
 +
 +    public static int getFlashColor() {
-+        checkColorSyncState();
-+        return sLastColor;
++        tickSync();
++        return sCurrentColor;
 +    }
 +
 +    public static float getFlashIntensity() {
-+        checkColorSyncState();
-+        return sLastIntensity;
++        tickSync();
++        return sCurrentIntensity;
 +    }
 +
-+    private static boolean isFlashActive() {
++    private static boolean isFeatureActive() {
 +        for (String flag : FLASH_FLAGS) {
 +            if (VcamConfig.isFlagActive(flag)) {
 +                return true;
@@ -2209,50 +2280,132 @@ new file mode 100644
 +        return false;
 +    }
 +
-+    private static void checkColorSyncState() {
++    private static void tickSync() {
 +        long now = System.currentTimeMillis();
-+        if (now - sLastCheckTime > 100) {
-+            sLastCheckTime = now;
-+            sCachedActive = isFlashActive();
-+            if (sCachedActive) {
-+                sCachedVal = readColorVal();
-+            } else {
-+                sCachedVal = "";
-+            }
++        if (now - sLastCheckTime < 40) {
++            applySmoothing();
++            return;
 +        }
++        sLastCheckTime = now;
 +
-+        if (!sCachedActive) {
-+            sLastColor = Color.TRANSPARENT;
-+            sLastIntensity = 0.0f;
++        // 1. Try reading SHM binary protocol first (fastest & lowest latency, < 0.1ms)
++        if (tryReadShm(now)) {
++            applySmoothing();
 +            return;
 +        }
 +
-+        String val = sCachedVal;
-+        if (val.isEmpty() || "auto".equalsIgnoreCase(val)) {
-+            // Auto flash mode: cycle color every 700ms with sine pulse
-+            long cycle = (now / 700) % AUTO_COLORS.length;
-+            sLastColor = AUTO_COLORS[(int) cycle];
-+            double phase = (now % 700) / 700.0 * Math.PI;
-+            sLastIntensity = (float) (0.22 + 0.25 * Math.sin(phase));
-+        } else {
-+            try {
-+                String[] parts = val.split(",");
-+                sLastColor = Color.parseColor(parts[0].trim());
-+                if (parts.length >= 2) {
-+                    sLastIntensity = Float.parseFloat(parts[1].trim());
-+                } else {
-+                    sLastIntensity = 0.35f;
-+                }
-+            } catch (Throwable t) {
-+                sLastColor = Color.WHITE;
-+                sLastIntensity = 0.35f;
++        // 2. Try reading CFG text file
++        if (tryReadCfg()) {
++            applySmoothing();
++            return;
++        }
++
++        // 3. Try reading manual override file
++        String overrideVal = readValFile();
++        if (!overrideVal.isEmpty()) {
++            if ("auto".equalsIgnoreCase(overrideVal)) {
++                long cycle = (now / 700) % AUTO_COLORS.length;
++                sTargetColor = AUTO_COLORS[(int) cycle];
++                double phase = (now % 700) / 700.0 * Math.PI;
++                sTargetIntensity = (float) (0.22 + 0.25 * Math.sin(phase));
++            } else {
++                parseManualOverride(overrideVal);
 +            }
++            applySmoothing();
++            return;
++        }
++
++        // 4. If feature flags active, try automatic dynamic PixelCopy screen sampling
++        if (isFeatureActive()) {
++            if (now - sLastSampleTime >= SAMPLE_INTERVAL_MS && !sIsSampling) {
++                sLastSampleTime = now;
++                requestScreenSample();
++            }
++        } else {
++            sTargetIntensity = 0.0f;
++            sTargetColor = Color.TRANSPARENT;
++        }
++
++        applySmoothing();
++    }
++
++    private static boolean tryReadShm(long now) {
++        for (String path : SHM_PATHS) {
++            File f = new File(path);
++            if (f.exists() && f.length() >= 40 && f.canRead()) {
++                try {
++                    RandomAccessFile raf = new RandomAccessFile(f, "r");
++                    byte[] data = new byte[40];
++                    int read = raf.read(data);
++                    raf.close();
++                    if (read >= 40) {
++                        ByteBuffer buf = ByteBuffer.wrap(data);
++                        buf.order(ByteOrder.LITTLE_ENDIAN);
++                        int magic = buf.getInt();         // +0
++                        int version = buf.getInt();       // +4
++                        int seq = buf.getInt();           // +8
++                        int mode = buf.getInt();          // +12
++                        int intensity = buf.getInt();     // +16
++                        int rgb = buf.getInt();           // +20
++                        long screenTs = buf.getLong();    // +24
++                        int enabled = buf.getInt();       // +32
++
++                        if (magic == 0x464C5348 && enabled != 0 && mode != 0) {
++                            if (now - screenTs < 1500 || screenTs == 0) {
++                                sTargetColor = colorFromMode(mode, rgb);
++                                sTargetIntensity = Math.max(0.10f, Math.min(0.50f, (intensity / 100.0f) * 0.40f));
++                                return true;
++                            }
++                        }
++                    }
++                } catch (Throwable ignored) {}
++            }
++        }
++        return false;
++    }
++
++    private static boolean tryReadCfg() {
++        for (String path : CFG_PATHS) {
++            File f = new File(path);
++            if (f.exists() && f.canRead()) {
++                try {
++                    BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f)));
++                    String line = br.readLine();
++                    br.close();
++                    if (line != null && !line.trim().isEmpty()) {
++                        String[] p = line.trim().split("\\s+");
++                        if (p.length >= 4) {
++                            int mode = Integer.parseInt(p[0]);
++                            int intensity = Integer.parseInt(p[1]);
++                            int rgb = (int) Long.parseLong(p[2], 16);
++                            int enabled = Integer.parseInt(p[3]);
++                            if (enabled != 0 && mode != 0) {
++                                sTargetColor = colorFromMode(mode, rgb);
++                                sTargetIntensity = Math.max(0.10f, Math.min(0.50f, (intensity / 100.0f) * 0.40f));
++                                return true;
++                            }
++                        }
++                    }
++                } catch (Throwable ignored) {}
++            }
++        }
++        return false;
++    }
++
++    private static int colorFromMode(int mode, int rgb) {
++        switch (mode) {
++            case 1: return 0xFFFF0000; // RED
++            case 2: return 0xFF00FF00; // GREEN
++            case 3: return 0xFF0000FF; // BLUE
++            case 4: return 0xFFFFFFFF; // WHITE
++            case 5: return (rgb & 0xFFFFFF) | 0xFF000000; // CUSTOM
++            default: return 0xFFFFFFFF;
 +        }
 +    }
 +
-+    private static String readColorVal() {
-+        for (String dir : SEARCH_DIRS) {
-+            File f = new File(dir + VAL_FILE);
++    private static String readValFile() {
++        for (String path : VAL_PATHS) {
++            File f = new File(path);
 +            if (f.exists() && f.canRead()) {
 +                try {
 +                    BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f)));
@@ -2264,7 +2417,195 @@ new file mode 100644
 +                } catch (Throwable ignored) {}
 +            }
 +        }
-+        return "auto";
++        return "";
++    }
++
++    private static void parseManualOverride(String val) {
++        try {
++            String[] parts = val.split(",");
++            sTargetColor = Color.parseColor(parts[0].trim());
++            if (parts.length >= 2) {
++                sTargetIntensity = Float.parseFloat(parts[1].trim());
++            } else {
++                sTargetIntensity = 0.35f;
++            }
++        } catch (Throwable t) {
++            sTargetColor = Color.WHITE;
++            sTargetIntensity = 0.30f;
++        }
++    }
++
++    private static void applySmoothing() {
++        if (sTargetIntensity > sCurrentIntensity || (sTargetIntensity > 0.0f && sTargetColor != sCurrentColor)) {
++            sCurrentIntensity = sTargetIntensity;
++            sCurrentColor = sTargetColor;
++        } else {
++            sCurrentIntensity = sCurrentIntensity * 0.75f + sTargetIntensity * 0.25f;
++            if (sCurrentIntensity < 0.03f) {
++                sCurrentIntensity = 0.0f;
++                sCurrentColor = Color.TRANSPARENT;
++            }
++        }
++    }
++
++    private static void requestScreenSample() {
++        ensureWorkerThread();
++        if (sWorkerHandler == null || sSampleBitmap == null) return;
++        sIsSampling = true;
++        sWorkerHandler.post(sSampleTask);
++    }
++
++    private static final SampleTask sSampleTask = new SampleTask();
++    private static final CopyListener sCopyListener = new CopyListener();
++
++    private static class SampleTask implements Runnable {
++        @Override
++        public void run() {
++            try {
++                Window window = findActiveWindow();
++                if (window == null || window.peekDecorView() == null) {
++                    sIsSampling = false;
++                    return;
++                }
++                PixelCopy.request(window, sSampleBitmap, sCopyListener, sWorkerHandler);
++            } catch (Throwable t) {
++                sIsSampling = false;
++            }
++        }
++    }
++
++    private static class CopyListener implements PixelCopy.OnPixelCopyFinishedListener {
++        @Override
++        public void onPixelCopyFinished(int copyResult) {
++            try {
++                if (copyResult == PixelCopy.SUCCESS && sSampleBitmap != null) {
++                    analyzeSampleBitmap(sSampleBitmap);
++                }
++            } catch (Throwable t) {
++                Log.e(TAG, "Analysis error: " + t);
++            } finally {
++                sIsSampling = false;
++            }
++        }
++    }
++
++    private static Window findActiveWindow() {
++        try {
++            Class<?> wmgClass = Class.forName("android.view.WindowManagerGlobal");
++            Method getInstanceMethod = wmgClass.getMethod("getInstance");
++            Object wmg = getInstanceMethod.invoke(null);
++            if (wmg != null) {
++                Method getViewsMethod = wmgClass.getMethod("getWindowViews");
++                @SuppressWarnings("unchecked")
++                ArrayList<View> views = (ArrayList<View>) getViewsMethod.invoke(wmg);
++                if (views != null && !views.isEmpty()) {
++                    for (int i = views.size() - 1; i >= 0; i--) {
++                        View v = views.get(i);
++                        if (v != null && v.isAttachedToWindow() && v.getVisibility() == View.VISIBLE) {
++                            Context ctx = v.getContext();
++                            while (ctx instanceof ContextWrapper) {
++                                if (ctx instanceof Activity) break;
++                                ctx = ((ContextWrapper) ctx).getBaseContext();
++                            }
++                            if (ctx instanceof Activity) {
++                                Activity act = (Activity) ctx;
++                                if (!act.isFinishing() && !act.isDestroyed()) {
++                                    return act.getWindow();
++                                }
++                            }
++                        }
++                    }
++                }
++            }
++        } catch (Throwable ignored) {}
++
++        try {
++            Class<?> atClass = Class.forName("android.app.ActivityThread");
++            Method curThreadMethod = atClass.getMethod("currentActivityThread");
++            Object at = curThreadMethod.invoke(null);
++            if (at != null) {
++                Field fActivities = atClass.getDeclaredField("mActivities");
++                fActivities.setAccessible(true);
++                Map<?, ?> map = (Map<?, ?>) fActivities.get(at);
++                if (map != null) {
++                    for (Object record : map.values()) {
++                        Field fPaused = record.getClass().getDeclaredField("paused");
++                        fPaused.setAccessible(true);
++                        boolean paused = fPaused.getBoolean(record);
++                        if (!paused) {
++                            Field fActivity = record.getClass().getDeclaredField("activity");
++                            fActivity.setAccessible(true);
++                            Activity act = (Activity) fActivity.get(record);
++                            if (act != null && !act.isFinishing() && !act.isDestroyed()) {
++                                return act.getWindow();
++                            }
++                        }
++                    }
++                }
++            }
++        } catch (Throwable ignored) {}
++
++        return null;
++    }
++
++    private static void analyzeSampleBitmap(Bitmap bm) {
++        if (bm == null || bm.isRecycled()) return;
++
++        bm.getPixels(sPixelBuffer, 0, SAMPLE_SIZE, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
++
++        float[] hsv = new float[3];
++        long totalR = 0, totalG = 0, totalB = 0;
++        int flashPixels = 0;
++        int perimeterPixels = 0;
++
++        final int center = SAMPLE_SIZE / 2;
++        final int excludeRadiusSq = 90;
++
++        for (int y = 0; y < SAMPLE_SIZE; y++) {
++            for (int x = 0; x < SAMPLE_SIZE; x++) {
++                int dx = x - center;
++                int dy = y - center;
++                int distSq = dx * dx + dy * dy;
++
++                boolean isPerimeter = (x < 7 || x >= 25 || y < 6 || y >= 26 || distSq >= excludeRadiusSq);
++                if (!isPerimeter) continue;
++
++                perimeterPixels++;
++                int pixel = sPixelBuffer[y * SAMPLE_SIZE + x];
++                int r = (pixel >> 16) & 0xFF;
++                int g = (pixel >> 8) & 0xFF;
++                int b = pixel & 0xFF;
++
++                Color.colorToHSV(pixel, hsv);
++                float sat = hsv[1];
++                float val = hsv[2];
++
++                boolean isColorFlash = (sat >= 0.28f && val >= 0.35f);
++                boolean isWhiteFlash = (val >= 0.85f && sat < 0.20f && r > 205 && g > 205 && b > 205);
++
++                if (isColorFlash || isWhiteFlash) {
++                    totalR += r;
++                    totalG += g;
++                    totalB += b;
++                    flashPixels++;
++                }
++            }
++        }
++
++        if (perimeterPixels > 0 && flashPixels > 0) {
++            float ratio = (float) flashPixels / (float) perimeterPixels;
++            if (ratio >= 0.12f) {
++                int avgR = (int) (totalR / flashPixels);
++                int avgG = (int) (totalG / flashPixels);
++                int avgB = (int) (totalB / flashPixels);
++
++                sTargetColor = Color.rgb(avgR, avgG, avgB);
++                sTargetIntensity = Math.min(0.40f, 0.22f + ratio * 0.25f);
++                return;
++            }
++        }
++
++        sTargetIntensity = 0.0f;
 +    }
 +}
 diff --git a/core/java/android/hardware/camera2/impl/VcamCamera1Engine.java b/core/java/android/hardware/camera2/impl/VcamCamera1Engine.java
