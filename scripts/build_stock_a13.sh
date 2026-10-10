@@ -399,17 +399,19 @@ PRODUCT_BUILD_PROP_OVERRIDES += \
 EOF
     fi
 
-    # [TẠM THỜI TẮT] Chưa nhúng CameraAssistant App để build test core VCam & ROM trước
-    # mkdir -p packages/apps/CameraAssistant
-    # if [ -f "${SCRIPT_DIR}/../org.lineageos.camera.assistant/CameraAssistant.apk" ]; then
-    #     cp "${SCRIPT_DIR}/../org.lineageos.camera.assistant/CameraAssistant.apk" packages/apps/CameraAssistant/CameraAssistant.apk
-    #     cp "${LOCAL_PATCH_DIR}/CameraAssistant_Android.bp" packages/apps/CameraAssistant/Android.bp
-    # else
-    #     curl -sL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/CameraAssistant_Android.bp" > packages/apps/CameraAssistant/Android.bp
-    # fi
-    # if [ -f device/google/coral/device.mk ]; then
-    #     grep -q "CameraAssistant" device/google/coral/device.mk || echo "PRODUCT_PACKAGES += CameraAssistant" >> device/google/coral/device.mk
-    # fi
+    # Nhúng CameraAssistant App thành System App (Zero-Root, cài sẵn trong ROM flash xong có ngay)
+    mkdir -p packages/apps/CameraAssistant
+    if [ -f "${LOCAL_PATCH_DIR}/../org.lineageos.camera.assistant/CameraAssistant-release.apk" ]; then
+        cp "${LOCAL_PATCH_DIR}/../org.lineageos.camera.assistant/CameraAssistant-release.apk" packages/apps/CameraAssistant/CameraAssistant.apk
+    elif [ -f "${LOCAL_PATCH_DIR}/../org.lineageos.camera.assistant/CameraAssistant.apk" ]; then
+        cp "${LOCAL_PATCH_DIR}/../org.lineageos.camera.assistant/CameraAssistant.apk" packages/apps/CameraAssistant/CameraAssistant.apk
+    else
+        curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/org.lineageos.camera.assistant/release/CameraAssistant-release.apk" -o packages/apps/CameraAssistant/CameraAssistant.apk || true
+    fi
+    curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/CameraAssistant_Android.bp" -o packages/apps/CameraAssistant/Android.bp
+    if [ -f device/google/coral/device.mk ]; then
+        grep -q "CameraAssistant" device/google/coral/device.mk || echo "PRODUCT_PACKAGES += CameraAssistant" >> device/google/coral/device.mk
+    fi
 
     # Cấu hình node điều khiển VCam trong init.coral.rc
     if [ -f device/google/coral/init.coral.rc ] && ! grep -q "vcam_pause" device/google/coral/init.coral.rc; then

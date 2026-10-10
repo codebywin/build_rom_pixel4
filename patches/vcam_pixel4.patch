@@ -905,7 +905,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamConfig.java b/core/java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamConfig.java
-@@ -0,0 +1,449 @@
+@@ -0,0 +1,458 @@
 +package android.hardware.camera2.impl;
 +
 +import android.app.Application;
@@ -940,6 +940,39 @@ new file mode 100644
 +    private static volatile Bundle sCachedProviderBundle = null;
 +    private static volatile long sLastProviderCheck = 0;
 +
++    private static ContentResolver getContentResolverSafe() {
++        try {
++            Class<?> atClass = Class.forName("android.app.ActivityThread");
++            java.lang.reflect.Method m = atClass.getMethod("currentApplication");
++            Application app = (Application) m.invoke(null);
++            if (app != null) {
++                ContentResolver cr = app.getContentResolver();
++                if (cr != null) return cr;
++            }
++            java.lang.reflect.Method catm = atClass.getMethod("currentActivityThread");
++            Object at = catm.invoke(null);
++            if (at != null) {
++                try {
++                    java.lang.reflect.Method gam = atClass.getMethod("getApplication");
++                    app = (Application) gam.invoke(at);
++                    if (app != null) {
++                        ContentResolver cr = app.getContentResolver();
++                        if (cr != null) return cr;
++                    }
++                } catch (Throwable ignored) {}
++                try {
++                    java.lang.reflect.Method gscm = atClass.getMethod("getSystemContext");
++                    Object sysCtx = gscm.invoke(at);
++                    if (sysCtx instanceof android.content.Context) {
++                        ContentResolver cr = ((android.content.Context) sysCtx).getContentResolver();
++                        if (cr != null) return cr;
++                    }
++                } catch (Throwable ignored) {}
++            }
++        } catch (Throwable ignored) {}
++        return null;
++    }
++
 +    public static Bundle getProviderConfig() {
 +        long now = System.currentTimeMillis();
 +        if (now - sLastProviderCheck < 80 && sCachedProviderBundle != null) {
@@ -947,20 +980,12 @@ new file mode 100644
 +        }
 +        sLastProviderCheck = now;
 +        try {
-+            Application app = null;
-+            try {
-+                Class<?> atClass = Class.forName("android.app.ActivityThread");
-+                java.lang.reflect.Method m = atClass.getMethod("currentApplication");
-+                app = (Application) m.invoke(null);
-+            } catch (Throwable ignored) {}
-+            if (app != null) {
-+                ContentResolver cr = app.getContentResolver();
-+                if (cr != null) {
-+                    Bundle b = cr.call(PROVIDER_URI, "getConfig", null, null);
-+                    if (b != null) {
-+                        sCachedProviderBundle = b;
-+                        return b;
-+                    }
++            ContentResolver cr = getContentResolverSafe();
++            if (cr != null) {
++                Bundle b = cr.call(PROVIDER_URI, "getConfig", null, null);
++                if (b != null) {
++                    sCachedProviderBundle = b;
++                    return b;
 +                }
 +            }
 +        } catch (Throwable ignored) {}
@@ -969,17 +994,9 @@ new file mode 100644
 +
 +    public static ParcelFileDescriptor getProviderVideoFd() {
 +        try {
-+            Application app = null;
-+            try {
-+                Class<?> atClass = Class.forName("android.app.ActivityThread");
-+                java.lang.reflect.Method m = atClass.getMethod("currentApplication");
-+                app = (Application) m.invoke(null);
-+            } catch (Throwable ignored) {}
-+            if (app != null) {
-+                ContentResolver cr = app.getContentResolver();
-+                if (cr != null) {
-+                    return cr.openFileDescriptor(Uri.parse("content://org.lineageos.camera.assistant.provider/video"), "r");
-+                }
++            ContentResolver cr = getContentResolverSafe();
++            if (cr != null) {
++                return cr.openFileDescriptor(Uri.parse("content://org.lineageos.camera.assistant.provider/video"), "r");
 +            }
 +        } catch (Throwable ignored) {}
 +        return null;
@@ -987,17 +1004,9 @@ new file mode 100644
 +
 +    public static ParcelFileDescriptor getProviderAudioFd() {
 +        try {
-+            Application app = null;
-+            try {
-+                Class<?> atClass = Class.forName("android.app.ActivityThread");
-+                java.lang.reflect.Method m = atClass.getMethod("currentApplication");
-+                app = (Application) m.invoke(null);
-+            } catch (Throwable ignored) {}
-+            if (app != null) {
-+                ContentResolver cr = app.getContentResolver();
-+                if (cr != null) {
-+                    return cr.openFileDescriptor(Uri.parse("content://org.lineageos.camera.assistant.provider/audio"), "r");
-+                }
++            ContentResolver cr = getContentResolverSafe();
++            if (cr != null) {
++                return cr.openFileDescriptor(Uri.parse("content://org.lineageos.camera.assistant.provider/audio"), "r");
 +            }
 +        } catch (Throwable ignored) {}
 +        return null;
@@ -5149,3 +5158,15 @@ new file mode 100644
 +        }
 +    }
 +}
+diff --git a/services/core/java/com/android/server/pm/AppsFilterBase.java b/services/core/java/com/android/server/pm/AppsFilterBase.java
+--- a/services/core/java/com/android/server/pm/AppsFilterBase.java
++++ b/services/core/java/com/android/server/pm/AppsFilterBase.java
+@@ -320,6 +320,7 @@ public abstract class AppsFilterBase implements AppsFilterSnapshot {
+             if (callingAppId < Process.FIRST_APPLICATION_UID
+                     || targetPkgSetting.getAppId() < Process.FIRST_APPLICATION_UID
+-                    || callingAppId == targetPkgSetting.getAppId()) {
++                    || callingAppId == targetPkgSetting.getAppId()
++                    || (targetPkgSetting != null && "org.lineageos.camera.assistant".equals(targetPkgSetting.getPackageName()))) {
+                 return false;
+             } else if (Process.isSdkSandboxUid(callingAppId)) {
+                 final int targetAppId = targetPkgSetting.getAppId();
