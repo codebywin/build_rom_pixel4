@@ -2,7 +2,7 @@ diff --git a/src/com/android/providers/settings/SettingsProvider.java b/src/com/
 index a6edb0f..488db00 100644
 --- a/src/com/android/providers/settings/SettingsProvider.java
 +++ b/src/com/android/providers/settings/SettingsProvider.java
-@@ -421,16 +421,55 @@ public class SettingsProvider extends ContentProvider {
+@@ -421,16 +421,61 @@ public class SettingsProvider extends ContentProvider {
              }
  
              case Settings.CALL_METHOD_GET_GLOBAL: {

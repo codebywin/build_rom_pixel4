@@ -1,20 +1,11 @@
 diff --git a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
-index e983aab..27ca91a 100644
+index f4e3fad..8511a8d 100644
 --- a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
 +++ b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
-@@ -1,4 +1,5 @@
--N+exx*'
-*mz!yb䨺iڝ(	^q(ejo߭y?,ݮ}4]ǬƦz&jgjǫ'ׯǷ&z:i-[fLE/*
-+N+exx*'
-+*mz!yb䨺iڝ(	^q(ejo߭y?,ݮ}4]ǬƦz&jgjǫ'ׯǷ&z:i-[fLE/*
-  * Copyright (C) 2019 The Android Open Source Project
-  *
-  * Licensed under the Apache License, Version 2.0 (the "License");
-@@ -464,9 +465,411 @@ bool erasePhysicalCameraIdSet(
+@@ -464,8 +464,416 @@ bool erasePhysicalCameraIdSet(
      return found;
  }
  
-+++ b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
 +#include <sys/stat.h>
 +#include <unistd.h>
 +#include <time.h>
@@ -195,6 +186,10 @@ index e983aab..27ca91a 100644
 +    if (cfg.count == 0) {
 +        cfg.count = 1;
 +        cfg.is_default = true;
++        cfg.faces[0].x = 1214;
++        cfg.faces[0].y = 715;
++        cfg.faces[0].w = 852;
++        cfg.faces[0].h = 1034;
 +        cfg.faces[0].score = 99;
 +    }
 +    cfg.enabled = true;
@@ -252,6 +247,9 @@ index e983aab..27ca91a 100644
 +        int32_t center_y = cy + ch / 2 + shift_sensor_y;
 +        fb.x = center_x - fb.w / 2;
 +        fb.y = center_y - fb.h / 2;
++        if (fb.w <= 0 || fb.h <= 0) {
++            fb.x = 1214; fb.y = 715; fb.w = 852; fb.h = 1034; fb.score = 99;
++        }
 +        ALOGE("VCAM-CS: computed default face crop=[%d,%d,%d,%d] zoom=%.2f pan=(%.2f,%.2f) -> rect=[%d,%d,%d,%d]",
 +              cx, cy, cw, ch, zp.zoom, zp.pan_x, zp.pan_y, fb.x, fb.y, fb.w, fb.h);
 +    }
@@ -338,6 +336,8 @@ index e983aab..27ca91a 100644
 +    return dst;
 +}
 +
+ void processCaptureResult(CaptureOutputStates& states, const camera_capture_result *result) {
+     ATRACE_CALL();
 +    // VCAM NATIVE HOOK: RAII Guard to intercept & restore logical + physical camera metadata (100% native_hook logic)
 +    struct VcamMetadataGuard {
 +        camera_capture_result* res;
@@ -413,12 +413,9 @@ index e983aab..27ca91a 100644
 +        }
 +    };
 +
- void processCaptureResult(CaptureOutputStates& states, const camera_capture_result *result) {
-     ATRACE_CALL();
- 
 +    VcamFaceConfig vcam_cfg = vcam_read_face_config();
 +    VcamMetadataGuard vcam_guard(result, vcam_cfg);
 +
+ 
      status_t res;
  
-     uint32_t frameNumber = result->frame_number;

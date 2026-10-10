@@ -1,10 +1,10 @@
 diff --git a/core/java/android/os/Debug.java b/core/java/android/os/Debug.java
-index f6310fd..3bcb6ba 100644
+index b4930fa..a2d530e 100644
 --- a/core/java/android/os/Debug.java
 +++ b/core/java/android/os/Debug.java
-@@ -4,10 +4,16 @@ public final class Debug {
-     private static volatile boolean mWaiting = false;
- 
+@@ -1041,6 +1041,9 @@ public final class Debug
+      * to attach.
+      */
      public static boolean waitingForDebugger() {
 +        if (Process.myUid() >= Process.FIRST_APPLICATION_UID) {
 +            return false;
@@ -12,13 +12,16 @@ index f6310fd..3bcb6ba 100644
          return mWaiting;
      }
  
+@@ -1048,6 +1051,9 @@ public final class Debug
+      * Determine if a debugger is currently attached.
+      */
      public static boolean isDebuggerConnected() {
 +        if (Process.myUid() >= Process.FIRST_APPLICATION_UID) {
 +            return false;
 +        }
          return VMDebug.isDebuggerConnected();
      }
- }
+
 diff --git a/core/java/android/provider/Settings.java b/core/java/android/provider/Settings.java
 index 4578eec..c2ac129 100644
 --- a/core/java/android/provider/Settings.java
