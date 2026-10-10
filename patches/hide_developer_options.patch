@@ -1,8 +1,8 @@
-diff --git a/core/java/android/os/Debug.java b/core/java/android/os/Debug.java
+﻿diff --git a/core/java/android/os/Debug.java b/core/java/android/os/Debug.java
 index b4930fa..a2d530e 100644
 --- a/core/java/android/os/Debug.java
 +++ b/core/java/android/os/Debug.java
-@@ -1041,6 +1041,9 @@ public final class Debug
+@@ -1041,12 +1041,18 @@ public final class Debug
       * to attach.
       */
      public static boolean waitingForDebugger() {
@@ -12,7 +12,7 @@ index b4930fa..a2d530e 100644
          return mWaiting;
      }
  
-@@ -1048,6 +1051,9 @@ public final class Debug
+     /**
       * Determine if a debugger is currently attached.
       */
      public static boolean isDebuggerConnected() {
@@ -21,9 +21,9 @@ index b4930fa..a2d530e 100644
 +        }
          return VMDebug.isDebuggerConnected();
      }
- 
+
 diff --git a/core/java/android/provider/Settings.java b/core/java/android/provider/Settings.java
-index 805fdc4..e96f29c 100644
+index 4578eec..c2ac129 100644
 --- a/core/java/android/provider/Settings.java
 +++ b/core/java/android/provider/Settings.java
 @@ -3055,6 +3055,9 @@ public final class Settings {
@@ -36,7 +36,7 @@ index 805fdc4..e96f29c 100644
              // Check if the target settings key is readable. Reject if the caller is not system and
              // is trying to access a settings key defined in the Settings.Secure, Settings.System or
              // Settings.Global and is not annotated as @Readable.
-@@ -3548,6 +3551,42 @@ public final class Settings {
+@@ -3565,6 +3568,42 @@ public final class Settings {
          }
      }
  
@@ -79,7 +79,7 @@ index 805fdc4..e96f29c 100644
      /**
       * System settings, containing miscellaneous system preferences.  This
       * table holds simple name/value pairs.  There are convenience
-@@ -3724,6 +3763,9 @@ public final class Settings {
+@@ -3741,6 +3780,9 @@ public final class Settings {
          @UnsupportedAppUsage
          public static String getStringForUser(ContentResolver resolver, String name,
                  int userHandle) {
@@ -89,7 +89,7 @@ index 805fdc4..e96f29c 100644
              if (MOVED_TO_SECURE.contains(name)) {
                  Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.System"
                          + " to android.provider.Settings.Secure, returning read-only value.");
-@@ -3806,6 +3848,9 @@ public final class Settings {
+@@ -3823,6 +3865,9 @@ public final class Settings {
           * @return the corresponding content URI, or null if not present
           */
          public static Uri getUriFor(String name) {
@@ -99,7 +99,7 @@ index 805fdc4..e96f29c 100644
              if (MOVED_TO_SECURE.contains(name)) {
                  Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.System"
                      + " to android.provider.Settings.Secure, returning Secure URI.");
-@@ -3834,12 +3879,14 @@ public final class Settings {
+@@ -3851,12 +3896,14 @@ public final class Settings {
           * or not a valid integer.
           */
          public static int getInt(ContentResolver cr, String name, int def) {
@@ -114,7 +114,7 @@ index 805fdc4..e96f29c 100644
              String v = getStringForUser(cr, name, userHandle);
              return parseIntSettingWithDefault(v, def);
          }
-@@ -3864,6 +3911,7 @@ public final class Settings {
+@@ -3881,6 +3928,7 @@ public final class Settings {
           */
          public static int getInt(ContentResolver cr, String name)
                  throws SettingNotFoundException {
@@ -122,7 +122,7 @@ index 805fdc4..e96f29c 100644
              return getIntForUser(cr, name, cr.getUserId());
          }
  
-@@ -3871,6 +3919,7 @@ public final class Settings {
+@@ -3888,6 +3936,7 @@ public final class Settings {
          @UnsupportedAppUsage
          public static int getIntForUser(ContentResolver cr, String name, int userHandle)
                  throws SettingNotFoundException {
@@ -130,7 +130,7 @@ index 805fdc4..e96f29c 100644
              String v = getStringForUser(cr, name, userHandle);
              return parseIntSetting(v, name);
          }
-@@ -3914,12 +3963,14 @@ public final class Settings {
+@@ -3931,12 +3980,14 @@ public final class Settings {
           * or not a valid {@code long}.
           */
          public static long getLong(ContentResolver cr, String name, long def) {
@@ -145,7 +145,7 @@ index 805fdc4..e96f29c 100644
              String v = getStringForUser(cr, name, userHandle);
              return parseLongSettingWithDefault(v, def);
          }
-@@ -3943,12 +3994,14 @@ public final class Settings {
+@@ -3960,12 +4011,14 @@ public final class Settings {
           */
          public static long getLong(ContentResolver cr, String name)
                  throws SettingNotFoundException {
@@ -160,7 +160,7 @@ index 805fdc4..e96f29c 100644
              String v = getStringForUser(cr, name, userHandle);
              return parseLongSetting(v, name);
          }
-@@ -6124,6 +6177,9 @@ public final class Settings {
+@@ -6177,6 +6230,9 @@ public final class Settings {
          @UnsupportedAppUsage
          public static String getStringForUser(ContentResolver resolver, String name,
                  int userHandle) {
@@ -170,7 +170,7 @@ index 805fdc4..e96f29c 100644
              if (MOVED_TO_GLOBAL.contains(name)) {
                  Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Secure"
                          + " to android.provider.Settings.Global.");
-@@ -6328,6 +6384,9 @@ public final class Settings {
+@@ -6381,6 +6437,9 @@ public final class Settings {
           * @return the corresponding content URI, or null if not present
           */
          public static Uri getUriFor(String name) {
@@ -180,7 +180,7 @@ index 805fdc4..e96f29c 100644
              if (MOVED_TO_GLOBAL.contains(name)) {
                  Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Secure"
                          + " to android.provider.Settings.Global, returning global URI.");
-@@ -6351,12 +6410,14 @@ public final class Settings {
+@@ -6404,12 +6463,14 @@ public final class Settings {
           * or not a valid integer.
           */
          public static int getInt(ContentResolver cr, String name, int def) {
@@ -195,7 +195,7 @@ index 805fdc4..e96f29c 100644
              String v = getStringForUser(cr, name, userHandle);
              return parseIntSettingWithDefault(v, def);
          }
-@@ -6381,12 +6442,14 @@ public final class Settings {
+@@ -6434,12 +6495,14 @@ public final class Settings {
           */
          public static int getInt(ContentResolver cr, String name)
                  throws SettingNotFoundException {
@@ -210,7 +210,7 @@ index 805fdc4..e96f29c 100644
              String v = getStringForUser(cr, name, userHandle);
              return parseIntSetting(v, name);
          }
-@@ -6430,6 +6493,7 @@ public final class Settings {
+@@ -6483,6 +6546,7 @@ public final class Settings {
           * or not a valid {@code long}.
           */
          public static long getLong(ContentResolver cr, String name, long def) {
@@ -218,7 +218,7 @@ index 805fdc4..e96f29c 100644
              return getLongForUser(cr, name, def, cr.getUserId());
          }
  
-@@ -6437,6 +6501,7 @@ public final class Settings {
+@@ -6490,6 +6554,7 @@ public final class Settings {
          @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
          public static long getLongForUser(ContentResolver cr, String name, long def,
                  int userHandle) {
@@ -226,7 +226,7 @@ index 805fdc4..e96f29c 100644
              String v = getStringForUser(cr, name, userHandle);
              return parseLongSettingWithDefault(v, def);
          }
-@@ -6460,12 +6525,14 @@ public final class Settings {
+@@ -6513,12 +6578,14 @@ public final class Settings {
           */
          public static long getLong(ContentResolver cr, String name)
                  throws SettingNotFoundException {
@@ -241,7 +241,7 @@ index 805fdc4..e96f29c 100644
              String v = getStringForUser(cr, name, userHandle);
              return parseLongSetting(v, name);
          }
-@@ -15841,6 +15908,9 @@ public final class Settings {
+@@ -16197,6 +16264,9 @@ public final class Settings {
          @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
          public static String getStringForUser(ContentResolver resolver, String name,
                  int userHandle) {
@@ -251,7 +251,7 @@ index 805fdc4..e96f29c 100644
              if (MOVED_TO_SECURE.contains(name)) {
                  Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Global"
                          + " to android.provider.Settings.Secure, returning read-only value.");
-@@ -16033,9 +16103,20 @@ public final class Settings {
+@@ -16389,9 +16459,20 @@ public final class Settings {
           * @return the corresponding content URI, or null if not present
           */
          public static Uri getUriFor(String name) {
@@ -272,7 +272,7 @@ index 805fdc4..e96f29c 100644
          /**
           * Convenience function for retrieving a single secure settings value
           * as an integer.  Note that internally setting values are always
-@@ -16051,6 +16132,7 @@ public final class Settings {
+@@ -16407,6 +16488,7 @@ public final class Settings {
           * or not a valid integer.
           */
          public static int getInt(ContentResolver cr, String name, int def) {
@@ -280,7 +280,7 @@ index 805fdc4..e96f29c 100644
              String v = getString(cr, name);
              return parseIntSettingWithDefault(v, def);
          }
-@@ -16075,6 +16157,7 @@ public final class Settings {
+@@ -16431,6 +16513,7 @@ public final class Settings {
           */
          public static int getInt(ContentResolver cr, String name)
                  throws SettingNotFoundException {
@@ -288,7 +288,7 @@ index 805fdc4..e96f29c 100644
              String v = getString(cr, name);
              return parseIntSetting(v, name);
          }
-@@ -16111,6 +16194,7 @@ public final class Settings {
+@@ -16467,6 +16550,7 @@ public final class Settings {
           * or not a valid {@code long}.
           */
          public static long getLong(ContentResolver cr, String name, long def) {
@@ -296,7 +296,7 @@ index 805fdc4..e96f29c 100644
              String v = getString(cr, name);
              return parseLongSettingWithDefault(v, def);
          }
-@@ -16134,6 +16218,7 @@ public final class Settings {
+@@ -16490,6 +16574,7 @@ public final class Settings {
           */
          public static long getLong(ContentResolver cr, String name)
                  throws SettingNotFoundException {
@@ -304,3 +304,4 @@ index 805fdc4..e96f29c 100644
              String v = getString(cr, name);
              return parseLongSetting(v, name);
          }
+
