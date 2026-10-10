@@ -209,7 +209,7 @@ fi
 # Áp dụng bản vá VCam nếu được chọn
 if [ "$STOCK_MODE" == "1" ]; then
     echo -e "\n${CYAN}>> Đang tích hợp VCam & Công cụ hỗ trợ vào ROM Stock...${NC}"
-    REPO_REF="main"
+    REPO_REF="HEAD"
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     LOCAL_PATCH_DIR="${SCRIPT_DIR}/../patches"
     
