@@ -4587,7 +4587,7 @@ diff --git a/media/java/android/media/VcamAudioEngine.java b/media/java/android/
 new file mode 100644
 --- /dev/null
 +++ b/media/java/android/media/VcamAudioEngine.java
-@@ -0,0 +1,560 @@
+@@ -0,0 +1,559 @@
 +package android.media;
 +
 +import android.util.Log;
