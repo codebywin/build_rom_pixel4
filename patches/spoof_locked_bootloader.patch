@@ -1,15 +1,6 @@
-diff --git a/core/java/android/os/SystemProperties.java b/core/java/android/os/SystemProperties.java
 --- a/core/java/android/os/SystemProperties.java
 +++ b/core/java/android/os/SystemProperties.java
-@@ -17,6 +17,7 @@
- package android.os;
- 
- import android.annotation.NonNull;
-+import android.os.Process;
- import android.annotation.Nullable;
- import android.annotation.SystemApi;
- import android.compat.annotation.UnsupportedAppUsage;
-@@ -146,6 +147,8 @@
+@@ -146,6 +146,8 @@
      @SystemApi
      public static String get(@NonNull String key) {
          if (TRACK_KEY_ACCESS) onKeyAccess(key);
@@ -18,7 +9,7 @@ diff --git a/core/java/android/os/SystemProperties.java b/core/java/android/os/S
          return native_get(key);
      }
  
-@@ -162,6 +165,8 @@
+@@ -162,6 +164,8 @@
      @SystemApi
      public static String get(@NonNull String key, @Nullable String def) {
          if (TRACK_KEY_ACCESS) onKeyAccess(key);
@@ -27,47 +18,33 @@ diff --git a/core/java/android/os/SystemProperties.java b/core/java/android/os/S
          return native_get(key, def);
      }
  
-@@ -177,6 +182,12 @@
+@@ -177,6 +181,10 @@
      @SystemApi
      public static int getInt(@NonNull String key, int def) {
          if (TRACK_KEY_ACCESS) onKeyAccess(key);
-+        if (isCallerApp()) {
-+            if ("ro.boot.flash.locked".equals(key)) return 1;
-+            if ("ro.debuggable".equals(key)) return 0;
-+            if ("ro.secure".equals(key)) return 1;
-+            if ("service.adb.tcp.port".equals(key)) return -1;
-+        }
++        if ("ro.boot.flash.locked".equals(key)) return 1;
++        if ("ro.debuggable".equals(key)) return 0;
++        if ("ro.secure".equals(key)) return 1;
++        if ("service.adb.tcp.port".equals(key)) return -1;
          return native_get_int(key, def);
      }
  
-@@ -212,6 +223,11 @@
+@@ -212,6 +220,9 @@
      @SystemApi
      public static boolean getBoolean(@NonNull String key, boolean def) {
          if (TRACK_KEY_ACCESS) onKeyAccess(key);
-+        if (isCallerApp()) {
-+            if ("ro.boot.flash.locked".equals(key)) return true;
-+            if ("ro.debuggable".equals(key)) return false;
-+            if ("ro.secure".equals(key)) return true;
-+        }
++        if ("ro.boot.flash.locked".equals(key)) return true;
++        if ("ro.debuggable".equals(key)) return false;
++        if ("ro.secure".equals(key)) return true;
          return native_get_boolean(key, def);
      }
  
-@@ -382,4 +398,52 @@
+@@ -382,4 +393,42 @@
              mNativeHandle = nativeHandle;
          }
      }
 +
-+    private static boolean isCallerApp() {
-+        try {
-+            return Process.myUid() >= Process.FIRST_APPLICATION_UID;
-+        } catch (Throwable ignored) {
-+            return false;
-+        }
-+    }
-+
 +    private static String spoofProperty(String key) {
-+        if (!isCallerApp()) return null;
-+
 +        if ("ro.boot.flash.locked".equals(key)) return "1";
 +        if ("ro.boot.verifiedbootstate".equals(key)) return "green";
 +        if ("ro.boot.vbmeta.device_state".equals(key)) return "locked";

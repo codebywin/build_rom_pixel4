@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Camera Assistant</string>
-    <string name="header_title">VCAM Assistant</string>
-    <string name="header_badge">Pixel 4 ROM</string>
+    <string name="header_title">Camera Assistant</string>
+    <string name="header_badge">Tele:@</string>
     <string name="btn_settings">⚙️ Cài đặt</string>
     <string name="dialog_settings_title">Cài đặt ngôn ngữ / Language</string>
     <string name="lang_vi">🇻🇳 Tiếng Việt</string>
@@ -27,6 +27,9 @@
     <string name="video_title">🎬 Tệp Video Nguồn (.mp4)</string>
     <string name="btn_pick_video">Chọn Video Mới Từ Máy</string>
 
+    <string name="image_title">🖼️ Tệp Hình Ảnh Nguồn (.jpg / .png)</string>
+    <string name="btn_pick_image">Chọn Hình Ảnh Mới Từ Máy</string>
+
     <string name="audio_title">🎙️ Quản Lý Âm Thanh (Audio Hook)</string>
     <string name="btn_pick_audio">Chọn Nhạc Mới (.wav / .mp3)</string>
     <string name="audio_mode_label">Chế Độ Micro:</string>
@@ -46,6 +49,15 @@
     <string name="toast_storage_perm">"Vui lòng bật quyền 'Cho phép quản lý tất cả tệp'!"</string>
     <string name="toast_enter_key">Vui lòng nhập mã Active Key!</string>
     <string name="toast_video_updated">Đã cập nhật video mới!</string>
+    <string name="toast_image_updated">Đã cập nhật hình ảnh mới!</string>
     <string name="toast_audio_updated">Đã cập nhật audio mới!</string>
     <string name="toast_lang_changed">Đã đổi ngôn ngữ sang Tiếng Việt!</string>
+    <string name="vcam_swap_uv_switch">Đảo màu UV (Sửa mặt xanh Chrome / WebRTC)</string>
+    <string name="vcam_swap_uv_desc">Tráo đổi 2 kênh màu U/V để sửa triệt để lỗi da mặt bị xanh tím trên Google Chrome và các web/app WebRTC</string>
+    <string name="toast_swap_uv_on">🎨 Đã BẬT Đảo màu UV!\n(Sửa mặt xanh trên Chrome / WebRTC)</string>
+    <string name="toast_swap_uv_off">🎨 Đã TẮT Đảo màu UV!\n(Chuẩn màu cho Firefox &amp; Camera thường)</string>
+    <string name="vcam_bright_title">☀️ Độ Sáng Chụp Ảnh (RAW Exposure)</string>
+    <string name="vcam_bright_desc">Khắc phục hiện tượng ảnh chụp bị sáng chói hơn video gốc do thuật toán Google Camera HDR+. Mức 65% giúp ảnh chụp ra chuẩn 1:1 như video.</string>
+    <string name="vcam_opacity_title">👁️ Độ Trong Suốt Menu Nổi</string>
+    <string name="vcam_opacity_desc" formatted="false">Điều chỉnh độ trong suốt của menu nổi (80%, 85%, 90%, 95%, 100%) để dễ nhìn xuyên qua video preview phía dưới.</string>
 </resources>

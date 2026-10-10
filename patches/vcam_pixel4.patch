@@ -894,9 +894,14 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamConfig.java b/core/java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamConfig.java
-@@ -0,0 +1,270 @@
+@@ -0,0 +1,392 @@
 +package android.hardware.camera2.impl;
 +
++import android.app.ActivityThread;
++import android.app.Application;
++import android.content.ContentResolver;
++import android.net.Uri;
++import android.os.Bundle;
 +import java.io.BufferedReader;
 +import java.io.File;
 +import java.io.FileInputStream;
@@ -920,6 +925,32 @@ new file mode 100644
 +    public static final String LIGHT_FILE = "vcam_light";
 +    public static final String STREAM_PORT_FILE = "vcam_stream_port";
 +
++    private static final Uri PROVIDER_URI = Uri.parse("content://org.lineageos.camera.assistant.provider");
++    private static volatile Bundle sCachedProviderBundle = null;
++    private static volatile long sLastProviderCheck = 0;
++
++    private static Bundle getProviderConfig() {
++        long now = System.currentTimeMillis();
++        if (now - sLastProviderCheck < 80 && sCachedProviderBundle != null) {
++            return sCachedProviderBundle;
++        }
++        sLastProviderCheck = now;
++        try {
++            Application app = ActivityThread.currentApplication();
++            if (app != null) {
++                ContentResolver cr = app.getContentResolver();
++                if (cr != null) {
++                    Bundle b = cr.call(PROVIDER_URI, "getConfig", null, null);
++                    if (b != null) {
++                        sCachedProviderBundle = b;
++                        return b;
++                    }
++                }
++            }
++        } catch (Throwable ignored) {}
++        return sCachedProviderBundle;
++    }
++
 +    public static boolean isFaceDisabled() {
 +        return isFlagActive(FACE_DISABLE_FLAG);
 +    }
@@ -933,10 +964,18 @@ new file mode 100644
 +    public static final String PAUSE_FLAG = "vcam_pause";
 +
 +    public static boolean isVcamDisabled() {
++        Bundle b = getProviderConfig();
++        if (b != null && b.containsKey("disable")) {
++            return b.getBoolean("disable", false);
++        }
 +        return isFlagActive(DISABLE_FLAG);
 +    }
 +
 +    public static boolean isPaused() {
++        Bundle b = getProviderConfig();
++        if (b != null && b.containsKey("pause")) {
++            return b.getBoolean("pause", false);
++        }
 +        return isFlagActive(PAUSE_FLAG);
 +    }
 +
@@ -949,7 +988,40 @@ new file mode 100644
 +    }
 +
 +    public static boolean isKycFlashEnabled() {
++        Bundle b = getProviderConfig();
++        if (b != null && b.containsKey("kyc_flash")) {
++            return b.getBoolean("kyc_flash", false);
++        }
 +        return isFlagActive(KYC_FLASH_FLAG);
++    }
++
++    public static boolean isSwapUv() {
++        Bundle b = getProviderConfig();
++        if (b != null && b.containsKey("swap_uv")) {
++            return b.getBoolean("swap_uv", false);
++        }
++        return isFlagActive("vcam_swap_uv");
++    }
++
++    public static float getBrightnessFactor() {
++        Bundle b = getProviderConfig();
++        if (b != null && b.containsKey("bright_factor")) {
++            float bf = b.getFloat("bright_factor", 1.0f);
++            if (bf > 0.05f && bf < 3.0f) return bf;
++        }
++        if (b != null && b.containsKey("raw_bright")) {
++            int rb = b.getInt("raw_bright", 65);
++            if (rb > 0) return rb / 65.0f;
++        }
++        String val = readFileContent(RAW_EXP_FILE);
++        if (val.isEmpty()) val = readFileContent("vcam_raw_bright");
++        if (!val.isEmpty()) {
++            try {
++                int rb = Integer.parseInt(val.trim());
++                if (rb > 0) return rb / 65.0f;
++            } catch (Throwable ignored) {}
++        }
++        return 1.0f;
 +    }
 +
 +    public static File getActiveVideoFile() {
@@ -970,6 +1042,14 @@ new file mode 100644
 +    private static volatile long sLastPanCheck = 0;
 +
 +    public static float getZoomScale() {
++        Bundle b = getProviderConfig();
++        if (b != null && b.containsKey("zoom")) {
++            float z = b.getFloat("zoom", 1.0f);
++            if (z >= 1.0f && z <= 5.0f) {
++                sCachedZoom = z;
++                return z;
++            }
++        }
 +        long now = System.currentTimeMillis();
 +        if (now - sLastZoomCheck < 200) return sCachedZoom;
 +        sLastZoomCheck = now;
@@ -978,7 +1058,7 @@ new file mode 100644
 +        if (!val.isEmpty()) {
 +            try {
 +                float z = Float.parseFloat(val);
-+                if (z >= 1.0f && z <= 4.0f) {
++                if (z >= 1.0f && z <= 5.0f) {
 +                    sCachedZoom = z;
 +                    return z;
 +                }
@@ -989,6 +1069,12 @@ new file mode 100644
 +    }
 +
 +    public static float getPanX() {
++        Bundle b = getProviderConfig();
++        if (b != null && b.containsKey("pan_x")) {
++            sCachedPanX = b.getFloat("pan_x", 0.0f);
++            sCachedPanY = b.getFloat("pan_y", 0.0f);
++            return sCachedPanX;
++        }
 +        long now = System.currentTimeMillis();
 +        if (now - sLastPanCheck < 200) return sCachedPanX;
 +        sLastPanCheck = now;
@@ -1018,6 +1104,11 @@ new file mode 100644
 +    }
 +
 +    public static float getPanY() {
++        Bundle b = getProviderConfig();
++        if (b != null && b.containsKey("pan_y")) {
++            sCachedPanY = b.getFloat("pan_y", 0.0f);
++            return sCachedPanY;
++        }
 +        long now = System.currentTimeMillis();
 +        if (now - sLastPanCheck < 200) return sCachedPanY;
 +        getPanX(); // refreshes panX and panY together
@@ -1030,8 +1121,8 @@ new file mode 100644
 +            if (f.exists()) {
 +                if (f.length() == 0) return true;
 +                String val = readFileContent(flagName);
-+                if ("0".equals(val)) return false;
-+                return true;
++                if ("1".equals(val)) return true;
++                return false;
 +            }
 +        }
 +        return false;
@@ -1041,6 +1132,14 @@ new file mode 100644
 +    private static volatile long sLastResetCheck = 0;
 +
 +    public static long getRewindTimestamp() {
++        Bundle b = getProviderConfig();
++        if (b != null && b.containsKey("reset_ts")) {
++            long ts = b.getLong("reset_ts", 0L);
++            if (ts > 0) {
++                sCachedResetTs = ts;
++                return ts;
++            }
++        }
 +        long now = System.currentTimeMillis();
 +        if (now - sLastResetCheck < 150) return sCachedResetTs;
 +        sLastResetCheck = now;
@@ -1057,10 +1156,18 @@ new file mode 100644
 +    private static volatile long sLastRotationCheck = 0;
 +
 +    public static int getRotation() {
++        Bundle b = getProviderConfig();
++        int userRot = 0;
++        if (b != null && b.containsKey("rotation")) {
++            userRot = b.getInt("rotation", 0);
++            int totalRot = (180 + userRot) % 360;
++            if (totalRot < 0) totalRot += 360;
++            sCachedRotation = totalRot;
++            return totalRot;
++        }
 +        long now = System.currentTimeMillis();
 +        if (now - sLastRotationCheck < 150) return sCachedRotation;
 +        sLastRotationCheck = now;
-+        int userRot = 0;
 +        String val = readFileContent(ROTATION_FILE);
 +        if (val.isEmpty()) {
 +            val = readFileContent("vcam_rotate");
@@ -1081,6 +1188,14 @@ new file mode 100644
 +    private static volatile long sLastNoiseCheck = 0;
 +
 +    public static int getNoiseLevel() {
++        Bundle b = getProviderConfig();
++        if (b != null && b.containsKey("noise")) {
++            int n = b.getInt("noise", 0);
++            if (n < 0) n = 0;
++            if (n > 10) n = 10;
++            sCachedNoise = n;
++            return n;
++        }
 +        long now = System.currentTimeMillis();
 +        if (now - sLastNoiseCheck < 200) return sCachedNoise;
 +        sLastNoiseCheck = now;
@@ -1102,13 +1217,20 @@ new file mode 100644
 +    private static volatile long sLastLightCheck = 0;
 +
 +    public static float[] getLightParams() {
-+        long now = System.currentTimeMillis();
-+        if (now - sLastLightCheck < 200) return sCachedLight;
-+        sLastLightCheck = now;
-+        String val = readFileContent(LIGHT_FILE);
-+        if (!val.isEmpty()) {
++        Bundle b = getProviderConfig();
++        String val = null;
++        if (b != null && b.containsKey("light")) {
++            val = b.getString("light", "");
++        }
++        if (val == null || val.isEmpty()) {
++            long now = System.currentTimeMillis();
++            if (now - sLastLightCheck < 200) return sCachedLight;
++            sLastLightCheck = now;
++            val = readFileContent(LIGHT_FILE);
++        }
++        if (val != null && !val.isEmpty()) {
 +            try {
-+                String[] parts = val.trim().split("[,\\s]+");
++                String[] parts = val.trim().split("[,\s]+");
 +                if (parts.length >= 1) {
 +                    int intensity = Integer.parseInt(parts[0]);
 +                    if (intensity < -100) intensity = -100;
@@ -1681,7 +1803,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamRenderer.java b/core/ja
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamRenderer.java
-@@ -0,0 +1,639 @@
+@@ -0,0 +1,652 @@
 +package android.hardware.camera2.impl;
 +
 +import android.graphics.Bitmap;
@@ -1740,12 +1862,22 @@ new file mode 100644
 +        "uniform vec4 uLightParams;\n" +
 +        "uniform float uNoiseIntensity;\n" +
 +        "uniform float uNoiseSeed;\n" +
++        "uniform float uBrightness;\n" +
++        "uniform float uSwapUv;\n" +
 +        "uniform float uAuthKey;\n" +
 +        "float rand(vec2 co, float seed) {\n" +
 +        "  return fract(sin(dot(co * (seed + 1.0), vec2(12.9898, 78.233))) * 43758.5453) - 0.5;\n" +
 +        "}\n" +
 +        "void main() {\n" +
 +        "  vec4 c = texture2D(sTexture, vTextureCoord);\n" +
++        "  if (uSwapUv > 0.5) {\n" +
++        "    float tmp = c.r;\n" +
++        "    c.r = c.b;\n" +
++        "    c.b = tmp;\n" +
++        "  }\n" +
++        "  if (uBrightness > 0.0) {\n" +
++        "    c.rgb *= uBrightness;\n" +
++        "  }\n" +
 +        "  if (uLightParams.w != 0.0) {\n" +
 +        "    vec2 ndc = vTextureCoord * 2.0 - 1.0;\n" +
 +        "    vec2 diff = (ndc - uLightParams.xy) / max(uLightParams.z, 0.1);\n" +
@@ -1765,12 +1897,9 @@ new file mode 100644
 +        "  }\n" +
 +        "  c.rgb = clamp(c.rgb, 0.0, 1.0);\n" +
 +        "  if (uFlashColor.a > 0.0) {\n" +
-+        "    float y_val = dot(c.rgb, vec3(0.299, 0.587, 0.114));\n" +
-+        "    float cb_val = (-0.168736 * c.r - 0.331264 * c.g + 0.5 * c.b) + 0.5;\n" +
-+        "    float cr_val = (0.5 * c.r - 0.418688 * c.g - 0.081312 * c.b) + 0.5;\n" +
-+        "    bool is_skin = (y_val >= 0.25 && y_val <= 0.88 && cb_val >= 0.38 && cb_val <= 0.54 && cr_val >= 0.50 && cr_val <= 0.70);\n" +
-+        "    float skinWeight = is_skin ? 1.0 : 0.32;\n" +
-+        "    vec3 tinted = mix(c.rgb, uFlashColor.rgb, uFlashColor.a * skinWeight);\n" +
++        "    vec2 ndc = vTextureCoord * 2.0 - 1.0;\n" +
++        "    float radial = clamp(1.0 - ndc.x * ndc.x * 0.60, 0.35, 1.0);\n" +
++        "    vec3 tinted = mix(c.rgb, uFlashColor.rgb, uFlashColor.a * radial);\n" +
 +        "    gl_FragColor = vec4(tinted, c.a);\n" +
 +        "  } else {\n" +
 +        "    gl_FragColor = c;\n" +
@@ -1807,6 +1936,8 @@ new file mode 100644
 +    private int muLightParamsHandle = 0;
 +    private int muNoiseIntensityHandle = 0;
 +    private int muNoiseSeedHandle = 0;
++    private int muBrightnessHandle = 0;
++    private int muSwapUvHandle = 0;
 +    private int muAuthKeyHandle = 0;
 +    private int maPositionHandle = 0;
 +    private int maTextureHandle = 0;
@@ -1964,6 +2095,8 @@ new file mode 100644
 +            muLightParamsHandle = GLES20.glGetUniformLocation(mProgram, "uLightParams");
 +            muNoiseIntensityHandle = GLES20.glGetUniformLocation(mProgram, "uNoiseIntensity");
 +            muNoiseSeedHandle = GLES20.glGetUniformLocation(mProgram, "uNoiseSeed");
++            muBrightnessHandle = GLES20.glGetUniformLocation(mProgram, "uBrightness");
++            muSwapUvHandle = GLES20.glGetUniformLocation(mProgram, "uSwapUv");
 +            muAuthKeyHandle = GLES20.glGetUniformLocation(mProgram, "uAuthKey");
 +
 +            mSurfaceTexture = new SurfaceTexture(mTextureId);
@@ -2054,6 +2187,8 @@ new file mode 100644
 +                        GLES20.glUniform4fv(muLightParamsHandle, 1, lightParams, 0);
 +                        GLES20.glUniform1f(muNoiseIntensityHandle, (float) noiseLevel);
 +                        GLES20.glUniform1f(muNoiseSeedHandle, mNoiseSeed);
++                        GLES20.glUniform1f(muBrightnessHandle, VcamConfig.getBrightnessFactor());
++                        GLES20.glUniform1f(muSwapUvHandle, VcamConfig.isSwapUv() ? 1.0f : 0.0f);
 +
 +                        if (flashColor != Color.TRANSPARENT && flashIntensity > 0.0f) {
 +                            float r = Color.red(flashColor) / 255.0f;
