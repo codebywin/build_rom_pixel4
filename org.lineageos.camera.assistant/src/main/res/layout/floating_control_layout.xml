@@ -7,2006 +7,280 @@
     <!-- 1. BONG BÓNG THU NHỎ (MINIMIZED BUBBLE) -->
     <LinearLayout
         android:id="@+id/layout_bubble"
-        android:layout_width="52dp"
-        android:layout_height="52dp"
+        android:layout_width="54dp"
+        android:layout_height="54dp"
         android:background="@drawable/bg_floating_bubble"
         android:gravity="center"
         android:orientation="vertical"
         android:visibility="gone"
-        android:outlineProvider="background"
-        android:clipToOutline="true">
+        android:elevation="8dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="📷"
-            android:textSize="22sp" />
+            android:text=""
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:textSize="12sp" />
     </LinearLayout>
 
-    <!-- 2. CỬA SỔ ĐIỀU KHIỂN NỔI (EXPANDED WCAM HUD) -->
+    <!-- 2. CỬA SỔ ĐIỀU KHIỂN NỔI (EXPANDED HUD CARD) -->
     <LinearLayout
         android:id="@+id/layout_expanded"
-        android:layout_width="340dp"
+        android:layout_width="220dp"
         android:layout_height="wrap_content"
-        android:background="@drawable/bg_wcam_card"
+        android:background="@drawable/bg_floating_card"
         android:orientation="vertical"
-        android:padding="12dp"
-        android:elevation="10dp">
+        android:padding="10dp"
+        android:elevation="8dp">
 
-        <!-- ── HEADER ────────────────────────────────────────────────────────── -->
+        <!-- Header: Drag bar, Title, Minimize & Close -->
         <LinearLayout
             android:id="@+id/header_drag"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingBottom="8dp">
+            android:gravity="center_vertical">
 
-            <!-- Logo Icon -->
             <TextView
-                android:layout_width="34dp"
-                android:layout_height="34dp"
-                android:background="@drawable/bg_wcam_icon_circle"
-                android:text="📷"
-                android:gravity="center"
-                android:textSize="17sp" />
-
-            <!-- Title & Subtitle -->
-            <LinearLayout
+                android:id="@+id/txt_drag_handle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:orientation="vertical"
-                android:paddingStart="9dp">
-
-                <TextView
-                    android:id="@+id/txt_drag_handle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Camera Assistant"
-                    android:textColor="#FFFFFF"
-                    android:textStyle="bold"
-                    android:textSize="15sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Virtual Camera Control"
-                    android:textColor="#829AB1"
-                    android:textSize="11sp" />
-            </LinearLayout>
-
-            <!-- Nút chỉnh độ trong suốt nhanh -->
-            <TextView
-                android:id="@+id/btn_float_opacity"
-                android:layout_width="wrap_content"
-                android:layout_height="28dp"
-                android:text="👁️ 85%"
-                android:textColor="#38BDF8"
+                android:text="Controller ✥"
+                android:textColor="#00BFA5"
                 android:textStyle="bold"
-                android:textSize="10sp"
-                android:gravity="center"
-                android:paddingHorizontal="6dp"
-                android:background="@drawable/bg_wcam_btn"
-                android:layout_marginEnd="6dp"
-                android:clickable="true"
-                android:focusable="true" />
+                android:textSize="13sp"
+                android:padding="0dp" />
 
-            <!-- Nút Thu nhỏ -->
+            <!-- Nút Thu Nhỏ thành Bong Bóng -->
             <TextView
                 android:id="@+id/btn_float_minimize"
-                android:layout_width="30dp"
-                android:layout_height="30dp"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
                 android:text="—"
-                android:textColor="#9FB3C8"
+                android:textColor="#FFFFFF"
                 android:textStyle="bold"
-                android:textSize="15sp"
+                android:textSize="14sp"
                 android:gravity="center"
                 android:background="?android:attr/selectableItemBackgroundBorderless" />
 
             <!-- Nút Đóng -->
             <TextView
                 android:id="@+id/btn_float_close"
-                android:layout_width="30dp"
-                android:layout_height="30dp"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
                 android:text="✕"
                 android:textColor="#FF5252"
                 android:textStyle="bold"
                 android:textSize="14sp"
                 android:gravity="center"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:layout_marginStart="2dp" />
+                android:layout_marginStart="4dp" />
         </LinearLayout>
 
-        <!-- ── TOP QUICK BAR (VCam ON, Play, Xoay 90°, Reset) ─────────────── -->
+        <!-- Switch Bật / Tắt Camera Ảo Nổi -->
+        <Switch
+            android:id="@+id/switch_float_vcam"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Kích hoạt Camera Ảo"
+            android:textColor="#00E5FF"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:checked="true"
+            android:layout_marginTop="6dp" />
+            
+        <!-- Hàng 4 nút: Tạm dừng, Tua lại, Xoay video, Khuếch đại Mic -->
+        <LinearLayout
+            android:id="@+id/layout_4_buttons"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="6dp">
+
+            <!-- 1. Nút Pause / Play -->
+            <Button
+                android:id="@+id/btn_float_pause"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="0.9"
+                android:text="⏸"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:backgroundTint="#455A64"
+                android:textColor="#FFFFFF"
+                android:padding="0dp"
+                android:layout_marginEnd="3dp" />
+
+            <!-- 2. Nút Tua lại từ đầu (00:00) -->
+            <Button
+                android:id="@+id/btn_float_rewind"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="0.9"
+                android:text="⏮"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:backgroundTint="#00897B"
+                android:textColor="#FFFFFF"
+                android:padding="0dp"
+                android:layout_marginEnd="3dp" />
+
+            <!-- 3. Nút Xoay video (0° -> 90° -> 180° -> 270°) -->
+            <Button
+                android:id="@+id/btn_float_rotate"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="0.9"
+                android:text="🔄"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:backgroundTint="#5C6BC0"
+                android:textColor="#FFFFFF"
+                android:padding="0dp"
+                android:layout_marginEnd="3dp" />
+
+            <!-- 4. Nút Khuếch đại Micro (Boost) -->
+            <Button
+                android:id="@+id/btn_float_mic_boost"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1.0"
+                android:text="🎙️"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:backgroundTint="#00838F"
+                android:textColor="#FFFFFF"
+                android:padding="0dp" />
+        </LinearLayout>
+
+        
+
+        <!-- Zoom Row -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:background="@drawable/bg_wcam_subcard"
-            android:padding="6dp"
-            android:layout_marginBottom="8dp">
+            android:layout_marginTop="6dp">
 
-            <!-- VCam ON + Switch -->
-            <LinearLayout
+            <Button
+                android:id="@+id/btn_float_zoom_out"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:text="-"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:padding="0dp" />
+
+            <TextView
+                android:id="@+id/txt_float_zoom"
                 android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="1.2"
-                android:orientation="horizontal"
-                android:gravity="center"
-                android:background="@drawable/bg_wcam_btn"
-                android:paddingHorizontal="6dp"
-                android:layout_marginEnd="4dp">
-
-                <TextView
-                    android:id="@+id/switch_text"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="ON"
-                    android:textColor="#FFFFFF"
-                    android:textSize="10sp"
-                    android:textStyle="bold" />
-
-                <Switch
-                    android:id="@+id/switch_float_vcam"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:checked="true"
-                    android:scaleX="0.8"
-                    android:scaleY="0.8" />
-            </LinearLayout>
-
-            <!-- Nút Play / Pause -->
-            <LinearLayout
-                android:id="@+id/btn_top_play"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="0.9"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:background="@drawable/bg_wcam_btn"
-                android:clickable="true"
-                android:focusable="true"
-                android:layout_marginEnd="4dp">
-
-                <TextView
-                    android:id="@+id/txt_top_play_icon"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="⏸"
-                    android:textColor="#38BDF8"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:id="@+id/txt_top_play_lbl"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Pause"
-                    android:textColor="#94A3B8"
-                    android:textSize="9sp" />
-            </LinearLayout>
-
-            <!-- Nút Xoay 90° -->
-            <LinearLayout
-                android:id="@+id/btn_top_rotate"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="0.9"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:background="@drawable/bg_wcam_btn"
-                android:clickable="true"
-                android:focusable="true"
-                android:layout_marginEnd="4dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🔄"
-                    android:textColor="#38BDF8"
-                    android:textSize="13sp" />
-
-                <TextView
-                    android:id="@+id/txt_top_rotate_lbl"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Xoay 90°"
-                    android:textColor="#94A3B8"
-                    android:textSize="9sp" />
-            </LinearLayout>
-
-            <!-- Nút Reset -->
-            <LinearLayout
-                android:id="@+id/btn_top_reset"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="0.8"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:background="@drawable/bg_wcam_btn"
-                android:clickable="true"
-                android:focusable="true"
-                android:layout_marginEnd="4dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="⟲"
-                    android:textColor="#38BDF8"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Reset"
-                    android:textColor="#94A3B8"
-                    android:textSize="9sp" />
-            </LinearLayout>
-
-            <!-- Nút Đổi màu UV (Sửa mặt xanh) -->
-            <LinearLayout
-                android:id="@+id/btn_top_swap_uv"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="0.9"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:background="@drawable/bg_wcam_btn"
-                android:clickable="true"
-                android:focusable="true">
-
-                <TextView
-                    android:id="@+id/txt_top_swap_uv_icon"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🎨"
-                    android:textSize="13sp" />
-
-                <TextView
-                    android:id="@+id/txt_top_swap_uv_lbl"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Đổi màu"
-                    android:textColor="#94A3B8"
-                    android:textSize="9sp" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- ── TAB CONTENT AREA (CONTAINER FOR 4 TABS) ────────────────────── -->
-        <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            >
-
-            <!-- ══════════════════════════════════════════════════════════════════
-                 TAB 1: HẠT NHIỄU (SENSOR NOISE)
-                 ══════════════════════════════════════════════════════════════════ -->
-            <LinearLayout
-                android:id="@+id/panel_noise"
-                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="@drawable/bg_wcam_subcard"
-                android:padding="12dp"
-                android:visibility="visible">
-
-                <!-- Header thẻ Noise -->
-                <LinearLayout
-                    android:visibility="gone"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="12dp">
-
-                    <TextView
-                        android:layout_width="30dp"
-                        android:layout_height="30dp"
-                        android:background="@drawable/bg_wcam_icon_circle"
-                        android:text="🔆"
-                        android:gravity="center"
-                        android:textSize="15sp" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:paddingStart="8dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Hạt nhiễu (Sensor Noise)"
-                            android:textColor="#FFFFFF"
-                            android:textStyle="bold"
-                            android:textSize="13sp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Tạo hạt nhiễu động bằng Xorshift32 theo thời gian thực trên kênh Y của NV12."
-                            android:textColor="#829AB1"
-                            android:textSize="10sp" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <!-- Label + Value Badge -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="4dp">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="Mức nhiễu"
-                        android:textColor="#E2E8F0"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/txt_noise_badge"
-                        android:layout_width="38dp"
-                        android:layout_height="24dp"
-                        android:background="@drawable/bg_wcam_badge"
-                        android:gravity="center"
-                        android:text="0"
-                        android:textColor="#38BDF8"
-                        android:textStyle="bold"
-                        android:textSize="12sp" />
-                </LinearLayout>
-
-                <!-- SeekBar Mức nhiễu -->
-                <SeekBar
-                    android:id="@+id/sb_noise"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:max="10"
-                    android:progress="0"
-                    android:progressDrawable="@drawable/custom_seekbar_progress"
-                    android:thumb="@drawable/custom_seekbar_thumb"
-                    android:paddingVertical="8dp" />
-
-                <!-- Dải số 0 .. 10 -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="12dp">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="0"
-                        android:textColor="#64748B"
-                        android:textSize="10sp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="10"
-                        android:textColor="#64748B"
-                        android:textSize="10sp" />
-                </LinearLayout>
-
-                <!-- Preset nhanh row -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Preset nhanh"
-                        android:textColor="#829AB1"
-                        android:textSize="11sp"
-                        android:layout_marginEnd="8dp" />
-
-                    <Button
-                        android:id="@+id/btn_noise_0"
-                        android:layout_width="0dp"
-                        android:layout_height="32dp"
-                        android:layout_weight="1"
-                        android:text="0"
-                        android:textSize="11sp"
-                        android:background="@drawable/bg_wcam_btn_active"
-                        android:textColor="#FFFFFF"
-                        android:layout_marginEnd="3dp" />
-
-                    <Button
-                        android:id="@+id/btn_noise_2"
-                        android:layout_width="0dp"
-                        android:layout_height="32dp"
-                        android:layout_weight="1"
-                        android:text="2"
-                        android:textSize="11sp"
-                        android:background="@drawable/bg_wcam_btn"
-                        android:textColor="#E2E8F0"
-                        android:layout_marginEnd="3dp" />
-
-                    <Button
-                        android:id="@+id/btn_noise_5"
-                        android:layout_width="0dp"
-                        android:layout_height="32dp"
-                        android:layout_weight="1"
-                        android:text="5"
-                        android:textSize="11sp"
-                        android:background="@drawable/bg_wcam_btn"
-                        android:textColor="#E2E8F0"
-                        android:layout_marginEnd="3dp" />
-
-                    <Button
-                        android:id="@+id/btn_noise_8"
-                        android:layout_width="0dp"
-                        android:layout_height="32dp"
-                        android:layout_weight="1"
-                        android:text="8"
-                        android:textSize="11sp"
-                        android:background="@drawable/bg_wcam_btn"
-                        android:textColor="#E2E8F0"
-                        android:layout_marginEnd="3dp" />
-
-                    <Button
-                        android:id="@+id/btn_noise_max"
-                        android:layout_width="0dp"
-                        android:layout_height="32dp"
-                        android:layout_weight="1.2"
-                        android:text="Max"
-                        android:textSize="11sp"
-                        android:background="@drawable/bg_wcam_btn"
-                        android:textColor="#E2E8F0" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <!-- ══════════════════════════════════════════════════════════════════
-                 TAB 2: THU PHÓNG (ZOOM)
-                 ══════════════════════════════════════════════════════════════════ -->
-            <LinearLayout
-                android:id="@+id/panel_zoom"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="@drawable/bg_wcam_subcard"
-                android:padding="12dp"
-                android:visibility="gone">
-
-                <!-- Header thẻ Zoom -->
-                <LinearLayout
-
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="10dp">
-
-                    <TextView
-                        android:visibility="gone"
-                        android:layout_width="30dp"
-                        android:layout_height="30dp"
-                        android:background="@drawable/bg_wcam_icon_circle"
-                        android:text="🔍"
-                        android:gravity="center"
-                        android:textSize="15sp" />
-
-                    <LinearLayout
-
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical"
-                        android:paddingStart="8dp">
-
-                        <TextView
-                            android:visibility="gone"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Thu phóng (Zoom)"
-                            android:textColor="#FFFFFF"
-                            android:textStyle="bold"
-                            android:textSize="13sp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Phóng to / thu nhỏ hình ảnh theo tỷ lệ."
-                            android:textColor="#829AB1"
-                            android:textSize="10sp" />
-                    </LinearLayout>
-
-                    <TextView
-                        android:id="@+id/txt_zoom_badge"
-                        android:layout_width="wrap_content"
-                        android:layout_height="26dp"
-                        android:background="@drawable/bg_wcam_btn_active"
-                        android:gravity="center"
-                        android:paddingHorizontal="10dp"
-                        android:text="1.00×"
-                        android:textColor="#FFFFFF"
-                        android:textStyle="bold"
-                        android:textSize="12sp" />
-                </LinearLayout>
-
-                <!-- Label Thu phóng -->
-                <TextView
-                    android:visibility="gone"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Thu phóng"
-                    android:textColor="#E2E8F0"
-                    android:textSize="11sp"
-                    android:textStyle="bold" />
-
-                <!-- SeekBar Zoom (1.00 - 5.00, scale 100 - 500) -->
-                <SeekBar
-                    android:id="@+id/sb_zoom"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:max="400"
-                    android:progress="0"
-                    android:progressDrawable="@drawable/custom_seekbar_progress"
-                    android:thumb="@drawable/custom_seekbar_thumb"
-                    android:paddingVertical="6dp" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="8dp">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="1.00×"
-                        android:textColor="#64748B"
-                        android:textSize="10sp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="5.00×"
-                        android:textColor="#64748B"
-                        android:textSize="10sp" />
-                </LinearLayout>
-
-                <!-- Preset Row -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="8dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Preset"
-                        android:textColor="#829AB1"
-                        android:textSize="11sp"
-                        android:layout_marginEnd="10dp" />
-
-                    <Button
-                        android:id="@+id/btn_zoom_1"
-                        android:layout_width="0dp"
-                        android:layout_height="32dp"
-                        android:layout_weight="1"
-                        android:text="1.0×"
-                        android:textSize="11sp"
-                        android:background="@drawable/bg_wcam_btn_active"
-                        android:textColor="#FFFFFF"
-                        android:layout_marginEnd="3dp" />
-
-                    <Button
-                        android:id="@+id/btn_zoom_15"
-                        android:layout_width="0dp"
-                        android:layout_height="32dp"
-                        android:layout_weight="1"
-                        android:text="1.5×"
-                        android:textSize="11sp"
-                        android:background="@drawable/bg_wcam_btn"
-                        android:textColor="#E2E8F0"
-                        android:layout_marginEnd="3dp" />
-
-                    <Button
-                        android:id="@+id/btn_zoom_2"
-                        android:layout_width="0dp"
-                        android:layout_height="32dp"
-                        android:layout_weight="1"
-                        android:text="2.0×"
-                        android:textSize="11sp"
-                        android:background="@drawable/bg_wcam_btn"
-                        android:textColor="#E2E8F0"
-                        android:layout_marginEnd="3dp" />
-
-                    <Button
-                        android:id="@+id/btn_zoom_3"
-                        android:layout_width="0dp"
-                        android:layout_height="32dp"
-                        android:layout_weight="1"
-                        android:text="3.0×"
-                        android:textSize="11sp"
-                        android:background="@drawable/bg_wcam_btn"
-                        android:textColor="#E2E8F0"
-                        android:layout_marginEnd="3dp" />
-
-                    <Button
-                        android:id="@+id/btn_zoom_5"
-                        android:layout_width="0dp"
-                        android:layout_height="32dp"
-                        android:layout_weight="1"
-                        android:text="5.0×"
-                        android:textSize="11sp"
-                        android:background="@drawable/bg_wcam_btn"
-                        android:textColor="#E2E8F0" />
-                </LinearLayout>
-
-                <!-- Tinh chỉnh vi mô Row -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="Tinh chỉnh"
-                        android:textColor="#829AB1"
-                        android:textSize="11sp" />
-
-                    <Button
-                        android:id="@+id/btn_zoom_minus"
-                        android:layout_width="38dp"
-                        android:layout_height="32dp"
-                        android:text="—"
-                        android:textSize="14sp"
-                        android:textStyle="bold"
-                        android:background="@drawable/bg_wcam_btn"
-                        android:textColor="#FFFFFF" />
-
-                    <TextView
-                        android:id="@+id/txt_zoom_stepper_val"
-                        android:layout_width="70dp"
-                        android:layout_height="wrap_content"
-                        android:gravity="center"
-                        android:text="1.00×"
-                        android:textColor="#38BDF8"
-                        android:textStyle="bold"
-                        android:textSize="13sp" />
-
-                    <Button
-                        android:id="@+id/btn_zoom_plus"
-                        android:layout_width="38dp"
-                        android:layout_height="32dp"
-                        android:text="+"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:background="@drawable/bg_wcam_btn"
-                        android:textColor="#FFFFFF" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <!-- ══════════════════════════════════════════════════════════════════
-                 TAB 3: DỊCH CHUYỂN (PAN X / Y)
-                 ══════════════════════════════════════════════════════════════════ -->
-            <LinearLayout
-                android:id="@+id/panel_pan"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="@drawable/bg_wcam_subcard"
-                android:padding="12dp"
-                android:visibility="gone">
-
-                <!-- Header thẻ Pan -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="10dp">
-
-                    <TextView
-                        android:visibility="gone"
-                        android:layout_width="30dp"
-                        android:layout_height="30dp"
-                        android:background="@drawable/bg_wcam_icon_circle"
-                        android:text="🎯"
-                        android:gravity="center"
-                        android:textSize="15sp" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:paddingStart="8dp">
-
-                        <TextView
-                            android:visibility="gone"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Dịch chuyển (Pan X / Y)"
-                            android:textColor="#FFFFFF"
-                            android:textStyle="bold"
-                            android:textSize="13sp" />
-
-                        <TextView
-                            android:visibility="gone"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Dịch chuyển khung hình theo trục X và Y."
-                            android:textColor="#829AB1"
-                            android:textSize="10sp" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <!-- Thân Pan: D-Pad bên trái, 2 Slider bên phải -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <!-- Cụm D-Pad tròn (Trái) -->
-                    <RelativeLayout
-                        android:layout_width="120dp"
-                        android:layout_height="120dp"
-                        android:background="@drawable/bg_wcam_circle_btn"
-                        android:gravity="center">
-
-                        <!-- Nút Lên ▲ -->
-                        <Button
-                            android:id="@+id/btn_pan_up"
-                            android:layout_width="40dp"
-                            android:layout_height="32dp"
-                            android:layout_alignParentTop="true"
-                            android:layout_centerHorizontal="true"
-                            android:text="▲"
-                            android:textColor="#94A3B8"
-                            android:textSize="12sp"
-                            android:background="@null" />
-
-                        <!-- Nút Trái ◄ -->
-                        <Button
-                            android:id="@+id/btn_pan_left"
-                            android:layout_width="32dp"
-                            android:layout_height="40dp"
-                            android:layout_alignParentStart="true"
-                            android:layout_centerVertical="true"
-                            android:text="◄"
-                            android:textColor="#94A3B8"
-                            android:textSize="12sp"
-                            android:background="@null" />
-
-                        <!-- Nút Tâm C (Center) -->
-                        <Button
-                            android:id="@+id/btn_pan_center"
-                            android:layout_width="38dp"
-                            android:layout_height="38dp"
-                            android:layout_centerInParent="true"
-                            android:background="@drawable/bg_wcam_circle_active"
-                            android:text="C"
-                            android:textColor="#FFFFFF"
-                            android:textStyle="bold"
-                            android:textSize="14sp" />
-
-                        <!-- Nút Phải ► -->
-                        <Button
-                            android:id="@+id/btn_pan_right"
-                            android:layout_width="32dp"
-                            android:layout_height="40dp"
-                            android:layout_alignParentEnd="true"
-                            android:layout_centerVertical="true"
-                            android:text="►"
-                            android:textColor="#94A3B8"
-                            android:textSize="12sp"
-                            android:background="@null" />
-
-                        <!-- Nút Xuống ▼ -->
-                        <Button
-                            android:id="@+id/btn_pan_down"
-                            android:layout_width="40dp"
-                            android:layout_height="32dp"
-                            android:layout_alignParentBottom="true"
-                            android:layout_centerHorizontal="true"
-                            android:text="▼"
-                            android:textColor="#94A3B8"
-                            android:textSize="12sp"
-                            android:background="@null" />
-                    </RelativeLayout>
-
-                    <!-- Cụm Sliders Pan X / Y (Phải) -->
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical"
-                        android:paddingStart="12dp">
-
-                        <!-- Pan X -->
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical">
-
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="Pan X"
-                                android:textColor="#E2E8F0"
-                                android:textSize="11sp"
-                                android:textStyle="bold" />
-
-                            <TextView
-                                android:id="@+id/txt_pan_x_badge"
-                                android:layout_width="48dp"
-                                android:layout_height="22dp"
-                                android:background="@drawable/bg_wcam_badge"
-                                android:gravity="center"
-                                android:text="+0.00"
-                                android:textColor="#38BDF8"
-                                android:textStyle="bold"
-                                android:textSize="10sp" />
-                        </LinearLayout>
-
-                        <SeekBar
-                            android:id="@+id/sb_pan_x"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:max="200"
-                            android:progress="100"
-                            android:progressDrawable="@drawable/custom_seekbar_progress"
-                            android:thumb="@drawable/custom_seekbar_thumb"
-                            android:paddingVertical="4dp" />
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:layout_marginBottom="6dp">
-
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="-1.00"
-                                android:textColor="#64748B"
-                                android:textSize="9sp" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="+1.00"
-                                android:textColor="#64748B"
-                                android:textSize="9sp" />
-                        </LinearLayout>
-
-                        <!-- Pan Y -->
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center_vertical">
-
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="Pan Y"
-                                android:textColor="#E2E8F0"
-                                android:textSize="11sp"
-                                android:textStyle="bold" />
-
-                            <TextView
-                                android:id="@+id/txt_pan_y_badge"
-                                android:layout_width="48dp"
-                                android:layout_height="22dp"
-                                android:background="@drawable/bg_wcam_badge"
-                                android:gravity="center"
-                                android:text="+0.00"
-                                android:textColor="#38BDF8"
-                                android:textStyle="bold"
-                                android:textSize="10sp" />
-                        </LinearLayout>
-
-                        <SeekBar
-                            android:id="@+id/sb_pan_y"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:max="200"
-                            android:progress="100"
-                            android:progressDrawable="@drawable/custom_seekbar_progress"
-                            android:thumb="@drawable/custom_seekbar_thumb"
-                            android:paddingVertical="4dp" />
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal">
-
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="-1.00"
-                                android:textColor="#64748B"
-                                android:textSize="9sp" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="+1.00"
-                                android:textColor="#64748B"
-                                android:textSize="9sp" />
-                        </LinearLayout>
-                    </LinearLayout>
-                </LinearLayout>
-            </LinearLayout>
-
-            <!-- ══════════════════════════════════════════════════════════════════
-                 TAB 4: ÁNH SÁNG & ĐỔ BÓNG (LIGHT & SHADOW)
-                 ══════════════════════════════════════════════════════════════════ -->
-            <LinearLayout
-                android:id="@+id/panel_light"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="@drawable/bg_wcam_subcard"
-                android:padding="12dp"
-                android:visibility="gone">
-
-                <!-- Header thẻ Light -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="8dp">
-
-                    <TextView
-                        android:visibility="gone"
-                        android:layout_width="30dp"
-                        android:layout_height="30dp"
-                        android:background="@drawable/bg_wcam_icon_circle"
-                        android:text="💡"
-                        android:gravity="center"
-                        android:textSize="15sp" />
-
-                    <TextView
-                        android:visibility="gone"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Ánh sáng &amp; Đổ bóng (Light &amp; Shadow)"
-                        android:textColor="#FFFFFF"
-                        android:textStyle="bold"
-                        android:textSize="12sp"
-                        android:paddingStart="8dp" />
-                </LinearLayout>
-
-                <!-- Cường độ sáng row -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="Cường độ"
-                        android:textColor="#E2E8F0"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/txt_light_badge"
-                        android:layout_width="wrap_content"
-                        android:layout_height="22dp"
-                        android:background="@drawable/bg_wcam_badge"
-                        android:gravity="center"
-                        android:paddingHorizontal="6dp"
-                        android:text="0% (Tắt)"
-                        android:textColor="#38BDF8"
-                        android:textStyle="bold"
-                        android:textSize="10sp" />
-                </LinearLayout>
-
-                <SeekBar
-                    android:id="@+id/sb_light_int"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:max="200"
-                    android:progress="100"
-                    android:progressDrawable="@drawable/custom_seekbar_progress"
-                    android:thumb="@drawable/custom_seekbar_thumb"
-                    android:paddingVertical="4dp" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="8dp">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="-100% (Tối)"
-                        android:textColor="#64748B"
-                        android:textSize="9sp" />
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:gravity="center"
-                        android:text="0% (Tắt)"
-                        android:textColor="#64748B"
-                        android:textSize="9sp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="+100% (Sáng)"
-                        android:textColor="#64748B"
-                        android:textSize="9sp" />
-                </LinearLayout>
-
-                <!-- Virtual Light Compass & Controls (3 columns) -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <!-- Col 1: Compass 8 hướng (trái) -->
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1.2"
-                        android:orientation="vertical"
-                        android:gravity="center_horizontal">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Virtual Light Compass"
-                            android:textColor="#94A3B8"
-                            android:textSize="9sp"
-                            android:textStyle="bold" />
-
-                        <!-- Compass grid -->
-                        <GridLayout
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:columnCount="3"
-                            android:rowCount="3"
-                            android:layout_marginTop="3dp">
-
-                            <TextView
-                                android:id="@+id/btn_light_nw"
-                                android:layout_width="26dp"
-                                android:layout_height="24dp"
-                                android:text="↖"
-                                android:textColor="#94A3B8"
-                                android:textSize="11sp"
-                                android:gravity="center"
-                                android:background="@drawable/bg_wcam_btn"
-                                android:layout_margin="1dp" />
-
-                            <TextView
-                                android:id="@+id/btn_light_n"
-                                android:layout_width="26dp"
-                                android:layout_height="24dp"
-                                android:text="↑"
-                                android:textColor="#94A3B8"
-                                android:textSize="12sp"
-                                android:gravity="center"
-                                android:background="@drawable/bg_wcam_btn"
-                                android:layout_margin="1dp" />
-
-                            <TextView
-                                android:id="@+id/btn_light_ne"
-                                android:layout_width="26dp"
-                                android:layout_height="24dp"
-                                android:text="↗"
-                                android:textColor="#94A3B8"
-                                android:textSize="11sp"
-                                android:gravity="center"
-                                android:background="@drawable/bg_wcam_btn"
-                                android:layout_margin="1dp" />
-
-                            <TextView
-                                android:id="@+id/btn_light_w"
-                                android:layout_width="26dp"
-                                android:layout_height="24dp"
-                                android:text="←"
-                                android:textColor="#94A3B8"
-                                android:textSize="12sp"
-                                android:gravity="center"
-                                android:background="@drawable/bg_wcam_btn"
-                                android:layout_margin="1dp" />
-
-                            <TextView
-                                android:id="@+id/btn_light_center"
-                                android:layout_width="26dp"
-                                android:layout_height="24dp"
-                                android:text="⏺"
-                                android:textColor="#38BDF8"
-                                android:textSize="13sp"
-                                android:gravity="center"
-                                android:background="@drawable/bg_wcam_circle_active"
-                                android:layout_margin="1dp" />
-
-                            <TextView
-                                android:id="@+id/btn_light_e"
-                                android:layout_width="26dp"
-                                android:layout_height="24dp"
-                                android:text="→"
-                                android:textColor="#94A3B8"
-                                android:textSize="12sp"
-                                android:gravity="center"
-                                android:background="@drawable/bg_wcam_btn"
-                                android:layout_margin="1dp" />
-
-                            <TextView
-                                android:id="@+id/btn_light_sw"
-                                android:layout_width="26dp"
-                                android:layout_height="24dp"
-                                android:text="↙"
-                                android:textColor="#94A3B8"
-                                android:textSize="11sp"
-                                android:gravity="center"
-                                android:background="@drawable/bg_wcam_btn"
-                                android:layout_margin="1dp" />
-
-                            <TextView
-                                android:id="@+id/btn_light_s"
-                                android:layout_width="26dp"
-                                android:layout_height="24dp"
-                                android:text="↓"
-                                android:textColor="#94A3B8"
-                                android:textSize="12sp"
-                                android:gravity="center"
-                                android:background="@drawable/bg_wcam_btn"
-                                android:layout_margin="1dp" />
-
-                            <TextView
-                                android:id="@+id/btn_light_se"
-                                android:layout_width="26dp"
-                                android:layout_height="24dp"
-                                android:text="↘"
-                                android:textColor="#94A3B8"
-                                android:textSize="11sp"
-                                android:gravity="center"
-                                android:background="@drawable/bg_wcam_btn"
-                                android:layout_margin="1dp" />
-                        </GridLayout>
-                    </LinearLayout>
-
-                    <!-- Col 2: Preview Đèn trung tâm (giữa) -->
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1.0"
-                        android:orientation="vertical"
-                        android:gravity="center"
-                        android:background="@drawable/bg_wcam_preview_box"
-                        android:padding="6dp"
-                        android:layout_marginHorizontal="4dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Đèn trung tâm"
-                            android:textColor="#E2E8F0"
-                            android:textSize="9sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/txt_light_preview_glow"
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
-                            android:text="✨"
-                            android:textSize="22sp"
-                            android:gravity="center" />
-
-                        <TextView
-                            android:id="@+id/txt_light_preview_desc"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Giữa mặt"
-                            android:textColor="#38BDF8"
-                            android:textSize="9sp" />
-                    </LinearLayout>
-
-                    <!-- Col 3: Nút hướng nhanh + Tắt (phải) -->
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1.0"
-                        android:orientation="vertical"
-                        android:gravity="center_horizontal">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Nút hướng nhanh"
-                            android:textColor="#94A3B8"
-                            android:textSize="9sp"
-                            android:textStyle="bold"
-                            android:layout_marginBottom="3dp" />
-
-                        <!-- Nút mũi tên -->
-                        <LinearLayout
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:layout_marginBottom="2dp">
-
-                            <TextView
-                                android:id="@+id/btn_quick_left"
-                                android:layout_width="22dp"
-                                android:layout_height="22dp"
-                                android:text="←"
-                                android:textColor="#E2E8F0"
-                                android:textSize="11sp"
-                                android:gravity="center"
-                                android:background="@drawable/bg_wcam_btn"
-                                android:layout_marginEnd="2dp" />
-
-                            <TextView
-                                android:id="@+id/btn_quick_up"
-                                android:layout_width="22dp"
-                                android:layout_height="22dp"
-                                android:text="↑"
-                                android:textColor="#E2E8F0"
-                                android:textSize="11sp"
-                                android:gravity="center"
-                                android:background="@drawable/bg_wcam_btn"
-                                android:layout_marginEnd="2dp" />
-
-                            <TextView
-                                android:id="@+id/btn_quick_right"
-                                android:layout_width="22dp"
-                                android:layout_height="22dp"
-                                android:text="→"
-                                android:textColor="#E2E8F0"
-                                android:textSize="11sp"
-                                android:gravity="center"
-                                android:background="@drawable/bg_wcam_btn" />
-                        </LinearLayout>
-
-                        <!-- Nút xuống -->
-                        <TextView
-                            android:id="@+id/btn_quick_down"
-                            android:layout_width="22dp"
-                            android:layout_height="22dp"
-                            android:text="↓"
-                            android:textColor="#E2E8F0"
-                            android:textSize="11sp"
-                            android:gravity="center"
-                            android:background="@drawable/bg_wcam_btn"
-                            android:layout_marginBottom="4dp" />
-
-                        <!-- Nút Tắt đèn -->
-                        <Button
-                            android:id="@+id/btn_light_off"
-                            android:layout_width="match_parent"
-                            android:layout_height="24dp"
-                            android:text="💡 Tắt"
-                            android:textSize="9sp"
-                            android:background="@drawable/bg_wcam_btn"
-                            android:textColor="#FF5252" />
-                    </LinearLayout>
-                </LinearLayout>
-            </LinearLayout>
-
-            <!-- ══════════════════════════════════════════════════════════════════
-                 TAB 5: ĐỘ SÁNG CHỤP ẢNH (RAW EXPOSURE)
-                 ══════════════════════════════════════════════════════════════════ -->
-            <LinearLayout
-                android:id="@+id/panel_bright"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="@drawable/bg_wcam_subcard"
-                android:padding="12dp"
-                android:visibility="gone">
-
-                <!-- Header thẻ Bright -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="10dp">
-
-                    <TextView
-                        android:visibility="gone"
-                        android:layout_width="30dp"
-                        android:layout_height="30dp"
-                        android:background="@drawable/bg_wcam_icon_circle"
-                        android:text="☀️"
-                        android:gravity="center"
-                        android:textSize="15sp" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:paddingStart="8dp">
-
-                        <TextView
-                            android:visibility="gone"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Độ sáng chụp ảnh RAW"
-                            android:textColor="#FFFFFF"
-                            android:textStyle="bold"
-                            android:textSize="13sp" />
-
-                        <TextView
-                            android:visibility="gone"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Bù trừ khử chói HDR+ trên Google Camera. Video sao chụp ảnh ra vậy."
-                            android:textColor="#829AB1"
-                            android:textSize="10sp" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <!-- Label + Value Badge -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="4dp">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="Mức phơi sáng RAW"
-                        android:textColor="#E2E8F0"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/txt_bright_badge"
-                        android:layout_width="48dp"
-                        android:layout_height="24dp"
-                        android:background="@drawable/bg_wcam_badge"
-                        android:gravity="center"
-                        android:text="65%"
-                        android:textColor="#38BDF8"
-                        android:textStyle="bold"
-                        android:textSize="12sp" />
-                </LinearLayout>
-
-                <!-- SeekBar Mức sáng RAW -->
-                <SeekBar
-                    android:id="@+id/sb_raw_bright"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:max="130"
-                    android:progress="45"
-                    android:progressDrawable="@drawable/custom_seekbar_progress"
-                    android:thumb="@drawable/custom_seekbar_thumb"
-                    android:paddingVertical="8dp" />
-
-                <!-- Dải số 20% .. 65% .. 150% -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="10dp">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="20% (Tối)"
-                        android:textColor="#64748B"
-                        android:textSize="10sp" />
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:gravity="center"
-                        android:text="65% (Chuẩn HDR+)"
-                        android:textColor="#38BDF8"
-                        android:textStyle="bold"
-                        android:textSize="10sp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="150% (Sáng)"
-                        android:textColor="#64748B"
-                        android:textSize="10sp" />
-                </LinearLayout>
-
-                <!-- Preset nhanh row -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="8dp">
-
-                    <Button
-                        android:id="@+id/btn_bright_50"
-                        android:layout_width="0dp"
-                        android:layout_height="32dp"
-                        android:layout_weight="1"
-                        android:text="50%"
-                        android:textColor="#E2E8F0"
-                        android:textSize="11sp"
-                        android:background="@drawable/bg_wcam_btn"
-                        android:layout_marginEnd="4dp" />
-
-                    <Button
-                        android:id="@+id/btn_bright_65"
-                        android:layout_width="0dp"
-                        android:layout_height="32dp"
-                        android:layout_weight="1.3"
-                        android:text="65% (Chuẩn)"
-                        android:textColor="#FFFFFF"
-                        android:textStyle="bold"
-                        android:textSize="10sp"
-                        android:background="@drawable/bg_wcam_btn_active"
-                        android:layout_marginEnd="4dp" />
-
-                    <Button
-                        android:id="@+id/btn_bright_80"
-                        android:layout_width="0dp"
-                        android:layout_height="32dp"
-                        android:layout_weight="1"
-                        android:text="80%"
-                        android:textColor="#E2E8F0"
-                        android:textSize="11sp"
-                        android:background="@drawable/bg_wcam_btn"
-                        android:layout_marginEnd="4dp" />
-
-                    <Button
-                        android:id="@+id/btn_bright_100"
-                        android:layout_width="0dp"
-                        android:layout_height="32dp"
-                        android:layout_weight="1"
-                        android:text="100%"
-                        android:textColor="#E2E8F0"
-                        android:textSize="11sp"
-                        android:background="@drawable/bg_wcam_btn" />
-                </LinearLayout>
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="💡 Mức 65% giúp ảnh chụp ra có độ sáng, tương phản và màu sắc tự nhiên giống hệt video gốc."
-                    android:textColor="#64748B"
-                    android:textSize="10sp" />
-
-                <!-- Phân cách -->
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="#2238BDF8"
-                    android:layout_marginTop="10dp"
-                    android:layout_marginBottom="8dp" />
-
-                <!-- Header: Độ trong suốt menu nổi & Badge -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="6dp">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="👁️ Độ Trong Suốt Menu"
-                        android:textColor="#E2E8F0"
-                        android:textStyle="bold"
-                        android:textSize="12sp" />
-
-                    <TextView
-                        android:id="@+id/txt_tab_opacity_badge"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="85%"
-                        android:textColor="#38BDF8"
-                        android:textStyle="bold"
-                        android:textSize="12sp"
-                        android:background="@drawable/bg_wcam_badge"
-                        android:paddingHorizontal="7dp"
-                        android:paddingVertical="2dp" />
-                </LinearLayout>
-
-                <!-- Các nút chọn nhanh độ trong suốt 80, 85, 90, 95, 100 -->
-                <SeekBar
-                    android:id="@+id/sb_opacity"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:max="100"
-                    android:progress="85"
-                    android:progressDrawable="@drawable/custom_seekbar_progress"
-                    android:thumb="@drawable/custom_seekbar_thumb"
-                    android:paddingVertical="8dp"
-                    android:layout_marginBottom="2dp" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="4dp">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="0% (Đục rõ)" android:textColor="#64748B" android:textSize="10sp" />
-                    <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="50%" android:textColor="#64748B" android:textSize="10sp" />
-                    <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="100% (Trong suốt)" android:textColor="#64748B" android:textSize="10sp" />
-                </LinearLayout>
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="💡 Kéo sang phải để tăng độ trong suốt nhìn xuyên qua video."
-                    android:textColor="#64748B"
-                    android:textSize="10sp" />
-            </LinearLayout>
-        <!-- ══════════════════════════════════════════════════════════════════
-             TAB 6: KYC FLASH SYNC (Liveness Color)
-             ══════════════════════════════════════════════════════════════════ -->
-            <LinearLayout
-                android:id="@+id/panel_flash"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="@drawable/bg_wcam_subcard"
-                android:padding="12dp"
-                android:visibility="gone">
-
-                <!-- Header -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="12dp">
-
-                    <TextView
-                        android:visibility="gone"
-                        android:layout_width="30dp"
-                        android:layout_height="30dp"
-                        android:background="@drawable/bg_wcam_icon_circle"
-                        android:text="🎭"
-                        android:gravity="center"
-                        android:textSize="15sp" />
-
-                    <LinearLayout
-                        android:visibility="gone"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:paddingStart="8dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="KYC Flash Sync"
-                            android:textColor="#FFFFFF"
-                            android:textStyle="bold"
-                            android:textSize="13sp" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Tự động detect &amp; sync màu flash của app KYC vào video"
-                            android:textColor="#829AB1"
-                            android:textSize="10sp" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <!-- Bật/Tắt Flash Sync -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="10dp">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="⚡ Flash Sync"
-                        android:textColor="#E2E8F0"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/txt_flash_status"
-                        android:layout_width="60dp"
-                        android:layout_height="24dp"
-                        android:background="@drawable/bg_wcam_badge"
-                        android:gravity="center"
-                        android:text="TẮT"
-                        android:textColor="#94A3B8"
-                        android:textStyle="bold"
-                        android:textSize="11sp" />
-
-                    <Switch
-                        android:id="@+id/switch_flash_sync"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:checked="false"
-                        android:layout_marginStart="6dp"
-                        android:scaleX="0.85"
-                        android:scaleY="0.85" />
-                </LinearLayout>
-
-                <!-- Chế độ Detect -->
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Chế độ phát hiện flash:"
-                    android:textColor="#94A3B8"
-                    android:textSize="11sp"
-                    android:layout_marginBottom="6dp" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="10dp">
-
-                    <TextView
-                        android:id="@+id/btn_flash_mode_diff"
-                        android:layout_width="0dp"
-                        android:layout_height="36dp"
-                        android:layout_weight="1"
-                        android:text="📷 Frame Diff"
-                        android:textColor="#E2E8F0"
-                        android:textSize="11sp"
-                        android:gravity="center"
-                        android:background="@drawable/bg_wcam_btn_active"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:layout_marginEnd="4dp" />
-
-                    <TextView
-                        android:id="@+id/btn_flash_mode_screen"
-                        android:layout_width="0dp"
-                        android:layout_height="36dp"
-                        android:layout_weight="1"
-                        android:text="🖥️ Màn hình"
-                        android:textColor="#E2E8F0"
-                        android:textSize="11sp"
-                        android:gravity="center"
-                        android:background="@drawable/bg_wcam_btn"
-                        android:clickable="true"
-                        android:focusable="true" />
-                </LinearLayout>
-
-                <!-- Cường độ tint -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="4dp">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="Cường độ màu"
-                        android:textColor="#E2E8F0"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/txt_flash_intensity_badge"
-                        android:layout_width="38dp"
-                        android:layout_height="24dp"
-                        android:background="@drawable/bg_wcam_badge"
-                        android:gravity="center"
-                        android:text="35"
-                        android:textColor="#38BDF8"
-                        android:textStyle="bold"
-                        android:textSize="12sp" />
-                </LinearLayout>
-
-                <SeekBar
-                    android:id="@+id/sb_flash_intensity"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:max="100"
-                    android:progress="35"
-                    android:progressDrawable="@drawable/custom_seekbar_progress"
-                    android:thumb="@drawable/custom_seekbar_thumb"
-                    android:paddingVertical="8dp" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="10dp">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="0" android:textColor="#64748B" android:textSize="10sp" />
-                    <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="50" android:textColor="#64748B" android:textSize="10sp" />
-                    <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                        android:text="100" android:textColor="#64748B" android:textSize="10sp" />
-                </LinearLayout>
-
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="💡 Bật khi làm KYC. Flash Diff tự động, Màn hình cần cấp quyền Screen Capture."
-                    android:textColor="#64748B"
-                    android:textSize="10sp" />
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="#334155"
-                    android:layout_marginVertical="10dp" />
-
-                <!-- Bật/Tắt Live Feed SHM -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginBottom="6dp">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="📡 Live Feed SHM (0ms)"
-                        android:textColor="#E2E8F0"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/txt_shm_status"
-                        android:layout_width="60dp"
-                        android:layout_height="24dp"
-                        android:background="@drawable/bg_wcam_badge"
-                        android:gravity="center"
-                        android:text="TẮT"
-                        android:textColor="#94A3B8"
-                        android:textStyle="bold"
-                        android:textSize="11sp" />
-
-                    <Switch
-                        android:id="@+id/switch_live_shm"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:checked="false"
-                        android:layout_marginStart="6dp"
-                        android:scaleX="0.85"
-                        android:scaleY="0.85" />
-                </LinearLayout>
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="💡 Stream trực tiếp qua Shared Memory (0ms lag, ưu tiên cao nhất, bypass camera pipeline)."
-                    android:textColor="#64748B"
-                    android:textSize="10sp" />
-
-            </LinearLayout>
-        </FrameLayout>
-
-        <!-- ── BOTTOM TAB NAVIGATION BAR (4 TABS) ────────────────────────── -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:background="@drawable/bg_wcam_subcard"
-            android:padding="3dp"
-            android:layout_marginTop="8dp">
-
-            <!-- TAB 1: Hạt nhiễu -->
-            <LinearLayout
-                android:id="@+id/tab_nav_noise"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:background="@drawable/bg_wcam_tab_active"
-                android:clickable="true"
-                android:focusable="true">
+                android:text="1.00x"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:gravity="center" />
 
-                <TextView
-                    android:id="@+id/tab_icon_noise"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🔆"
-                    android:textColor="#FFFFFF"
-                    android:textSize="13sp" />
+            <Button
+                android:id="@+id/btn_float_zoom_in"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:text="+"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:padding="0dp" />
+        </LinearLayout>
 
-                <TextView
-                    android:id="@+id/tab_txt_noise"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Hạt nhiễu"
+        <!-- D-Pad Pan -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:layout_marginTop="6dp">
+
+            <Button
+                android:id="@+id/btn_float_up"
+                android:layout_width="60dp"
+                android:layout_height="32dp"
+                android:text="▲"
+                android:textSize="11sp"
+                android:padding="0dp" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <Button
+                    android:id="@+id/btn_float_left"
+                    android:layout_width="54dp"
+                    android:layout_height="32dp"
+                    android:text="◀"
+                    android:textSize="11sp"
+                    android:padding="0dp"
+                    android:layout_marginEnd="4dp" />
+
+                <Button
+                    android:id="@+id/btn_float_reset"
+                    android:layout_width="60dp"
+                    android:layout_height="32dp"
+                    android:text="↺ RESET"
+                    android:backgroundTint="#FF6F00"
                     android:textColor="#FFFFFF"
                     android:textStyle="bold"
-                    android:textSize="9sp" />
+                    android:textSize="9sp"
+                    android:padding="0dp" />
+
+                <Button
+                    android:id="@+id/btn_float_right"
+                    android:layout_width="54dp"
+                    android:layout_height="32dp"
+                    android:text="▶"
+                    android:textSize="11sp"
+                    android:padding="0dp"
+                    android:layout_marginStart="4dp" />
             </LinearLayout>
 
-            <!-- TAB 2: Thu phóng -->
-            <LinearLayout
-                android:id="@+id/tab_nav_zoom"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:background="@drawable/bg_wcam_tab_inactive"
-                android:clickable="true"
-                android:focusable="true">
-
-                <TextView
-                    android:id="@+id/tab_icon_zoom"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🔍"
-                    android:textColor="#829AB1"
-                    android:textSize="13sp" />
-
-                <TextView
-                    android:id="@+id/tab_txt_zoom"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Thu phóng"
-                    android:textColor="#829AB1"
-                    android:textSize="9sp" />
-            </LinearLayout>
-
-            <!-- TAB 3: Dịch chuyển -->
-            <LinearLayout
-                android:id="@+id/tab_nav_pan"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:background="@drawable/bg_wcam_tab_inactive"
-                android:clickable="true"
-                android:focusable="true">
-
-                <TextView
-                    android:id="@+id/tab_icon_pan"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🎯"
-                    android:textColor="#829AB1"
-                    android:textSize="13sp" />
-
-                <TextView
-                    android:id="@+id/tab_txt_pan"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Dịch chuyển"
-                    android:textColor="#829AB1"
-                    android:textSize="9sp" />
-            </LinearLayout>
-
-            <!-- TAB 4: Ánh sáng & Đổ bóng -->
-            <!-- TAB 4: Đèn 3D -->
-            <LinearLayout
-                android:id="@+id/tab_nav_light"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:background="@drawable/bg_wcam_tab_inactive"
-                android:clickable="true"
-                android:focusable="true">
-
-                <TextView
-                    android:id="@+id/tab_icon_light"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="💡"
-                    android:textColor="#829AB1"
-                    android:textSize="13sp" />
-
-                <TextView
-                    android:id="@+id/tab_txt_light"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Đèn 3D"
-                    android:textColor="#829AB1"
-                    android:textSize="9sp" />
-            </LinearLayout>
-
-            <!-- TAB 5: Độ sáng RAW -->
-            <LinearLayout
-                android:id="@+id/tab_nav_bright"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:background="@drawable/bg_wcam_tab_inactive"
-                android:clickable="true"
-                android:focusable="true">
-
-                <TextView
-                    android:id="@+id/tab_icon_bright"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="☀️"
-                    android:textColor="#829AB1"
-                    android:textSize="13sp" />
-
-                <TextView
-                    android:id="@+id/tab_txt_bright"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Độ sáng"
-                    android:textColor="#829AB1"
-                    android:textSize="9sp" />
-            </LinearLayout>
-
-            <!-- TAB 6: KYC Flash -->
-            <LinearLayout
-                android:id="@+id/tab_nav_flash"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:background="@drawable/bg_wcam_tab_inactive"
-                android:clickable="true"
-                android:focusable="true">
-
-                <TextView
-                    android:id="@+id/tab_icon_flash"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🎭"
-                    android:textColor="#829AB1"
-                    android:textSize="13sp" />
-
-                <TextView
-                    android:id="@+id/tab_txt_flash"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="KYC"
-                    android:textColor="#829AB1"
-                    android:textSize="9sp" />
-            </LinearLayout>
+            <Button
+                android:id="@+id/btn_float_down"
+                android:layout_width="60dp"
+                android:layout_height="32dp"
+                android:text="▼"
+                android:textSize="11sp"
+                android:padding="0dp" />
         </LinearLayout>
+
+        <!-- KYC Flash / Color Switch -->
+        <Switch
+            android:id="@+id/switch_float_kyc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Chớp màu / Đổi màu"
+            android:textColor="#FF4081"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:layout_marginTop="4dp"
+            android:padding="2dp" />
+
+        <!-- Nút Đổi chế độ màu (Tự động chớp / Trắng / Xanh / Đỏ / Vàng) -->
+        <Button
+            android:id="@+id/btn_float_color_mode"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:text="🎨 CHẾ ĐỘ: TỰ ĐỘNG CHỚP"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:backgroundTint="#AD1457"
+            android:textColor="#FFFFFF"
+            android:padding="0dp"
+            android:layout_marginTop="2dp" />
+
     </LinearLayout>
 </FrameLayout>

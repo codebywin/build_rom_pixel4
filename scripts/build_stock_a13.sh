@@ -282,6 +282,7 @@ if [ "$STOCK_MODE" == "1" ]; then
     apply_patch "frameworks/base" "hide_accessibility_services.patch"
     apply_patch "frameworks/base" "bypass_overlay_tapjacking.patch"
     apply_patch "frameworks/base" "hide_sensitive_packages.patch"
+    apply_patch "frameworks/base" "fake_gps_system.patch"
 
     # Cấu hình SELinux cho các file Virtual Camera & Virtual Mic trong /data/local/tmp
     echo -e "   [SEPOLICY] Cấu hình quyền SELinux cho VCam trong system/sepolicy..."
@@ -303,11 +304,6 @@ allow appdomain vcam_data_file:file { read open getattr map };
 # Allow shell (adb) to manage VCAM files
 allow shell vcam_data_file:dir { create read write open getattr add_name remove_name search };
 allow shell vcam_data_file:file { create read write open getattr unlink rename setattr };
-
-# Allow cameraserver to traverse /data/local/tmp and access only labeled VCAM files
-allow cameraserver shell_data_file:dir { search };
-allow cameraserver vcam_data_file:dir { read open getattr search remove_name };
-allow cameraserver vcam_data_file:file { read open getattr map unlink };
 EOF
 
         # 2. Gán nhãn cho các file vcam trong /data/local/tmp
@@ -421,8 +417,8 @@ on post-fs-data
     write /data/local/tmp/vcam_disable 0
     write /data/local/tmp/vcam_mic_disable 0
     write /data/local/tmp/vcam_mic_mix 0
-    write /data/local/tmp/vcam_color_sync 1
-    write /data/local/tmp/vcam_kyc_flash 1
+    write /data/local/tmp/vcam_color_sync 0
+    write /data/local/tmp/vcam_kyc_flash 0
     chmod 0666 /data/local/tmp/vcam_pause
     chmod 0666 /data/local/tmp/vcam_disable
     chmod 0666 /data/local/tmp/vcam_mic_disable

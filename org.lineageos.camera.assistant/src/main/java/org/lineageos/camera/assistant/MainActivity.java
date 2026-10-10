@@ -5,18 +5,15 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
-import android.media.projection.MediaProjectionManager;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Build;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.RadioButton;
-import android.widget.RadioGroup;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.widget.SeekBar;
 import android.view.View;
 
 import android.os.Environment;
@@ -25,6 +22,8 @@ import android.util.Log;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.util.Locale;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.InputStream;
@@ -32,18 +31,12 @@ import java.io.OutputStream;
 
 public class MainActivity extends Activity {
     private static final int REQ_PICK_VIDEO = 101;
-    private static final int REQ_PICK_AUDIO = 102;
-    private static final int REQ_MEDIA_PROJECTION = 103;
-    private static final int REQ_PICK_IMAGE = 104;
 
     private static final String FLAG_DISABLE = "vcam_disable";
-    private static final String FLAG_MIC_DISABLE = "vcam_mic_disable";
-    private static final String FLAG_MIC_MIX = "vcam_mic_mix";
+
+    private static final String PREF_VCAM = "vcam_prefs";
 
     private static final String TARGET_VIDEO = "vcam.mp4";
-    private static final String TARGET_AUDIO = "vcam.wav";
-    private static final String TARGET_IMAGE = "vcam.jpg";
-    public static final String SDCARD_DIR = "/sdcard/CameraAssistant/";
 
     private TextView txtLicenseBadge;
     private TextView txtDeviceSerial;
@@ -54,41 +47,8 @@ public class MainActivity extends Activity {
     private Button btnResetLicense;
 
     private Switch switchVcam;
-    private Switch switchSwapUv;
     private Button btnOpenFloating;
     private TextView txtVideoInfo;
-    private TextView txtImageInfo;
-    private TextView txtAudioInfo;
-    private RadioGroup rgAudioMode;
-    private RadioButton rbAudioVirtual;
-    private RadioButton rbAudioMix;
-    private RadioButton rbAudioReal;
-
-    private static final String FILE_RAW_BRIGHT = "vcam_raw_bright";
-    private TextView txtMainBrightBadge;
-    private SeekBar sbMainRawBright;
-    private Button btnMainBright50, btnMainBright65, btnMainBright80, btnMainBright100;
-    private int mCurrentRawBright = 65;
-
-    private static final String FILE_MIC_BOOST = "vcam_mic_boost";
-    private Button btnMainMicBoost;
-    private int mCurrentBoostIndex = 2; // Default x3.0
-
-    private static final String[] BOOST_LABELS = new String[] {
-        "🎙️ KHUẾCH ĐẠI MIC: x1.0 (GỐC)",
-        "🎙️ KHUẾCH ĐẠI MIC: x2.0 (VỪA)",
-        "🎙️ KHUẾCH ĐẠI MIC: x3.0 (TO RÕ - KHUYÊN DÙNG)",
-        "🎙️ KHUẾCH ĐẠI MIC: x4.5 (CỰC TO)",
-        "🎙️ KHUẾCH ĐẠI MIC: x6.0 (TỐI ĐA)"
-    };
-
-    private static final String[] BOOST_VALS = new String[] {
-        "1.0",
-        "2.0",
-        "3.0",
-        "4.5",
-        "6.0"
-    };
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -100,13 +60,6 @@ public class MainActivity extends Activity {
         LocaleManager.applyLocale(this);
         super.onCreate(savedInstanceState);
         LicenseManager.init(this);
-        if (LicenseManager.isAppTampered(this)) {
-            Toast.makeText(this, "Cảnh báo: Phát hiện ứng dụng bị can thiệp trái phép!", Toast.LENGTH_LONG).show();
-            finishAffinity();
-            return;
-        }
-        LicenseManager.ensureLicenseSharedSync();
-        migrateAndEnsureStorageDir();
         requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
         setContentView(R.layout.activity_main);
 
@@ -123,54 +76,10 @@ public class MainActivity extends Activity {
         }
 
         switchVcam = findViewById(R.id.switch_vcam);
-        switchSwapUv = findViewById(R.id.switch_swap_uv);
         btnOpenFloating = findViewById(R.id.btn_open_floating);
         txtVideoInfo = findViewById(R.id.txt_video_info);
-        txtImageInfo = findViewById(R.id.txt_image_info);
-        txtAudioInfo = findViewById(R.id.txt_audio_info);
-        rgAudioMode = findViewById(R.id.rg_audio_mode);
-        rbAudioVirtual = findViewById(R.id.rb_audio_virtual);
-        rbAudioMix = findViewById(R.id.rb_audio_mix);
-        rbAudioReal = findViewById(R.id.rb_audio_real);
-        btnMainMicBoost = findViewById(R.id.btn_main_mic_boost);
-        if (btnMainMicBoost != null) {
-            btnMainMicBoost.setOnClickListener(v -> cycleMicBoost());
-        }
-
-        txtMainBrightBadge = findViewById(R.id.txt_main_bright_badge);
-        sbMainRawBright = findViewById(R.id.sb_main_raw_bright);
-        btnMainBright50 = findViewById(R.id.btn_main_bright_50);
-        btnMainBright65 = findViewById(R.id.btn_main_bright_65);
-        btnMainBright80 = findViewById(R.id.btn_main_bright_80);
-        btnMainBright100 = findViewById(R.id.btn_main_bright_100);
-
-        if (sbMainRawBright != null) {
-            sbMainRawBright.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-                @Override
-                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                    mCurrentRawBright = progress + 20;
-                    if (txtMainBrightBadge != null) {
-                        txtMainBrightBadge.setText(mCurrentRawBright + "%");
-                    }
-                    updateMainBrightButtons();
-                    if (fromUser) {
-                        writeRawBright(mCurrentRawBright);
-                    }
-                }
-                @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-                @Override public void onStopTrackingTouch(SeekBar seekBar) {
-                    writeRawBright(mCurrentRawBright);
-                }
-            });
-        }
-        if (btnMainBright50 != null) btnMainBright50.setOnClickListener(v -> setMainRawBright(50));
-        if (btnMainBright65 != null) btnMainBright65.setOnClickListener(v -> setMainRawBright(65));
-        if (btnMainBright80 != null) btnMainBright80.setOnClickListener(v -> setMainRawBright(80));
-        if (btnMainBright100 != null) btnMainBright100.setOnClickListener(v -> setMainRawBright(100));
 
         Button btnPickVideo = findViewById(R.id.btn_pick_video);
-        Button btnPickImage = findViewById(R.id.btn_pick_image);
-        Button btnPickAudio = findViewById(R.id.btn_pick_audio);
         Button btnApply = findViewById(R.id.btn_apply);
 
         // 0. Sao chép Serial
@@ -237,7 +146,7 @@ public class MainActivity extends Activity {
             }
         });
 
-        // 3. Chọn Video / Audio
+        // 3. Chọn Video
         btnPickVideo.setOnClickListener(v -> {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
                 try {
@@ -250,75 +159,22 @@ public class MainActivity extends Activity {
             }
             Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
             intent.setType("video/*");
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.putExtra(Intent.EXTRA_LOCAL_ONLY, true);
             startActivityForResult(intent, REQ_PICK_VIDEO);
-        });
-
-        if (btnPickImage != null) {
-            btnPickImage.setOnClickListener(v -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
-                    try {
-                        Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
-                        intent.setData(Uri.parse("package:" + getPackageName()));
-                        startActivity(intent);
-                        Toast.makeText(this, "Vui lòng bật quyền 'Cho phép quản lý tất cả tệp'!", Toast.LENGTH_LONG).show();
-                        return;
-                    } catch (Throwable ignored) {}
-                }
-                Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-                intent.setType("image/*");
-                startActivityForResult(intent, REQ_PICK_IMAGE);
-            });
-        }
-
-        btnPickAudio.setOnClickListener(v -> {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !android.os.Environment.isExternalStorageManager()) {
-                try {
-                    Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
-                    intent.setData(Uri.parse("package:" + getPackageName()));
-                    startActivity(intent);
-                    Toast.makeText(this, "Vui lòng bật quyền 'Cho phép quản lý tất cả tệp'!", Toast.LENGTH_LONG).show();
-                    return;
-                } catch (Throwable ignored) {}
-            }
-            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-            intent.setType("audio/*");
-            startActivityForResult(intent, REQ_PICK_AUDIO);
         });
 
         // 4. Lưu cài đặt thủ công
         btnApply.setOnClickListener(v -> applySettings());
 
+        ensureControlFiles();
         loadCurrentState();
         updateLicenseUI();
-
-        if (getIntent() != null && "request_media_projection".equals(getIntent().getStringExtra("action"))) {
-            requestMediaProjectionPermission();
-        }
-    }
-
-    private void setupAudioModeListener() {
-        if (rgAudioMode == null) return;
-        rgAudioMode.setOnCheckedChangeListener((group, checkedId) -> {
-            if (checkedId == R.id.rb_audio_real) {
-                writeFlag(FLAG_MIC_DISABLE, true);
-                writeFlag(FLAG_MIC_MIX, false);
-                Toast.makeText(this, "🎙️ Chế độ Micro: Dùng Mic thật", Toast.LENGTH_SHORT).show();
-            } else if (checkedId == R.id.rb_audio_mix) {
-                writeFlag(FLAG_MIC_DISABLE, false);
-                writeFlag(FLAG_MIC_MIX, true);
-                Toast.makeText(this, "🎙️ Chế độ Micro: Trộn âm thanh Mic + Nhạc", Toast.LENGTH_SHORT).show();
-            } else if (checkedId == R.id.rb_audio_virtual) {
-                writeFlag(FLAG_MIC_DISABLE, false);
-                writeFlag(FLAG_MIC_MIX, false);
-                Toast.makeText(this, "🎙️ Chế độ Micro: Phát nhạc ảo", Toast.LENGTH_SHORT).show();
-            }
-        });
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        LicenseManager.ensureLicenseSharedSync();
         loadCurrentState();
         updateLicenseUI();
         LicenseManager.checkOnlineAsync((isValid, message) -> runOnUiThread(() -> {
@@ -347,61 +203,6 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         FloatingControlService.setVcamStateListener(null);
-    }
-
-    @Override
-    protected void onNewIntent(Intent intent) {
-        super.onNewIntent(intent);
-        setIntent(intent);
-        if (intent != null && "request_media_projection".equals(intent.getStringExtra("action"))) {
-            requestMediaProjectionPermission();
-        }
-    }
-
-    private void requestMediaProjectionPermission() {
-        MediaProjectionManager mpm = (MediaProjectionManager)
-                getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-        if (mpm == null) {
-            Toast.makeText(this, "Thiết bị không hỗ trợ Screen Capture", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        try {
-            startActivityForResult(mpm.createScreenCaptureIntent(), REQ_MEDIA_PROJECTION);
-        } catch (Throwable e) {
-            Toast.makeText(this, "Không thể yêu cầu quyền Screen Capture: " + e.getMessage(),
-                    Toast.LENGTH_LONG).show();
-        }
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == REQ_MEDIA_PROJECTION) {
-            if (resultCode == RESULT_OK && data != null) {
-                FloatingControlService svc = FloatingControlService.getInstance();
-                if (svc != null) {
-                    svc.startFlashScreenCapMode(resultCode, data);
-                    Toast.makeText(this, "✅ Đã cấp quyền Screen Capture cho KYC Flash!", Toast.LENGTH_SHORT).show();
-                } else {
-                    Toast.makeText(this, "Chưa mở Camera Assistant HUD, vui lòng mở trước",
-                            Toast.LENGTH_LONG).show();
-                }
-            } else {
-                Toast.makeText(this, "❌ Không cấp quyền Screen Capture", Toast.LENGTH_SHORT).show();
-            }
-            return;
-        }
-        // File picker (video / image / audio)
-        if (resultCode == RESULT_OK && data != null && data.getData() != null) {
-            Uri uri = data.getData();
-            if (requestCode == REQ_PICK_VIDEO) {
-                copyUriToDualLocations(uri, TARGET_VIDEO, getString(R.string.toast_video_updated));
-            } else if (requestCode == REQ_PICK_IMAGE) {
-                copyUriToDualLocations(uri, TARGET_IMAGE, getString(R.string.toast_image_updated));
-            } else if (requestCode == REQ_PICK_AUDIO) {
-                copyUriToDualLocations(uri, TARGET_AUDIO, getString(R.string.toast_audio_updated));
-            }
-        }
-        super.onActivityResult(requestCode, resultCode, data);
     }
 
     private void showLanguageDialog() {
@@ -473,18 +274,6 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void setupSwapUvListener() {
-        if (switchSwapUv == null) return;
-        switchSwapUv.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            writeFlag("vcam_swap_uv", isChecked);
-            if (isChecked) {
-                Toast.makeText(this, R.string.toast_swap_uv_on, Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(this, R.string.toast_swap_uv_off, Toast.LENGTH_SHORT).show();
-            }
-        });
-    }
-
     private void updateLicenseUI() {
         LicenseManager.LicenseInfo lic = LicenseManager.checkLicense();
         if (lic.isValid) {
@@ -527,129 +316,18 @@ public class MainActivity extends Activity {
         switchVcam.setChecked(!isDisabled);
         setupVcamSwitchListener();
 
-        if (switchSwapUv != null) {
-            boolean isSwapUv = isFlagActive("vcam_swap_uv");
-            switchSwapUv.setOnCheckedChangeListener(null);
-            switchSwapUv.setChecked(isSwapUv);
-            setupSwapUvListener();
-        }
-
-        if (rgAudioMode != null) {
-            rgAudioMode.setOnCheckedChangeListener(null);
-        }
-        boolean isMicDisabled = isFlagActive(FLAG_MIC_DISABLE);
-        boolean isMicMix = isFlagActive(FLAG_MIC_MIX);
-        if (isMicDisabled) {
-            rbAudioReal.setChecked(true);
-        } else if (isMicMix) {
-            rbAudioMix.setChecked(true);
-        } else {
-            rbAudioVirtual.setChecked(true);
-        }
-        setupAudioModeListener();
-
         File videoFile = new File("/data/local/tmp/" + TARGET_VIDEO);
-        File sdVideo = new File(SDCARD_DIR + TARGET_VIDEO);
-        if (!sdVideo.exists()) sdVideo = new File("/sdcard/" + TARGET_VIDEO);
-        if (sdVideo.exists() && sdVideo.length() > 0 && (!videoFile.exists() || videoFile.length() != sdVideo.length())) {
-            final File finalSdVideo = sdVideo;
-            sIoExecutor.execute(() -> {
-                try {
-                    String cmd = "cp '" + finalSdVideo.getAbsolutePath() + "' '/data/local/tmp/" + TARGET_VIDEO + "' && " +
-                                 "chmod 666 '/data/local/tmp/" + TARGET_VIDEO + "' && " +
-                                 "chown shell:shell '/data/local/tmp/" + TARGET_VIDEO + "' 2>/dev/null";
-                    Runtime.getRuntime().exec(new String[]{"su", "-c", cmd}).waitFor();
-                } catch (Throwable ignored) {}
-            });
-            videoFile = sdVideo;
-        } else if (!videoFile.exists()) {
-            videoFile = sdVideo;
+        if (!videoFile.exists() || videoFile.length() == 0) {
+            File sdVideo = new File("/sdcard/" + TARGET_VIDEO);
+            if (sdVideo.exists() && sdVideo.length() > 0) {
+                videoFile = sdVideo;
+            }
         }
-
-        File imgFile = new File("/data/local/tmp/" + TARGET_IMAGE);
-        File sdImg = new File(SDCARD_DIR + TARGET_IMAGE);
-        if (!sdImg.exists()) sdImg = new File("/sdcard/" + TARGET_IMAGE);
-        if (sdImg.exists() && sdImg.length() > 0 && (!imgFile.exists() || imgFile.length() != sdImg.length())) {
-            final File finalSdImg = sdImg;
-            sIoExecutor.execute(() -> {
-                try {
-                    String cmd = "cp '" + finalSdImg.getAbsolutePath() + "' '/data/local/tmp/" + TARGET_IMAGE + "' && " +
-                                 "chmod 666 '/data/local/tmp/" + TARGET_IMAGE + "' && " +
-                                 "chown shell:shell '/data/local/tmp/" + TARGET_IMAGE + "' 2>/dev/null";
-                    Runtime.getRuntime().exec(new String[]{"su", "-c", cmd}).waitFor();
-                } catch (Throwable ignored) {}
-            });
-            imgFile = sdImg;
-        } else if (!imgFile.exists()) {
-            imgFile = sdImg;
-        }
-
-        boolean hasVideo = videoFile.exists() && videoFile.length() > 0;
-        boolean hasImg = imgFile.exists() && imgFile.length() > 0;
-        boolean isImgActive = hasImg && (!hasVideo || imgFile.lastModified() > videoFile.lastModified());
-        boolean isVideoActive = hasVideo && (!hasImg || videoFile.lastModified() >= imgFile.lastModified());
-
-        if (hasVideo) {
-            String status = isVideoActive ? "  [🟢 ĐANG DÙNG]" : "";
-            txtVideoInfo.setText("Video: " + videoFile.getAbsolutePath() + " (" + (videoFile.length() / 1024 / 1024) + " MB)" + status);
+        if (videoFile.exists() && videoFile.length() > 0) {
+            txtVideoInfo.setText("Video: " + videoFile.getAbsolutePath() + " (" + formatFileSize(videoFile.length()) + ")");
         } else {
             txtVideoInfo.setText("Chưa có video, hệ thống dùng mặc định");
         }
-
-        if (txtImageInfo != null) {
-            if (hasImg) {
-                String status = isImgActive ? "  [🟢 ĐANG DÙNG]" : "";
-                txtImageInfo.setText("Hình ảnh: " + imgFile.getAbsolutePath() + " (" + (imgFile.length() / 1024) + " KB)" + status);
-            } else {
-                txtImageInfo.setText("Chưa có hình ảnh nào được chọn");
-            }
-        }
-
-        File audioFile = new File("/data/local/tmp/" + TARGET_AUDIO);
-        File sdAudio = new File(SDCARD_DIR + TARGET_AUDIO);
-        if (!sdAudio.exists()) sdAudio = new File("/sdcard/" + TARGET_AUDIO);
-        if (sdAudio.exists() && sdAudio.length() > 0 && (!audioFile.exists() || audioFile.length() != sdAudio.length())) {
-            final File finalSdAudio = sdAudio;
-            sIoExecutor.execute(() -> {
-                try {
-                    String cmd = "cp '" + finalSdAudio.getAbsolutePath() + "' '/data/local/tmp/" + TARGET_AUDIO + "' && " +
-                                 "chmod 666 '/data/local/tmp/" + TARGET_AUDIO + "' && " +
-                                 "chown shell:shell '/data/local/tmp/" + TARGET_AUDIO + "' 2>/dev/null";
-                    Runtime.getRuntime().exec(new String[]{"su", "-c", cmd}).waitFor();
-                } catch (Throwable ignored) {}
-            });
-            audioFile = sdAudio;
-        } else if (!audioFile.exists()) {
-            audioFile = sdAudio;
-        }
-
-        if (audioFile.exists() && audioFile.length() > 0) {
-            txtAudioInfo.setText("Audio: " + audioFile.getAbsolutePath() + " (" + (audioFile.length() / 1024 / 1024) + " MB)");
-        } else {
-            txtAudioInfo.setText("Chưa có audio, hệ thống dùng mặc định");
-        }
-
-        String savedBoost = readStringFile("/data/local/tmp/" + FILE_MIC_BOOST);
-        if (savedBoost.isEmpty()) savedBoost = readStringFile(SDCARD_DIR + FILE_MIC_BOOST);
-        if (savedBoost.isEmpty()) savedBoost = readStringFile("/sdcard/" + FILE_MIC_BOOST);
-        for (int i = 0; i < BOOST_VALS.length; i++) {
-            if (BOOST_VALS[i].equals(savedBoost)) {
-                mCurrentBoostIndex = i;
-                break;
-            }
-        }
-        updateMicBoostUi();
-
-        mCurrentRawBright = readIntValue(FILE_RAW_BRIGHT, 65);
-        if (mCurrentRawBright < 20) mCurrentRawBright = 20;
-        if (mCurrentRawBright > 150) mCurrentRawBright = 150;
-        if (sbMainRawBright != null) {
-            sbMainRawBright.setProgress(mCurrentRawBright - 20);
-        }
-        if (txtMainBrightBadge != null) {
-            txtMainBrightBadge.setText(mCurrentRawBright + "%");
-        }
-        updateMainBrightButtons();
     }
 
     private void applySettings() {
@@ -658,91 +336,11 @@ public class MainActivity extends Activity {
             writeFlag(FLAG_DISABLE, !isChecked);
             FloatingControlService.syncVcamStateFromActivity(isChecked);
 
-            if (rbAudioReal.isChecked()) {
-                writeFlag(FLAG_MIC_DISABLE, true);
-                writeFlag(FLAG_MIC_MIX, false);
-            } else if (rbAudioMix.isChecked()) {
-                writeFlag(FLAG_MIC_DISABLE, false);
-                writeFlag(FLAG_MIC_MIX, true);
-            } else {
-                writeFlag(FLAG_MIC_DISABLE, false);
-                writeFlag(FLAG_MIC_MIX, false);
-            }
-
-            writeBoostVal(BOOST_VALS[mCurrentBoostIndex]);
-            writeRawBright(mCurrentRawBright);
-
             Toast.makeText(this, R.string.toast_saved, Toast.LENGTH_SHORT).show();
             loadCurrentState();
         } catch (Exception e) {
             Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
-    }
-
-    private void cycleMicBoost() {
-        mCurrentBoostIndex = (mCurrentBoostIndex + 1) % BOOST_LABELS.length;
-        updateMicBoostUi();
-        writeBoostVal(BOOST_VALS[mCurrentBoostIndex]);
-        Toast.makeText(this, BOOST_LABELS[mCurrentBoostIndex], Toast.LENGTH_SHORT).show();
-    }
-
-    private void updateMicBoostUi() {
-        if (btnMainMicBoost != null) {
-            btnMainMicBoost.setText(BOOST_LABELS[mCurrentBoostIndex]);
-        }
-    }
-
-    private void writeBoostVal(String val) {
-        writeStringFile("/data/local/tmp/" + FILE_MIC_BOOST, val);
-        writeStringFile(SDCARD_DIR + FILE_MIC_BOOST, val);
-        deleteFileSafely(new File("/sdcard/" + FILE_MIC_BOOST));
-        deleteFileSafely(new File("/storage/emulated/0/" + FILE_MIC_BOOST));
-    }
-
-    private void setMainRawBright(int val) {
-        mCurrentRawBright = val;
-        if (mCurrentRawBright < 20) mCurrentRawBright = 20;
-        if (mCurrentRawBright > 150) mCurrentRawBright = 150;
-        if (sbMainRawBright != null) {
-            sbMainRawBright.setProgress(mCurrentRawBright - 20);
-        }
-        if (txtMainBrightBadge != null) {
-            txtMainBrightBadge.setText(mCurrentRawBright + "%");
-        }
-        updateMainBrightButtons();
-        writeRawBright(mCurrentRawBright);
-    }
-
-    private void updateMainBrightButtons() {
-        if (btnMainBright50 != null) btnMainBright50.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mCurrentRawBright == 50 ? 0xFF00838F : 0xFF263238));
-        if (btnMainBright65 != null) btnMainBright65.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mCurrentRawBright == 65 ? 0xFF00838F : 0xFF263238));
-        if (btnMainBright80 != null) btnMainBright80.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mCurrentRawBright == 80 ? 0xFF00838F : 0xFF263238));
-        if (btnMainBright100 != null) btnMainBright100.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mCurrentRawBright == 100 ? 0xFF00838F : 0xFF263238));
-    }
-
-    private void writeRawBright(int val) {
-        VcamConfigProvider.setInt("raw_bright", val);
-        VcamConfigProvider.setFloat("bright_factor", val / 65.0f);
-        writeStringFile("/data/local/tmp/" + FILE_RAW_BRIGHT, String.valueOf(val) + "\n");
-        writeStringFile(SDCARD_DIR + FILE_RAW_BRIGHT, String.valueOf(val) + "\n");
-        deleteFileSafely(new File("/sdcard/" + FILE_RAW_BRIGHT));
-        deleteFileSafely(new File("/storage/emulated/0/" + FILE_RAW_BRIGHT));
-    }
-
-    private int readIntValue(String name, int defVal) {
-        String s1 = readStringFile("/data/local/tmp/" + name);
-        if (!s1.isEmpty()) {
-            try { return Integer.parseInt(s1); } catch (Throwable ignored) {}
-        }
-        String s2 = readStringFile(SDCARD_DIR + name);
-        if (!s2.isEmpty()) {
-            try { return Integer.parseInt(s2); } catch (Throwable ignored) {}
-        }
-        String s3 = readStringFile("/sdcard/" + name);
-        if (!s3.isEmpty()) {
-            try { return Integer.parseInt(s3); } catch (Throwable ignored) {}
-        }
-        return defVal;
     }
 
     private String readStringFile(String path) {
@@ -759,160 +357,168 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void writeStringFile(String path, String val) {
+        try {
+            File f = new File(path);
+            if (!f.exists()) {
+                f.createNewFile();
+            }
+            FileOutputStream fos = new FileOutputStream(f);
+            fos.write(val.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            fos.flush();
+            fos.close();
+            f.setReadable(true, false);
+            f.setWritable(true, false);
+        } catch (Throwable t) {
+            Log.w("CameraAssistant", "writeStringFile error for " + path + ": " + t.getMessage());
+        }
+    }
 
-    private void copyUriToDualLocations(Uri srcUri, String filename, String successMsg) {
-        sIoExecutor.execute(() -> {
-            File cacheFile = new File(getCacheDir(), filename);
-            boolean copiedToCache = false;
-            try (InputStream in = getContentResolver().openInputStream(srcUri);
-                 OutputStream out = new FileOutputStream(cacheFile)) {
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+            Uri uri = data.getData();
+            if (requestCode == REQ_PICK_VIDEO) {
+                copyUriToDualLocations(uri, TARGET_VIDEO, getString(R.string.toast_video_updated));
+            }
+        }
+    }
+
+    private void copyUriToDualLocations(final Uri srcUri, final String filename, final String successMsg) {
+        Toast.makeText(this, "⏳ Đang nhập video mới...", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            File tmpFile = new File("/data/local/tmp/" + filename);
+            File sdFile = new File("/sdcard/" + filename);
+            boolean success = false;
+            long savedSize = 0;
+
+            // 1. Ghi trực tiếp vào /data/local/tmp/ (Nơi VCam Framework ưu tiên đọc số 1)
+            try {
+                InputStream in = getContentResolver().openInputStream(srcUri);
                 if (in != null) {
-                    byte[] buf = new byte[32768];
+                    try { if (tmpFile.exists()) tmpFile.delete(); } catch (Throwable ignored) {}
+                    try { tmpFile.createNewFile(); } catch (Throwable ignored) {}
+                    OutputStream out = new FileOutputStream(tmpFile);
+                    byte[] buf = new byte[65536];
                     int len;
                     while ((len = in.read(buf)) > 0) {
                         out.write(buf, 0, len);
                     }
-                    copiedToCache = true;
+                    in.close();
+                    out.flush();
+                    out.close();
+                    try {
+                        tmpFile.setReadable(true, false);
+                        tmpFile.setWritable(true, false);
+                    } catch (Throwable ignored) {}
+                    if (tmpFile.length() > 0) {
+                        success = true;
+                        savedSize = tmpFile.length();
+                        Log.i("CameraAssistant", "Đã lưu video vào /data/local/tmp: " + savedSize + " bytes");
+                    }
                 }
             } catch (Throwable t) {
-                Log.e("CameraAssistant", "Lỗi lưu cache tệp " + filename, t);
+                Log.e("CameraAssistant", "Lỗi ghi vào /data/local/tmp: " + t.getMessage(), t);
             }
 
-            if (!copiedToCache || cacheFile.length() == 0) {
-                runOnUiThread(() -> Toast.makeText(this, "Không thể đọc tệp đã chọn!", Toast.LENGTH_LONG).show());
-                return;
-            }
-
-            // 1. Sao chép sang /sdcard/CameraAssistant/
+            // 2. Ghi bản sao sang /sdcard/ để dự phòng
             try {
-                File dir = new File(SDCARD_DIR);
-                if (!dir.exists()) dir.mkdirs();
-                File sdFile = new File(dir, filename);
-                try (InputStream inSd = new java.io.FileInputStream(cacheFile);
-                     OutputStream outSd = new FileOutputStream(sdFile)) {
-                    byte[] buf = new byte[32768];
+                InputStream inSd = getContentResolver().openInputStream(srcUri);
+                if (inSd != null) {
+                    try { if (sdFile.exists()) sdFile.delete(); } catch (Throwable ignored) {}
+                    try { sdFile.createNewFile(); } catch (Throwable ignored) {}
+                    OutputStream outSd = new FileOutputStream(sdFile);
+                    byte[] buf = new byte[65536];
                     int len;
                     while ((len = inSd.read(buf)) > 0) {
                         outSd.write(buf, 0, len);
                     }
+                    inSd.close();
+                    outSd.flush();
+                    outSd.close();
+                    try {
+                        sdFile.setReadable(true, false);
+                        sdFile.setWritable(true, false);
+                    } catch (Throwable ignored) {}
+                    if (sdFile.length() > 0) {
+                        if (!success) {
+                            success = true;
+                            savedSize = sdFile.length();
+                        }
+                        Log.i("CameraAssistant", "Đã lưu video dự phòng vào /sdcard: " + sdFile.length() + " bytes");
+                    }
                 }
-                // Xóa tệp cũ ngoài thư mục gốc /sdcard/ nếu có
-                deleteFileSafely(new File("/sdcard/" + filename));
-            } catch (Throwable ignored) {}
+            } catch (Throwable t) {
+                Log.w("CameraAssistant", "Ghi đệm /sdcard bỏ qua: " + t.getMessage());
+            }
 
-            // 2. Dùng Root sao chép sang /data/local/tmp/ và phân quyền 666 (cho mọi app đều đọc được)
-            try {
-                String cmd = "cp '" + cacheFile.getAbsolutePath() + "' '/data/local/tmp/" + filename + "' && chmod 666 '/data/local/tmp/" + filename + "'";
-                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", cmd});
-                p.waitFor();
-            } catch (Throwable ignored) {}
-
+            final boolean finalSuccess = success;
+            final long finalSize = savedSize;
             runOnUiThread(() -> {
-                Toast.makeText(this, successMsg, Toast.LENGTH_SHORT).show();
-                loadCurrentState();
+                if (finalSuccess) {
+                    // Phát tín hiệu reset để Camera đang mở tự động tua/load video mới
+                    writeFlag("vcam_reset", true);
+                    Toast.makeText(this, successMsg + " (" + formatFileSize(finalSize) + ")", Toast.LENGTH_SHORT).show();
+                    loadCurrentState();
+                } else {
+                    Toast.makeText(this, "Không thể lưu video! Vui lòng kiểm tra quyền bộ nhớ.", Toast.LENGTH_LONG).show();
+                }
             });
-        });
+        }).start();
+    }
+
+    private String formatFileSize(long bytes) {
+        if (bytes <= 0) return "0 MB";
+        if (bytes < 1024 * 1024) {
+            return String.format(Locale.US, "%.1f KB", bytes / 1024.0);
+        }
+        return String.format(Locale.US, "%.2f MB", bytes / (1024.0 * 1024.0));
+    }
+
+    private void ensureControlFiles() {
+        String[] files = new String[] {
+            FLAG_DISABLE, TARGET_VIDEO
+        };
+        for (String fName : files) {
+            try {
+                File fSd = new File("/sdcard/" + fName);
+                if (!fSd.exists()) {
+                    fSd.createNewFile();
+                }
+                fSd.setReadable(true, false);
+                fSd.setWritable(true, false);
+            } catch (Throwable ignored) {}
+
+            try {
+                File fTmp = new File("/data/local/tmp/" + fName);
+                if (!fTmp.exists()) {
+                    fTmp.createNewFile();
+                }
+                fTmp.setReadable(true, false);
+                fTmp.setWritable(true, false);
+            } catch (Throwable ignored) {}
+        }
     }
 
     private boolean isFlagActive(String name) {
-        File[] targets = new File[] {
-            new File("/data/local/tmp/" + name),
-            new File(SDCARD_DIR + name),
-            new File("/sdcard/" + name),
-            new File("/storage/emulated/0/" + name),
-            new File(Environment.getExternalStorageDirectory(), name)
-        };
-        for (File f : targets) {
-            if (f.exists()) {
-                if (f.length() == 0) return true; // File created by touch from adb shell
-                try (BufferedReader reader = new BufferedReader(new FileReader(f))) {
-                    String line = reader.readLine();
-                    if (line != null) {
-                        String trimmed = line.trim();
-                        if ("0".equals(trimmed)) return false;
-                        if ("1".equals(trimmed)) return true;
-                    }
-                } catch (Throwable ignored) {}
-            }
-        }
-        return false;
+        String val = readStringFileDual(name);
+        return "1".equals(val) || "true".equalsIgnoreCase(val);
     }
 
     private void writeFlag(String name, boolean active) {
         Log.i("CameraAssistant", "MainActivity writeFlag: " + name + " -> " + active);
-        if (FLAG_DISABLE.equals(name)) {
-            VcamConfigProvider.setBoolean("disable", active);
-        } else if ("vcam_swap_uv".equals(name)) {
-            VcamConfigProvider.setBoolean("swap_uv", active);
-        } else if (FLAG_MIC_DISABLE.equals(name)) {
-            VcamConfigProvider.setBoolean("mic_disable", active);
-        } else if (FLAG_MIC_MIX.equals(name)) {
-            VcamConfigProvider.setBoolean("mic_mix", active);
-        }
-        if (active) {
-            String val = "1\n";
-            writeStringFile("/data/local/tmp/" + name, val);
-            writeStringFile(SDCARD_DIR + name, val);
-        } else {
-            deleteFileSafely(new File("/data/local/tmp/" + name));
-            deleteFileSafely(new File(SDCARD_DIR + name));
-            deleteFileSafely(new File("/sdcard/" + name));
-            deleteFileSafely(new File("/storage/emulated/0/" + name));
-        }
+        writeStringFileDual(name, active ? "1" : "0");
     }
 
-    private static final java.util.concurrent.ExecutorService sIoExecutor =
-            java.util.concurrent.Executors.newSingleThreadExecutor();
-
-    private void writeStringFile(String path, String val) {
-        sIoExecutor.execute(() -> {
-            boolean ok = false;
-            try {
-                File f = new File(path);
-                File parent = f.getParentFile();
-                if (parent != null && !parent.exists()) {
-                    parent.mkdirs();
-                }
-                FileOutputStream fos = new FileOutputStream(f);
-                fos.write(val.getBytes("UTF-8"));
-                fos.close();
-                f.setReadable(true, false);
-                f.setWritable(true, false);
-                ok = true;
-            } catch (Throwable ignored) {}
-
-            if (!ok) {
-                try {
-                    String cmd = "mkdir -p '$(dirname \"" + path + "\")' 2>/dev/null; echo -n '" + val + "' > " + path + " && chmod 666 " + path;
-                    Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", cmd});
-                    p.waitFor();
-                } catch (Throwable ignored2) {}
-            }
-        });
+    private String readStringFileDual(String filename) {
+        String s = readStringFile("/sdcard/" + filename);
+        if (!s.isEmpty()) return s;
+        return readStringFile("/data/local/tmp/" + filename);
     }
 
-    private void migrateAndEnsureStorageDir() {
-        sIoExecutor.execute(() -> {
-            try {
-                File dir = new File(SDCARD_DIR);
-                if (!dir.exists()) dir.mkdirs();
-                String cmd = "mkdir -p /sdcard/CameraAssistant 2>/dev/null && " +
-                             "for f in /sdcard/vcam* /sdcard/.vcam_uid; do " +
-                             "  if [ -f \"$f\" ]; then mv -f \"$f\" /sdcard/CameraAssistant/ 2>/dev/null; fi; " +
-                             "done; " +
-                             "chmod -R 777 /sdcard/CameraAssistant 2>/dev/null";
-                Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", cmd});
-                p.waitFor();
-            } catch (Throwable ignored) {}
-        });
-    }
-
-    private void deleteFileSafely(File file) {
-        if (file == null) return;
-        try {
-            if (file.exists()) {
-                file.delete();
-            }
-        } catch (Throwable ignored) {}
+    private void writeStringFileDual(String filename, String val) {
+        writeStringFile("/sdcard/" + filename, val);
+        writeStringFile("/data/local/tmp/" + filename, val);
     }
 }

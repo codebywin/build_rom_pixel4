@@ -16,7 +16,7 @@ new file mode 100644
 index 0000000..c20ae0e
 --- /dev/null
 +++ b/sepolicy/private/vcam.te
-@@ -0,0 +1,10 @@
+@@ -0,0 +1,11 @@
 +# Private platform data type for VCam (internal to Android framework)
 +type vcam_data_file, file_type, data_file_type, core_data_file_type;
 +
