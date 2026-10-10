@@ -406,9 +406,17 @@ EOF
     elif [ -f "${LOCAL_PATCH_DIR}/../org.lineageos.camera.assistant/CameraAssistant.apk" ]; then
         cp "${LOCAL_PATCH_DIR}/../org.lineageos.camera.assistant/CameraAssistant.apk" packages/apps/CameraAssistant/CameraAssistant.apk
     else
-        curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/org.lineageos.camera.assistant/release/CameraAssistant-release.apk" -o packages/apps/CameraAssistant/CameraAssistant.apk || true
+        curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/org.lineageos.camera.assistant/CameraAssistant-release.apk" -o packages/apps/CameraAssistant/CameraAssistant.apk || true
+    fi
+    if [ ! -s packages/apps/CameraAssistant/CameraAssistant.apk ]; then
+        curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/org.lineageos.camera.assistant/CameraAssistant.apk" -o packages/apps/CameraAssistant/CameraAssistant.apk || true
     fi
     curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/CameraAssistant_Android.bp" -o packages/apps/CameraAssistant/Android.bp
+    if [ -s packages/apps/CameraAssistant/CameraAssistant.apk ]; then
+        echo -e "   [${GREEN}OK${NC}] Đã tích hợp CameraAssistant App vào packages/apps/CameraAssistant"
+    else
+        echo -e "   [${RED}CẢNH BÁO${NC}] Không tải được CameraAssistant.apk"
+    fi
     if [ -f device/google/coral/device.mk ]; then
         grep -q "CameraAssistant" device/google/coral/device.mk || echo "PRODUCT_PACKAGES += CameraAssistant" >> device/google/coral/device.mk
     fi
