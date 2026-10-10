@@ -1242,7 +1242,7 @@ new file mode 100644
 +        }
 +        if (val != null && !val.isEmpty()) {
 +            try {
-+                String[] parts = val.trim().split("[,\s]+");
++                String[] parts = val.trim().split("[,\\s]+");
 +                if (parts.length >= 1) {
 +                    int intensity = Integer.parseInt(parts[0]);
 +                    if (intensity < -100) intensity = -100;
