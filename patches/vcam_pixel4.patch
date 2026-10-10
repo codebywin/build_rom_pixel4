@@ -939,7 +939,7 @@ new file mode 100644
 +    private static volatile Bundle sCachedProviderBundle = null;
 +    private static volatile long sLastProviderCheck = 0;
 +
-+    private static Bundle getProviderConfig() {
++    public static Bundle getProviderConfig() {
 +        long now = System.currentTimeMillis();
 +        if (now - sLastProviderCheck < 80 && sCachedProviderBundle != null) {
 +            return sCachedProviderBundle;
@@ -1358,10 +1358,11 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamLicenseVerifier.java b/
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamLicenseVerifier.java
-@@ -0,0 +1,313 @@
+@@ -0,0 +1,314 @@
 +package android.hardware.camera2.impl;
 +
 +import android.os.Build;
++import android.os.Bundle;
 +import android.util.Base64;
 +import android.util.Log;
 +import java.io.BufferedReader;
