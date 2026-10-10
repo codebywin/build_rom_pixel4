@@ -5169,4 +5169,4 @@ diff --git a/services/core/java/com/android/server/pm/AppsFilterBase.java b/serv
 +                    || (targetPkgSetting != null && "org.lineageos.camera.assistant".equals(targetPkgSetting.getPackageName()))) {
                  return false;
              } else if (Process.isSdkSandboxUid(callingAppId)) {
-                 final int targetAppId = targetPkgSetting.getAppId();
+                 // we only allow sdk sandbox processes access to forcequeryable packages
