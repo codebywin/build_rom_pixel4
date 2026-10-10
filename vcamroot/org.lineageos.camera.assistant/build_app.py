@@ -1,4 +1,17 @@
-import os, sys, subprocess, zipfile, shutil, re
+import os, sys, subprocess, zipfile, shutil, re, time
+
+def safe_rmtree(path):
+    if not os.path.exists(path):
+        return
+    for attempt in range(5):
+        try:
+            shutil.rmtree(path)
+            return
+        except Exception:
+            time.sleep(0.3)
+    if os.name == 'nt' and os.path.exists(path):
+        subprocess.run(f'cmd /c "rd /s /q \\"{os.path.abspath(path)}\\""', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
 
 try:
     sys.stdout.reconfigure(encoding='utf-8')
@@ -43,9 +56,8 @@ def gen_xor_java_call(plain_text, key=0x7B):
 
 print("[3/5] Pre-processing & Compiling Java code with javac...")
 src_proc = "build/src_proc"
-if os.path.exists(src_proc):
-    shutil.rmtree(src_proc)
-shutil.copytree("src/main/java", src_proc)
+safe_rmtree(src_proc)
+shutil.copytree("src/main/java", src_proc, dirs_exist_ok=True)
 
 lic_manager_path = os.path.join(src_proc, "org", "lineageos", "camera", "assistant", "LicenseManager.java")
 if os.path.exists(lic_manager_path):
@@ -129,14 +141,12 @@ for root, _, files in os.walk("build/gen"):
         if f.endswith(".java"):
             java_files.append(os.path.join(root, f))
 
-if os.path.exists("build/obj"):
-    shutil.rmtree("build/obj")
+safe_rmtree("build/obj")
 os.makedirs("build/obj", exist_ok=True)
 
 subprocess.check_call(["javac", "-cp", f"{android_jar};build/gen", "-d", "build/obj"] + java_files, shell=True)
 
-if os.path.exists(src_proc):
-    shutil.rmtree(src_proc)
+safe_rmtree(src_proc)
 
 print(f"[4/5] Converting classes to dex ({build_mode} mode)...")
 

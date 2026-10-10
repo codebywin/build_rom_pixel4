@@ -56,11 +56,11 @@ public class XposedSharedConfig {
     }
 
     public static float getMicBoost() {
-        String val = readString(FILE_MIC_BOOST, "3.0");
+        String val = readString(FILE_MIC_BOOST, "1.0");
         try {
             return Float.parseFloat(val);
         } catch (Throwable t) {
-            return 3.0f;
+            return 1.0f;
         }
     }
 
@@ -68,7 +68,7 @@ public class XposedSharedConfig {
         String val = readString("vcam_zoom", "1.0");
         try {
             float z = Float.parseFloat(val);
-            return Math.max(1.0f, Math.min(z, 5.0f));
+            return Math.max(0.2f, Math.min(z, 5.0f));
         } catch (Throwable t) {
             return 1.0f;
         }

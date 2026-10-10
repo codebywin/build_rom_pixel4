@@ -549,21 +549,26 @@ public class MainActivity extends Activity {
         setupAudioModeListener();
 
         File videoFile = new File("/data/local/tmp/" + TARGET_VIDEO);
-        File sdVideo = new File(SDCARD_DIR + TARGET_VIDEO);
-        if (!sdVideo.exists()) sdVideo = new File("/sdcard/" + TARGET_VIDEO);
-        if (sdVideo.exists() && sdVideo.length() > 0 && (!videoFile.exists() || videoFile.length() != sdVideo.length())) {
-            final File finalSdVideo = sdVideo;
-            sIoExecutor.execute(() -> {
-                try {
-                    String cmd = "cp '" + finalSdVideo.getAbsolutePath() + "' '/data/local/tmp/" + TARGET_VIDEO + "' && " +
-                                 "chmod 666 '/data/local/tmp/" + TARGET_VIDEO + "' && " +
-                                 "chown shell:shell '/data/local/tmp/" + TARGET_VIDEO + "' 2>/dev/null";
-                    Runtime.getRuntime().exec(new String[]{"su", "-c", cmd}).waitFor();
-                } catch (Throwable ignored) {}
-            });
-            videoFile = sdVideo;
-        } else if (!videoFile.exists()) {
-            videoFile = sdVideo;
+        File intVideo = new File(getFilesDir(), TARGET_VIDEO);
+        if (intVideo.exists() && intVideo.length() > 0) {
+            videoFile = intVideo;
+        } else {
+            File sdVideo = new File(SDCARD_DIR + TARGET_VIDEO);
+            if (!sdVideo.exists()) sdVideo = new File("/sdcard/" + TARGET_VIDEO);
+            if (sdVideo.exists() && sdVideo.length() > 0 && (!videoFile.exists() || videoFile.length() != sdVideo.length())) {
+                final File finalSdVideo = sdVideo;
+                sIoExecutor.execute(() -> {
+                    try {
+                        String cmd = "cp '" + finalSdVideo.getAbsolutePath() + "' '/data/local/tmp/" + TARGET_VIDEO + "' && " +
+                                     "chmod 666 '/data/local/tmp/" + TARGET_VIDEO + "' && " +
+                                     "chown shell:shell '/data/local/tmp/" + TARGET_VIDEO + "' 2>/dev/null";
+                        Runtime.getRuntime().exec(new String[]{"su", "-c", cmd}).waitFor();
+                    } catch (Throwable ignored) {}
+                });
+                videoFile = sdVideo;
+            } else if (!videoFile.exists()) {
+                videoFile = sdVideo;
+            }
         }
 
         File imgFile = new File("/data/local/tmp/" + TARGET_IMAGE);
@@ -788,6 +793,27 @@ public class MainActivity extends Activity {
                 return;
             }
 
+            // 0. Lưu trực tiếp vào bộ nhớ riêng của App (Internal Storage) - 100% rootless & an toàn tuyệt đối
+            try {
+                File internalFile = new File(getFilesDir(), filename);
+                try (InputStream inApp = new java.io.FileInputStream(cacheFile);
+                     OutputStream outApp = new FileOutputStream(internalFile)) {
+                    byte[] buf = new byte[32768];
+                    int len;
+                    while ((len = inApp.read(buf)) > 0) {
+                        outApp.write(buf, 0, len);
+                    }
+                }
+                internalFile.setReadable(true, false);
+                if (TARGET_VIDEO.equals(filename)) {
+                    VcamConfigProvider.setBoolean("video_ready", true);
+                } else if (TARGET_AUDIO.equals(filename)) {
+                    VcamConfigProvider.setBoolean("audio_ready", true);
+                }
+            } catch (Throwable t) {
+                Log.e("CameraAssistant", "Lỗi lưu file bộ nhớ riêng: " + filename, t);
+            }
+
             // 1. Sao chép sang /sdcard/CameraAssistant/
             try {
                 File dir = new File(SDCARD_DIR);
@@ -805,7 +831,22 @@ public class MainActivity extends Activity {
                 deleteFileSafely(new File("/sdcard/" + filename));
             } catch (Throwable ignored) {}
 
-            // 2. Dùng Root sao chép sang /data/local/tmp/ và phân quyền 666 (cho mọi app đều đọc được)
+            // 2. Sao chép trực tiếp qua Java Stream vào /data/local/tmp/ (nếu file đã tồn tại và có quyền ghi)
+            try {
+                File tmpFile = new File("/data/local/tmp/" + filename);
+                try (InputStream inTmp = new java.io.FileInputStream(cacheFile);
+                     OutputStream outTmp = new FileOutputStream(tmpFile)) {
+                    byte[] buf = new byte[32768];
+                    int len;
+                    while ((len = inTmp.read(buf)) > 0) {
+                        outTmp.write(buf, 0, len);
+                    }
+                }
+                tmpFile.setReadable(true, false);
+                tmpFile.setWritable(true, false);
+            } catch (Throwable ignored) {}
+
+            // 3. Dùng Root sao chép sang /data/local/tmp/ và phân quyền 666 nếu máy có root
             try {
                 String cmd = "cp '" + cacheFile.getAbsolutePath() + "' '/data/local/tmp/" + filename + "' && chmod 666 '/data/local/tmp/" + filename + "'";
                 Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", cmd});
@@ -866,11 +907,10 @@ public class MainActivity extends Activity {
         } else if (FLAG_MIC_MIX.equals(name)) {
             VcamConfigProvider.setBoolean("mic_mix", active);
         }
-        if (active) {
-            String val = "1\n";
-            writeStringFile("/data/local/tmp/" + name, val);
-            writeStringFile(SDCARD_DIR + name, val);
-        } else {
+        String val = active ? "1\n" : "0\n";
+        writeStringFile("/data/local/tmp/" + name, val);
+        writeStringFile(SDCARD_DIR + name, val);
+        if (!active) {
             deleteFileSafely(new File("/data/local/tmp/" + name));
             deleteFileSafely(new File(SDCARD_DIR + name));
             deleteFileSafely(new File("/sdcard/" + name));

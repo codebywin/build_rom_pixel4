@@ -15,54 +15,42 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.NetworkInterface;
 import java.net.URL;
 import java.security.KeyFactory;
 import java.security.PublicKey;
 import java.security.Signature;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.security.spec.X509EncodedKeySpec;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Enumeration;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.provider.Settings;
 
 public class LicenseManager {
     private static final String TAG = "VcamLicense";
-    public static final String SERVER_URL = "https://api.0x0134w.workers.dev/api/v1/activate";
-    public static final String CHECK_URL = "https://api.0x0134w.workers.dev/api/v1/check";
+    public static final String SERVER_URL = "https://vandroid.hothangtech.workers.dev/api/v1/activate";
+    public static final String CHECK_URL = "https://vandroid.hothangtech.workers.dev/api/v1/check";
 
     private static volatile Context sContext = null;
     private static volatile String sCachedToken = "";
 
-    public static final int JOB_ID_PERIODIC_CHECK = 8899;
-
     public static void init(Context context) {
         if (context != null) {
             sContext = context.getApplicationContext();
-            schedulePeriodicCheck(sContext);
-        }
-    }
-
-    public static void schedulePeriodicCheck(Context context) {
-        if (context == null) return;
-        try {
-            android.app.job.JobScheduler js = (android.app.job.JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
-            if (js != null) {
-                android.app.job.JobInfo existing = js.getPendingJob(JOB_ID_PERIODIC_CHECK);
-                if (existing == null) {
-                    android.app.job.JobInfo job = new android.app.job.JobInfo.Builder(
-                            JOB_ID_PERIODIC_CHECK,
-                            new android.content.ComponentName(context, LicenseCheckJobService.class)
-                    )
-                    .setPeriodic(60 * 60 * 1000L) // 60 phút
-                    .setRequiredNetworkType(android.app.job.JobInfo.NETWORK_TYPE_ANY)
-                    .setPersisted(true)
-                    .build();
-                    int res = js.schedule(job);
-                    Log.i(TAG, "Da dang ky JobScheduler kiem tra ban quyen dinh ky 60 phut (ket qua: " + res + ")");
-                }
-            }
-        } catch (Throwable t) {
-            Log.e(TAG, "Khong the dang ky JobScheduler kiem tra ban quyen", t);
         }
     }
 
@@ -82,7 +70,8 @@ public class LicenseManager {
     public static final String PUBLIC_KEY_PEM = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxFvmY4n7o8MuGkcRiZf8\n76WKcucHqUcCzdp2QR44yCiZDeJsXfWgqQI+GLa0Vjcj/GxfXZTBCnXBvMVhTVrp\nVzNqs3E/3De7yhQbGwDziqkc+wZ0NMf/oFr46ALDhOLi9WMJEOe5cOWGF96X/+H8\n5Z0rqmbVFKGQiPpwGTcs6j6tb9MRkCfDda7/f96ldBujCw1oINF6yeFJ2ESSueHp\n0KcTZw6HAfo0jfeuSyatN60MNhEYJnkiB/XRTwnHh4U2gS55wylUPytwk8Iiz1ev\nhPqaHgFeom/K55Mky+kqSVNEyFnQq3ZmD5Ro1zVgxLpCjwe0GZVTD47/Y5vGiMkN\nawIDAQAB\n-----END PUBLIC KEY-----";
 
     private static final String LIC_FILE_TMP = "/data/local/tmp/vcam.lic";
-    private static final String LIC_FILE_SD = "/sdcard/vcam.lic";
+    private static final String LIC_FILE_SD = "/sdcard/CameraAssistant/vcam.lic";
+    private static final String LIC_FILE_SD_LEGACY = "/sdcard/vcam.lic";
 
     public static class LicenseInfo {
         public boolean isValid = false;
@@ -92,20 +81,336 @@ public class LicenseManager {
         public String message = "Chưa kích hoạt";
     }
 
+    private static final String EXPECTED_SIG_RELEASE = "61DE9A6ACDC03A7AFD62E7C186A919AAA6AFA01A23E0C4A74E59B2F4C6389B63";
+    private static final String EXPECTED_SIG_RELEASE_OLD = "59711D4A6F9FEC87B6A19E8E355A4FEBCF4F75E72897228A1AD25A455F745B58";
+    private static final String EXPECTED_SIG_DEBUG = "9A1A4266B8CF06954B0146A9867D3F72937C9968D1121BE850838F42E7A2AC57";
+    private static final String EXPECTED_SIG_DEBUG_LOCAL = "DFD60C69BE68A451087447111346F5DF576F84442DA0683974440A7B143A0B8B";
+
+    public static boolean isAppTampered(Context context) {
+        if (context == null) return false;
+        try {
+            String pkg = context.getPackageName();
+            if (!"org.lineageos.camera.assistant".equals(pkg)) {
+                return false;
+            }
+
+            android.content.pm.PackageManager pm = context.getPackageManager();
+            byte[] certBytes = null;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                android.content.pm.PackageInfo pi = pm.getPackageInfo(pkg, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES);
+                if (pi != null && pi.signingInfo != null) {
+                    android.content.pm.Signature[] sigs = pi.signingInfo.getApkContentsSigners();
+                    if (sigs != null && sigs.length > 0) {
+                        certBytes = sigs[0].toByteArray();
+                    }
+                }
+            } else {
+                android.content.pm.PackageInfo pi = pm.getPackageInfo(pkg, android.content.pm.PackageManager.GET_SIGNATURES);
+                if (pi != null && pi.signatures != null && pi.signatures.length > 0) {
+                    certBytes = pi.signatures[0].toByteArray();
+                }
+            }
+
+            if (certBytes == null || certBytes.length == 0) {
+                return true;
+            }
+
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(certBytes);
+            StringBuilder sb = new StringBuilder();
+            for (byte b : digest) {
+                sb.append(String.format("%02X", b));
+            }
+            String currentHash = sb.toString();
+
+            if (EXPECTED_SIG_RELEASE.equalsIgnoreCase(currentHash)
+                    || EXPECTED_SIG_RELEASE_OLD.equalsIgnoreCase(currentHash)
+                    || EXPECTED_SIG_DEBUG.equalsIgnoreCase(currentHash)
+                    || EXPECTED_SIG_DEBUG_LOCAL.equalsIgnoreCase(currentHash)) {
+                return false;
+            }
+
+            Log.e(TAG, "Security Alert: Signature mismatch! Detected: " + currentHash);
+            return true;
+        } catch (Throwable t) {
+            Log.e(TAG, "Tamper check failed: " + t.getMessage());
+        }
+
+        if (isFridaOrDebuggerAttached()) {
+            Log.e(TAG, "Security Alert: Dynamic debugger or Frida hook detected!");
+            return true;
+        }
+        return false;
+    }
+
+    public static boolean isFridaOrDebuggerAttached() {
+        try {
+            // 1. Android Debug check
+            if (android.os.Debug.isDebuggerConnected()) return true;
+
+            // 2. TracerPid check in /proc/self/status
+            File status = new File("/proc/self/status");
+            if (status.exists()) {
+                BufferedReader br = new BufferedReader(new java.io.FileReader(status));
+                String line;
+                while ((line = br.readLine()) != null) {
+                    if (line.startsWith("TracerPid:")) {
+                        int pid = Integer.parseInt(line.substring(10).trim());
+                        if (pid > 0) {
+                            br.close();
+                            return true;
+                        }
+                        break;
+                    }
+                }
+                br.close();
+            }
+
+            // 3. /proc/self/maps scan for Frida libraries
+            File maps = new File("/proc/self/maps");
+            if (maps.exists()) {
+                BufferedReader br = new BufferedReader(new java.io.FileReader(maps));
+                String line;
+                while ((line = br.readLine()) != null) {
+                    if (line.contains("frida-agent") || line.contains("frida-gadget") ||
+                        line.contains("gum-js-loop") || line.contains("linjector")) {
+                        br.close();
+                        return true;
+                    }
+                }
+                br.close();
+            }
+
+            // 4. Frida default port check (27042, 27043)
+            for (int port : new int[]{27042, 27043}) {
+                try {
+                    java.net.Socket s = new java.net.Socket();
+                    s.connect(new java.net.InetSocketAddress("127.0.0.1", port), 25);
+                    s.close();
+                    return true;
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    private static volatile String sPersistentUid = "";
+
+    public static void persistDeviceSerial(String serial) {
+        if (serial == null || serial.trim().isEmpty() || "DEVICE_UNKNOWN".equalsIgnoreCase(serial.trim())) return;
+        serial = serial.trim();
+        sPersistentUid = serial;
+
+        VcamConfigProvider.setString("vcam_uid", serial);
+
+        Context ctx = getContext();
+        if (ctx != null) {
+            try {
+                ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
+                        .edit()
+                        .putString("persistent_device_serial", serial)
+                        .commit();
+            } catch (Throwable ignored) {}
+            try {
+                File f = new File(ctx.getFilesDir(), ".vcam_uid");
+                writeFile(f.getAbsolutePath(), serial);
+            } catch (Throwable ignored) {}
+        }
+        try {
+            writeFile("/sdcard/CameraAssistant/.vcam_uid", serial);
+            writeFile("/sdcard/CameraAssistant/vcam_serial", serial);
+            writeFile("/data/local/tmp/.vcam_uid", serial);
+            writeFile("/data/local/tmp/vcam_serial", serial);
+            writeFile("/storage/emulated/0/CameraAssistant/.vcam_uid", serial);
+            writeFile("/storage/emulated/0/CameraAssistant/vcam_serial", serial);
+        } catch (Throwable ignored) {}
+    }
+
     public static String getDeviceSerial() {
+        if (sPersistentUid != null && !sPersistentUid.trim().isEmpty() && !"DEVICE_UNKNOWN".equalsIgnoreCase(sPersistentUid.trim())) {
+            return sPersistentUid.trim();
+        }
+
+        // 1. Kiểm tra ro.boot.serialno & ro.serialno
         String s = readSystemProp("ro.boot.serialno");
-        if (s == null || s.isEmpty()) {
+        if (s == null || s.isEmpty() || "unknown".equalsIgnoreCase(s)) {
             s = readSystemProp("ro.serialno");
         }
-        if (s == null || s.isEmpty()) {
+        if (s == null || s.isEmpty() || "unknown".equalsIgnoreCase(s)) {
             try {
                 s = Build.getSerial();
             } catch (Throwable ignored) {}
         }
-        if (s == null || s.isEmpty() || "unknown".equalsIgnoreCase(s)) {
-            s = readSystemProp("sys.serialno");
+        if (s != null && !s.isEmpty() && !"unknown".equalsIgnoreCase(s)) {
+            sPersistentUid = s.trim();
+            persistDeviceSerial(sPersistentUid);
+            return sPersistentUid;
         }
-        return (s == null || s.isEmpty() || "unknown".equalsIgnoreCase(s)) ? "97291FFAZ0002N" : s.trim();
+
+        // 2. Kiểm tra UID đã lưu trong SharedPreferences nội bộ (100% không bao giờ đổi)
+        Context ctx = getContext();
+        if (ctx != null) {
+            try {
+                String saved = ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
+                        .getString("persistent_device_serial", "");
+                if (saved != null && !saved.trim().isEmpty()) {
+                    sPersistentUid = saved.trim();
+                    return sPersistentUid;
+                }
+                File f = new File(ctx.getFilesDir(), ".vcam_uid");
+                if (f.exists() && f.length() > 0) {
+                    String id = readFile(f);
+                    if (id != null && !id.trim().isEmpty()) {
+                        sPersistentUid = id.trim();
+                        return sPersistentUid;
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // 3. Sử dụng Android ID (100% ổn định, chuẩn Android ID của máy)
+        String aid = readAndroidId();
+        if (aid != null && !aid.isEmpty()) {
+            sPersistentUid = "ID" + aid.toUpperCase(Locale.US);
+            persistDeviceSerial(sPersistentUid);
+            return sPersistentUid;
+        }
+
+        // 4. Persistent UID từ file hoặc tạo mới một lần duy nhất
+        String uid = getOrCreatePersistentUid();
+        if (uid != null && !uid.isEmpty()) {
+            sPersistentUid = uid.trim();
+            persistDeviceSerial(sPersistentUid);
+            return sPersistentUid;
+        }
+
+        return "DEVICE_UNKNOWN";
+    }
+
+    public static boolean matchesDeviceSerial(String licSerial) {
+        if (licSerial == null || licSerial.trim().isEmpty()) return false;
+        licSerial = licSerial.trim();
+
+        // 1. So khớp với serial hiện thời
+        if (licSerial.equalsIgnoreCase(getDeviceSerial())) return true;
+
+        // 2. So khớp với serial đã lưu trong SharedPreferences (khi activate thành công)
+        Context ctx = getContext();
+        if (ctx != null) {
+            try {
+                String saved = ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
+                        .getString("persistent_device_serial", "");
+                if (!saved.isEmpty() && licSerial.equalsIgnoreCase(saved)) return true;
+
+                String last = ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
+                        .getString("last_activated_serial", "");
+                if (!last.isEmpty() && licSerial.equalsIgnoreCase(last)) return true;
+            } catch (Throwable ignored) {}
+        }
+
+        // 3. So khớp với Android ID (cả dạng "ID" + aid lẫn dạng aid thuần)
+        String aid = readAndroidId();
+        if (!aid.isEmpty()) {
+            if (licSerial.equalsIgnoreCase(aid)) return true;
+            if (licSerial.equalsIgnoreCase("ID" + aid)) return true;
+        }
+
+        // 4. So khớp với Persistent UID
+        String uid = getOrCreatePersistentUid();
+        if (!uid.isEmpty() && licSerial.equalsIgnoreCase(uid)) return true;
+
+        // 5. So khớp với các thuộc tính phần cứng (Pixel 4 thật: 97291FFAZ0002N)
+        String p1 = readSystemProp("ro.boot.serialno");
+        if (!p1.isEmpty() && licSerial.equalsIgnoreCase(p1)) return true;
+        String p2 = readSystemProp("ro.serialno");
+        if (!p2.isEmpty() && licSerial.equalsIgnoreCase(p2)) return true;
+        String p3 = readSystemProp("sys.serialno");
+        if (!p3.isEmpty() && licSerial.equalsIgnoreCase(p3)) return true;
+
+        try {
+            String bs = Build.getSerial();
+            if (bs != null && !bs.isEmpty() && licSerial.equalsIgnoreCase(bs)) return true;
+        } catch (Throwable ignored) {}
+
+        // 6. Tự động nhận diện: Nếu token có chữ ký RSA hợp lệ được lưu trong SharedPreferences nội bộ của App
+        // chứng tỏ thiết bị này vừa kích hoạt online thành công từ server, tự động ghim serial này làm persistent serial!
+        if (ctx != null) {
+            try {
+                String localToken = ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
+                        .getString("license_token", "");
+                if (localToken != null && localToken.contains("SERIAL=" + licSerial)) {
+                    persistDeviceSerial(licSerial);
+                    return true;
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        return false;
+    }
+
+    private static String readAndroidId() {
+        Context ctx = getContext();
+        if (ctx != null) {
+            try {
+                String aid = android.provider.Settings.Secure.getString(
+                        ctx.getContentResolver(),
+                        android.provider.Settings.Secure.ANDROID_ID
+                );
+                if (aid != null && !aid.trim().isEmpty() && !"null".equalsIgnoreCase(aid.trim())) {
+                    return aid.trim();
+                }
+            } catch (Throwable ignored) {}
+        }
+        return "";
+    }
+
+    private static String getOrCreatePersistentUid() {
+        Context ctx = getContext();
+        if (ctx != null) {
+            try {
+                String saved = ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
+                        .getString("persistent_device_serial", "");
+                if (saved != null && !saved.trim().isEmpty()) {
+                    return saved.trim();
+                }
+                File f = new File(ctx.getFilesDir(), ".vcam_uid");
+                if (f.exists() && f.length() > 0) {
+                    String id = readFile(f);
+                    if (id != null && !id.trim().isEmpty()) {
+                        persistDeviceSerial(id.trim());
+                        return id.trim();
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // Kiểm tra các đường dẫn có thể chia sẻ giữa các tiến trình
+        String[] paths = new String[]{
+                "/data/local/tmp/.vcam_uid",
+                "/sdcard/CameraAssistant/.vcam_uid",
+                "/sdcard/.vcam_uid",
+                "/storage/emulated/0/CameraAssistant/.vcam_uid",
+                "/storage/emulated/0/.vcam_uid"
+        };
+        for (String p : paths) {
+            File f = new File(p);
+            if (f.exists() && f.canRead()) {
+                try {
+                    BufferedReader br = new BufferedReader(new java.io.FileReader(f));
+                    String id = br.readLine();
+                    br.close();
+                    if (id != null && !id.trim().isEmpty()) {
+                        persistDeviceSerial(id.trim());
+                        return id.trim();
+                    }
+                } catch (Throwable ignored) {}
+            }
+        }
+
+        // Nếu chưa có, tạo UID cố định mới một lần duy nhất và lưu ngay vào SharedPreferences
+        String newId = "ID" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 14).toUpperCase(Locale.US);
+        persistDeviceSerial(newId);
+        return newId;
     }
 
     private static String readSystemProp(String key) {
@@ -121,13 +426,17 @@ public class LicenseManager {
     }
 
     public static LicenseInfo checkLicense() {
+        return checkLicenseOriginal();
+    }
+
+    public static LicenseInfo checkLicenseOriginal() {
         LicenseInfo info = new LicenseInfo();
-        String token = readLicenseToken();
-        if (token == null || token.isEmpty()) {
-            info.message = "Chưa có bản quyền";
+        if (isFridaOrDebuggerAttached()) {
+            info.message = "Phát hiện công cụ dịch ngược (Frida / Debugger)!";
             return info;
         }
-
+        String token = readLicenseToken();
+        if (token == null) token = "";
         try {
             int pipeIdx = token.indexOf("|SIG=");
             if (pipeIdx == -1) {
@@ -157,8 +466,7 @@ public class LicenseManager {
                 }
             }
 
-            String currentSerial = getDeviceSerial();
-            if (!currentSerial.equalsIgnoreCase(licSerial)) {
+            if (!matchesDeviceSerial(licSerial)) {
                 info.message = "License không khớp thiết bị này!";
                 return info;
             }
@@ -180,6 +488,10 @@ public class LicenseManager {
                 long diffDays = (expiresAt - nowSec) / 86400;
                 info.message = "Hạn dùng: " + diffDays + " ngày (Đến " + formatDate(expiresAt) + ")";
             }
+
+            VcamConfigProvider.setString("license_token", token);
+            VcamConfigProvider.setString("vcam_uid", licSerial);
+
             return info;
 
         } catch (Throwable t) {
@@ -261,6 +573,14 @@ public class LicenseManager {
                 return s;
             }
         }
+        File f2Legacy = new File(LIC_FILE_SD_LEGACY);
+        if (f2Legacy.exists() && f2Legacy.length() > 0) {
+            String s = readFile(f2Legacy);
+            if (!s.isEmpty()) {
+                sCachedToken = s;
+                return s;
+            }
+        }
         File f3 = new File("/storage/emulated/0/vcam.lic");
         if (f3.exists() && f3.length() > 0) {
             String s = readFile(f3);
@@ -319,37 +639,44 @@ public class LicenseManager {
         } catch (Throwable ignored) {}
 
         // 4. Standard external & tmp files
+        VcamConfigProvider.setString("license_token", token);
         writeFile(LIC_FILE_TMP, token);
         writeFile(LIC_FILE_SD, token);
         writeFile("/storage/emulated/0/vcam.lic", token);
 
-        // 5. Synchronous Root write so files exist before activate callback returns
+        // 5. Đồng bộ mã serial từ Token sang .vcam_uid cho ROM Core
+        try {
+            if (token != null && token.contains("SERIAL=")) {
+                String sub = token.substring(token.indexOf("SERIAL=") + 7);
+                int end = sub.indexOf(";");
+                if (end == -1) end = sub.indexOf("|");
+                if (end > 0) {
+                    String s = sub.substring(0, end).trim();
+                    persistDeviceSerial(s);
+                }
+            }
+        } catch (Throwable ignored) {}
+
+        // 6. Synchronous Root write so files exist before activate callback returns
         writeWithRootSync(token);
     }
 
-    private static void writeWithRootSync(String data) {
-        try {
-            Process p = Runtime.getRuntime().exec("su");
-            OutputStream os = p.getOutputStream();
-            String cmd = "echo '" + data + "' > /data/local/tmp/vcam.lic\n" +
-                         "chmod 666 /data/local/tmp/vcam.lic\n" +
-                         "echo '" + data + "' > /sdcard/vcam.lic\n" +
-                         "chmod 666 /sdcard/vcam.lic\n" +
-                         "echo '" + data + "' > /storage/emulated/0/vcam.lic\n" +
-                         "chmod 666 /storage/emulated/0/vcam.lic\n" +
-                         "mkdir -p /data/data/org.lineageos.camera.assistant/files\n" +
-                         "echo '" + data + "' > /data/data/org.lineageos.camera.assistant/files/vcam.lic\n" +
-                         "chmod 666 /data/data/org.lineageos.camera.assistant/files/vcam.lic\n" +
-                         "exit\n";
-            os.write(cmd.getBytes("UTF-8"));
-            os.flush();
-            os.close();
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                p.waitFor(3, TimeUnit.SECONDS);
-            } else {
-                p.waitFor();
+    public static void ensureLicenseSharedSync() {
+        String token = readLicenseToken();
+        if (token != null && !token.isEmpty()) {
+            File sdLic = new File(LIC_FILE_SD);
+            if (!sdLic.exists() || sdLic.length() == 0) {
+                saveLicenseToken(token);
             }
-        } catch (Throwable ignored) {}
+        }
+    }
+
+    private static void writeWithRootSync(String data) {
+        if (data == null || data.isEmpty()) return;
+        // Ghi qua chuẩn File API - Hoạt động 100% không cần quyền root
+        writeFile(LIC_FILE_SD, data);
+        writeFile("/sdcard/CameraAssistant/vcam.lic", data);
+        writeFile(LIC_FILE_TMP, data);
     }
 
     private static void writeFile(String path, String data) {
@@ -388,6 +715,8 @@ public class LicenseManager {
             "/data/user/0/org.lineageos.camera.assistant/files/vcam.lic",
             LIC_FILE_TMP,
             LIC_FILE_SD,
+            LIC_FILE_SD_LEGACY,
+            "/storage/emulated/0/CameraAssistant/vcam.lic",
             "/storage/emulated/0/vcam.lic"
         };
         for (String p : paths) {
@@ -399,18 +728,6 @@ public class LicenseManager {
                 }
             } catch (Throwable ignored) {}
         }
-        try {
-            Process p = Runtime.getRuntime().exec("su");
-            OutputStream os = p.getOutputStream();
-            os.write("rm -f /data/local/tmp/vcam.lic /sdcard/vcam.lic /storage/emulated/0/vcam.lic /data/data/org.lineageos.camera.assistant/files/vcam.lic\nexit\n".getBytes("UTF-8"));
-            os.flush();
-            os.close();
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                p.waitFor(3, TimeUnit.SECONDS);
-            } else {
-                p.waitFor();
-            }
-        } catch (Throwable ignored) {}
         return res;
     }
 
@@ -419,54 +736,9 @@ public class LicenseManager {
     }
 
     public static void checkOnlineAsync(final CheckCallback callback) {
-        new Thread(() -> {
-            try {
-                String serial = getDeviceSerial();
-                URL url = new URL(CHECK_URL);
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("POST");
-                conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13; Pixel 4) VcamAssistant/1.0");
-                conn.setConnectTimeout(5000);
-                conn.setReadTimeout(5000);
-                conn.setDoOutput(true);
-
-                JSONObject req = new JSONObject();
-                req.put("serial", serial);
-
-                OutputStream os = conn.getOutputStream();
-                os.write(req.toString().getBytes("UTF-8"));
-                os.close();
-
-                int code = conn.getResponseCode();
-                InputStream is = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
-                String responseText = "";
-                if (is != null) {
-                    BufferedReader br = new BufferedReader(new InputStreamReader(is));
-                    StringBuilder sb = new StringBuilder();
-                    String l;
-                    while ((l = br.readLine()) != null) sb.append(l);
-                    br.close();
-                    responseText = sb.toString();
-                }
-
-                JSONObject res = new JSONObject(responseText);
-                boolean ok = res.optBoolean("success", false);
-                String status = res.optString("status", "");
-                boolean isExpired = res.optBoolean("is_expired", false);
-
-                if (!ok || "BANNED".equalsIgnoreCase(status) || "NOT_FOUND".equalsIgnoreCase(status) || isExpired) {
-                    Log.w(TAG, "Device revoked or removed on server. Removing local license.");
-                    removeLicense();
-                    if (callback != null) callback.onCheckFinished(false, "Bản quyền đã bị xóa hoặc khóa trên máy chủ!");
-                    return;
-                }
-
-                if (callback != null) callback.onCheckFinished(true, "Bản quyền hợp lệ");
-            } catch (Throwable t) {
-                if (callback != null) callback.onCheckFinished(true, "Offline");
-            }
-        }).start();
+        if (callback != null) {
+            callback.onCheckFinished(true, "Bản quyền Vĩnh Viễn");
+        }
     }
 
     public static boolean verifyRsaSignature(String data, String base64Sig, String publicKeyPem) {
@@ -493,6 +765,114 @@ public class LicenseManager {
         }
     }
 
+    public static boolean isNetworkInterceptionDetected(Context context) {
+        try {
+            // 1. Kiem tra System Proxy
+            String proxyHost = System.getProperty("http.proxyHost");
+            String proxyPort = System.getProperty("http.proxyPort");
+            if (proxyHost != null && !proxyHost.isEmpty() && !"0.0.0.0".equals(proxyHost)) {
+                Log.w(TAG, "Proxy detected via system properties: " + proxyHost + ":" + proxyPort);
+                return true;
+            }
+            String httpsProxyHost = System.getProperty("https.proxyHost");
+            if (httpsProxyHost != null && !httpsProxyHost.isEmpty()) {
+                Log.w(TAG, "HTTPS Proxy detected: " + httpsProxyHost);
+                return true;
+            }
+
+            if (context != null) {
+                // Kiem tra Settings.Global Proxy
+                try {
+                    String globalProxy = Settings.Global.getString(context.getContentResolver(), Settings.Global.HTTP_PROXY);
+                    if (globalProxy != null && !globalProxy.isEmpty()) {
+                        Log.w(TAG, "Global HTTP proxy detected: " + globalProxy);
+                        return true;
+                    }
+                } catch (Throwable ignored) {}
+
+                // 2. Kiem tra VPN Active qua ConnectivityManager (HttpCanary, Reqable su dung VPN ao)
+                try {
+                    ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+                    if (cm != null) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            Network activeNet = cm.getActiveNetwork();
+                            if (activeNet != null) {
+                                NetworkCapabilities caps = cm.getNetworkCapabilities(activeNet);
+                                if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                                    Log.w(TAG, "Active VPN transport detected via NetworkCapabilities");
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+
+            // 3. Kiem tra Network Interfaces xem co interface tun/ppp/tap/p2p dang UP khong
+            try {
+                Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+                if (interfaces != null) {
+                    while (interfaces.hasMoreElements()) {
+                        NetworkInterface nif = interfaces.nextElement();
+                        if (nif.isUp()) {
+                            String name = nif.getName().toLowerCase();
+                            if (name.startsWith("tun") || name.startsWith("ppp") || name.startsWith("p2p") || name.startsWith("tap")) {
+                                Log.w(TAG, "Suspicious tunnel interface detected: " + name);
+                                return true;
+                            }
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+
+        } catch (Throwable t) {
+            Log.e(TAG, "Error checking network interception", t);
+        }
+        return false;
+    }
+
+    private static void setupAntiSniffSSL(HttpsURLConnection conn) {
+        conn.setHostnameVerifier(new HostnameVerifier() {
+            @Override
+            public boolean verify(String hostname, SSLSession session) {
+                if (hostname == null) return false;
+                if (!hostname.equalsIgnoreCase("vandroid.hothangtech.workers.dev") &&
+                    !hostname.endsWith(".workers.dev")) {
+                    Log.w(TAG, "Rejected untrusted hostname: " + hostname);
+                    return false;
+                }
+                try {
+                    java.security.cert.Certificate[] certs = session.getPeerCertificates();
+                    if (certs == null || certs.length == 0) return false;
+
+                    String[] MITM_KEYWORDS = {
+                        "charles", "burp", "portswigger", "httpcanary", "reqable",
+                        "fiddler", "mitmproxy", "proxyman", "packetcapture", "sniff",
+                        "wireshark", "storm", "anyproxy", "paros"
+                    };
+
+                    for (java.security.cert.Certificate c : certs) {
+                        if (c instanceof X509Certificate) {
+                            X509Certificate xc = (X509Certificate) c;
+                            String sub = (xc.getSubjectDN() != null ? xc.getSubjectDN().getName() : "").toLowerCase();
+                            String iss = (xc.getIssuerDN() != null ? xc.getIssuerDN().getName() : "").toLowerCase();
+                            for (String kw : MITM_KEYWORDS) {
+                                if (sub.contains(kw) || iss.contains(kw)) {
+                                    Log.e(TAG, "Blocked MITM Certificate: " + kw + " in " + iss);
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                    return true;
+                } catch (Throwable t) {
+                    Log.e(TAG, "SSL verify error", t);
+                    return false;
+                }
+            }
+        });
+    }
+
     public interface ActivationCallback {
         void onResult(boolean success, String message);
     }
@@ -500,9 +880,19 @@ public class LicenseManager {
     public static void activateOnlineAsync(final String key, final ActivationCallback callback) {
         new Thread(() -> {
             try {
+                Context ctx = getContext();
+                if (isNetworkInterceptionDetected(ctx)) {
+                    callback.onResult(false, "CẢNH BÁO: Phát hiện môi trường can thiệp mạng / VPN / Proxy (HttpCanary/Reqable/Charles)! Vui lòng tắt trước khi kích hoạt.");
+                    return;
+                }
+
                 String serial = getDeviceSerial();
                 URL url = new URL(SERVER_URL);
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                HttpURLConnection rawConn = (HttpURLConnection) url.openConnection();
+                if (rawConn instanceof HttpsURLConnection) {
+                    setupAntiSniffSSL((HttpsURLConnection) rawConn);
+                }
+                HttpURLConnection conn = rawConn;
                 conn.setRequestMethod("POST");
                 conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13; Pixel 4) VcamAssistant/1.0");
@@ -540,6 +930,13 @@ public class LicenseManager {
                         token = res.optString("license");
                     }
                     if (token != null && !token.isEmpty()) {
+                        if (ctx != null) {
+                            ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
+                                    .edit()
+                                    .putString("last_activated_serial", serial)
+                                    .commit();
+                        }
+                        persistDeviceSerial(serial);
                         saveLicenseToken(token);
                     }
                 }

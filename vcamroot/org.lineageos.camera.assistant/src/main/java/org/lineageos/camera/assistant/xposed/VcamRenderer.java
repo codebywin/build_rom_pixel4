@@ -20,6 +20,35 @@ import java.util.List;
 public class VcamRenderer {
     private static final String TAG = "VcamRenderer";
 
+    private static volatile byte[] sLatestJpeg = null;
+    private static volatile int sLatestWidth = 1080;
+    private static volatile int sLatestHeight = 1920;
+    private static long sLastJpegCaptureTime = 0;
+
+    public static byte[] getLatestJpeg() {
+        if (sLatestJpeg != null) return sLatestJpeg;
+        try {
+            java.io.File f = XposedSharedConfig.getVideoFile();
+            if (f != null && f.exists()) {
+                android.media.MediaMetadataRetriever mmr = new android.media.MediaMetadataRetriever();
+                mmr.setDataSource(f.getAbsolutePath());
+                android.graphics.Bitmap b = mmr.getFrameAtTime(0);
+                if (b != null) {
+                    java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                    b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, baos);
+                    sLatestJpeg = baos.toByteArray();
+                    sLatestWidth = b.getWidth();
+                    sLatestHeight = b.getHeight();
+                    b.recycle();
+                }
+                mmr.release();
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "Failed loading initial fallback JPEG frame: " + t);
+        }
+        return sLatestJpeg;
+    }
+
     private static final String VERTEX_SHADER =
         "uniform mat4 uMVPMatrix;\n" +
         "uniform mat4 uSTMatrix;\n" +
@@ -189,6 +218,9 @@ public class VcamRenderer {
 
                             mTargets.add(new RenderTarget(s, eglSurf, w, h));
                             Log.i(TAG, "Target EGL Surface #" + (i + 1) + " created (" + w + "x" + h + ")");
+                        } else {
+                            int err = EGL14.eglGetError();
+                            Log.e(TAG, "Failed creating EGL surface #" + (i + 1) + ", error=0x" + Integer.toHexString(err));
                         }
                     } catch (Throwable t) {
                         Log.e(TAG, "Failed creating EGL surface #" + (i + 1) + ": " + t.getMessage());
@@ -273,12 +305,14 @@ public class VcamRenderer {
             if (panY < -maxPan) panY = -maxPan;
 
             // Apply Pan and Zoom to Texture Coordinate matrix
-            Matrix.translateM(mSTMatrix, 0, 0.5f - panX, 0.5f - panY, 0.0f);
+            float[] stMatrix = new float[16];
+            System.arraycopy(mSTMatrix, 0, stMatrix, 0, 16);
+            Matrix.translateM(stMatrix, 0, 0.5f - panX, 0.5f - panY, 0.0f);
             if (rotation != 0) {
-                Matrix.rotateM(mSTMatrix, 0, rotation, 0.0f, 0.0f, 1.0f);
+                Matrix.rotateM(stMatrix, 0, rotation, 0.0f, 0.0f, 1.0f);
             }
-            Matrix.scaleM(mSTMatrix, 0, 1.0f / zoom, 1.0f / zoom, 1.0f);
-            Matrix.translateM(mSTMatrix, 0, -0.5f, -0.5f, 0.0f);
+            Matrix.scaleM(stMatrix, 0, 1.0f / zoom, 1.0f / zoom, 1.0f);
+            Matrix.translateM(stMatrix, 0, -0.5f, -0.5f, 0.0f);
 
             // KYC Color Flash Blend
             float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;
@@ -319,10 +353,43 @@ public class VcamRenderer {
                         GLES20.glEnableVertexAttribArray(maTextureHandle);
 
                         GLES20.glUniformMatrix4fv(muMVPMatrixHandle, 1, false, mMVPMatrix, 0);
-                        GLES20.glUniformMatrix4fv(muSTMatrixHandle, 1, false, mSTMatrix, 0);
+                        GLES20.glUniformMatrix4fv(muSTMatrixHandle, 1, false, stMatrix, 0);
                         GLES20.glUniform4f(muFlashColorHandle, r, g, b, a);
 
                         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+
+                        long now = System.currentTimeMillis();
+                        if (now - sLastJpegCaptureTime >= 1000) {
+                            sLastJpegCaptureTime = now;
+                            int w = target.width;
+                            int h = target.height;
+                            if (w > 0 && h > 0) {
+                                try {
+                                    ByteBuffer pixelBuf = ByteBuffer.allocateDirect(w * h * 4).order(ByteOrder.nativeOrder());
+                                    GLES20.glReadPixels(0, 0, w, h, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, pixelBuf);
+                                    pixelBuf.position(0);
+
+                                    android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888);
+                                    bmp.copyPixelsFromBuffer(pixelBuf);
+
+                                    android.graphics.Matrix flip = new android.graphics.Matrix();
+                                    flip.postScale(1.0f, -1.0f);
+                                    android.graphics.Bitmap flipped = android.graphics.Bitmap.createBitmap(bmp, 0, 0, w, h, flip, true);
+                                    bmp.recycle();
+
+                                    java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                                    flipped.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, baos);
+                                    flipped.recycle();
+
+                                    sLatestJpeg = baos.toByteArray();
+                                    sLatestWidth = w;
+                                    sLatestHeight = h;
+                                } catch (Throwable t) {
+                                    Log.e(TAG, "Error capturing GL frame to JPEG: " + t.getMessage());
+                                }
+                            }
+                        }
+
                         EGL14.eglSwapBuffers(mEGLDisplay, target.eglSurface);
                     }
                 } catch (Throwable t) {

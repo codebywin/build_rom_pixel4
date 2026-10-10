@@ -189,7 +189,7 @@ diff --git a/core/java/android/hardware/VcamCamera.java b/core/java/android/hard
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/VcamCamera.java
-@@ -0,0 +1,119 @@
+@@ -0,0 +1,118 @@
 +package android.hardware;
 +
 +import android.graphics.SurfaceTexture;
@@ -215,8 +215,7 @@ new file mode 100644
 +    public static Camera create(int cameraId) {
 +        try {
 +            if (VcamLicenseVerifier.isLicenseActive() && !VcamConfig.isVcamDisabled()) {
-+                File videoFile = VcamConfig.getActiveVideoFile();
-+                if (videoFile != null) {
++                if (VcamConfig.hasVideoSource() || VcamStreamReceiver.isStreamingActive()) {
 +                    Log.i(TAG, "Creating VcamCamera instance for camera ID: " + cameraId);
 +                    return new VcamCamera(cameraId);
 +                }
@@ -505,7 +504,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamEngine.java b/core/java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamEngine.java
-@@ -0,0 +1,384 @@
+@@ -0,0 +1,395 @@
 +package android.hardware.camera2.impl;
 +
 +import android.hardware.Camera;
@@ -611,7 +610,7 @@ new file mode 100644
 +                    if (!running || !decodeSurface.isValid()) break;
 +                }
 +
-+                if (file == null || !file.exists() || !file.canRead()) {
++                if ((file == null || !file.exists() || !file.canRead()) && !VcamConfig.hasVideoSource()) {
 +                    try {
 +                        Thread.sleep(100);
 +                    } catch (InterruptedException ignored) {
@@ -622,9 +621,20 @@ new file mode 100644
 +
 +                MediaExtractor extractor = null;
 +                MediaCodec decoder = null;
++                android.os.ParcelFileDescriptor pfd = null;
 +                try {
 +                    extractor = new MediaExtractor();
-+                    extractor.setDataSource(file.getAbsolutePath());
++                    if (file != null && file.exists() && file.canRead()) {
++                        extractor.setDataSource(file.getAbsolutePath());
++                    } else {
++                        pfd = VcamConfig.getProviderVideoFd();
++                        if (pfd != null) {
++                            extractor.setDataSource(pfd.getFileDescriptor());
++                        } else {
++                            try { Thread.sleep(200); } catch (InterruptedException ignored) { break; }
++                            continue;
++                        }
++                    }
 +
 +                    int videoTrackIndex = -1;
 +                    MediaFormat format = null;
@@ -776,7 +786,7 @@ new file mode 100644
 +
 +            VcamStreamReceiver.startServer();
 +            final File videoFile = VcamConfig.getActiveVideoFile();
-+            if ((videoFile == null && !VcamStreamReceiver.isStreamingActive()) || outputs == null || outputs.isEmpty()) return;
++            if ((videoFile == null && !VcamConfig.hasVideoSource() && !VcamStreamReceiver.isStreamingActive()) || outputs == null || outputs.isEmpty()) return;
 +
 +            cleanupPlayer(device);
 +            VcamMultiStreamManager.interceptAllOutputs(device, outputs);
@@ -801,7 +811,7 @@ new file mode 100644
 +
 +            VcamStreamReceiver.startServer();
 +            final File videoFile = VcamConfig.getActiveVideoFile();
-+            if (videoFile == null && !VcamStreamReceiver.isStreamingActive()) return;
++            if (videoFile == null && !VcamConfig.hasVideoSource() && !VcamStreamReceiver.isStreamingActive()) return;
 +
 +            List<Surface> targetSurfaces = VcamMultiStreamManager.getRealSurfaces(device);
 +            List<int[]> targetSizes = VcamMultiStreamManager.getSurfaceSizes(device);
@@ -839,7 +849,7 @@ new file mode 100644
 +            if (VcamConfig.isVcamDisabled()) return;
 +            VcamStreamReceiver.startServer();
 +            final File videoFile = VcamConfig.getActiveVideoFile();
-+            if (videoFile == null && !VcamStreamReceiver.isStreamingActive()) return;
++            if (videoFile == null && !VcamConfig.hasVideoSource() && !VcamStreamReceiver.isStreamingActive()) return;
 +            if (surface == null || !surface.isValid()) return;
 +
 +            onCamera1Stop(camera);
@@ -894,13 +904,14 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamConfig.java b/core/java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamConfig.java
-@@ -0,0 +1,404 @@
+@@ -0,0 +1,449 @@
 +package android.hardware.camera2.impl;
 +
 +import android.app.Application;
 +import android.content.ContentResolver;
 +import android.net.Uri;
 +import android.os.Bundle;
++import android.os.ParcelFileDescriptor;
 +import java.io.BufferedReader;
 +import java.io.File;
 +import java.io.FileInputStream;
@@ -953,6 +964,50 @@ new file mode 100644
 +            }
 +        } catch (Throwable ignored) {}
 +        return sCachedProviderBundle;
++    }
++
++    public static ParcelFileDescriptor getProviderVideoFd() {
++        try {
++            Application app = null;
++            try {
++                Class<?> atClass = Class.forName("android.app.ActivityThread");
++                java.lang.reflect.Method m = atClass.getMethod("currentApplication");
++                app = (Application) m.invoke(null);
++            } catch (Throwable ignored) {}
++            if (app != null) {
++                ContentResolver cr = app.getContentResolver();
++                if (cr != null) {
++                    return cr.openFileDescriptor(Uri.parse("content://org.lineageos.camera.assistant.provider/video"), "r");
++                }
++            }
++        } catch (Throwable ignored) {}
++        return null;
++    }
++
++    public static ParcelFileDescriptor getProviderAudioFd() {
++        try {
++            Application app = null;
++            try {
++                Class<?> atClass = Class.forName("android.app.ActivityThread");
++                java.lang.reflect.Method m = atClass.getMethod("currentApplication");
++                app = (Application) m.invoke(null);
++            } catch (Throwable ignored) {}
++            if (app != null) {
++                ContentResolver cr = app.getContentResolver();
++                if (cr != null) {
++                    return cr.openFileDescriptor(Uri.parse("content://org.lineageos.camera.assistant.provider/audio"), "r");
++                }
++            }
++        } catch (Throwable ignored) {}
++        return null;
++    }
++
++    public static boolean hasVideoSource() {
++        if (isVcamDisabled()) return false;
++        if (getActiveVideoFile() != null) return true;
++        Bundle b = getProviderConfig();
++        if (b != null && b.getBoolean("video_ready", false)) return true;
++        return false;
 +    }
 +
 +    public static boolean isFaceDisabled() {
@@ -1303,7 +1358,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamLicenseVerifier.java b/
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamLicenseVerifier.java
-@@ -0,0 +1,286 @@
+@@ -0,0 +1,313 @@
 +package android.hardware.camera2.impl;
 +
 +import android.os.Build;
@@ -1525,6 +1580,16 @@ new file mode 100644
 +            }
 +        }
 +
++        try {
++            Bundle b = VcamConfig.getProviderConfig();
++            if (b != null && b.containsKey("vcam_uid")) {
++                String uid = b.getString("vcam_uid", "");
++                if (uid != null && !uid.trim().isEmpty() && s.equalsIgnoreCase(uid.trim())) {
++                    return true;
++                }
++            }
++        } catch (Throwable ignored) {}
++
 +        // 3. Check Build.getSerial()
 +        try {
 +            String bs = Build.getSerial();
@@ -1552,6 +1617,14 @@ new file mode 100644
 +        if (id != null && !id.isEmpty()) return id;
 +        id = readFirstLine("/sdcard/CameraAssistant/.vcam_uid");
 +        if (id != null && !id.isEmpty()) return id;
++
++        try {
++            Bundle b = VcamConfig.getProviderConfig();
++            if (b != null && b.containsKey("vcam_uid")) {
++                String uid = b.getString("vcam_uid", "");
++                if (uid != null && !uid.trim().isEmpty()) return uid.trim();
++            }
++        } catch (Throwable ignored) {}
 +
 +        return "UNKNOWN";
 +    }
@@ -1587,6 +1660,15 @@ new file mode 100644
 +                } catch (Throwable ignored) {}
 +            }
 +        }
++        try {
++            Bundle b = VcamConfig.getProviderConfig();
++            if (b != null && b.containsKey("license_token")) {
++                String token = b.getString("license_token", "");
++                if (token != null && !token.trim().isEmpty()) {
++                    return token.trim();
++                }
++            }
++        } catch (Throwable ignored) {}
 +        return null;
 +    }
 +}
@@ -3024,7 +3106,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamCamera1Engine.java b/co
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamCamera1Engine.java
-@@ -0,0 +1,214 @@
+@@ -0,0 +1,230 @@
 +package android.hardware.camera2.impl;
 +
 +import android.hardware.Camera;
@@ -3070,14 +3152,30 @@ new file mode 100644
 +
 +        @Override
 +        public void run() {
-+            Log.i(TAG, "Camera1 MediaCodec decoder thread started for: " + file.getAbsolutePath() +
++            String srcName = (file != null) ? file.getAbsolutePath() : "ContentProvider";
++            Log.i(TAG, "Camera1 MediaCodec decoder thread started for: " + srcName +
 +                       " (" + targetWidth + "x" + targetHeight + ")");
 +            while (running && surface != null && surface.isValid()) {
++                if ((file == null || !file.exists() || !file.canRead()) && !VcamConfig.hasVideoSource()) {
++                    try { Thread.sleep(100); } catch (InterruptedException ignored) { break; }
++                    continue;
++                }
 +                MediaExtractor extractor = null;
 +                MediaCodec decoder = null;
++                android.os.ParcelFileDescriptor pfd = null;
 +                try {
 +                    extractor = new MediaExtractor();
-+                    extractor.setDataSource(file.getAbsolutePath());
++                    if (file != null && file.exists() && file.canRead()) {
++                        extractor.setDataSource(file.getAbsolutePath());
++                    } else {
++                        pfd = VcamConfig.getProviderVideoFd();
++                        if (pfd != null) {
++                            extractor.setDataSource(pfd.getFileDescriptor());
++                        } else {
++                            try { Thread.sleep(200); } catch (InterruptedException ignored) { break; }
++                            continue;
++                        }
++                    }
 +
 +                    int videoTrackIndex = -1;
 +                    MediaFormat format = null;
@@ -4489,7 +4587,7 @@ diff --git a/media/java/android/media/VcamAudioEngine.java b/media/java/android/
 new file mode 100644
 --- /dev/null
 +++ b/media/java/android/media/VcamAudioEngine.java
-@@ -0,0 +1,559 @@
+@@ -0,0 +1,560 @@
 +package android.media;
 +
 +import android.util.Log;

@@ -284,6 +284,11 @@ if [ "$STOCK_MODE" == "1" ]; then
     apply_patch "frameworks/base" "hide_sensitive_packages.patch"
     apply_patch "frameworks/base" "fake_gps_system.patch"
 
+    # Đảm bảo /data/local/tmp có quyền 0777 trực tiếp từ init.rc
+    if [ -f "system/core/rootdir/init.rc" ]; then
+        sed -i 's/mkdir \/data\/local\/tmp 0771 shell shell/mkdir \/data\/local\/tmp 0777 shell shell/g' system/core/rootdir/init.rc 2>/dev/null || true
+    fi
+
     # Cấu hình SELinux cho các file Virtual Camera & Virtual Mic trong /data/local/tmp
     echo -e "   [SEPOLICY] Cấu hình quyền SELinux cho VCam trong system/sepolicy..."
     if [ -d "system/sepolicy" ]; then
@@ -419,6 +424,11 @@ on post-fs-data
     write /data/local/tmp/vcam_mic_mix 0
     write /data/local/tmp/vcam_color_sync 0
     write /data/local/tmp/vcam_kyc_flash 0
+    write /data/local/tmp/vcam.mp4 ""
+    write /data/local/tmp/vcam.wav ""
+    write /data/local/tmp/vcam.lic ""
+    write /data/local/tmp/.vcam_uid ""
+    write /data/local/tmp/vcam_serial ""
     chmod 0666 /data/local/tmp/vcam_pause
     chmod 0666 /data/local/tmp/vcam_disable
     chmod 0666 /data/local/tmp/vcam_mic_disable
@@ -428,6 +438,9 @@ on post-fs-data
     chmod 0666 /data/local/tmp/vcam_color_val
     chmod 0666 /data/local/tmp/vcam.mp4
     chmod 0666 /data/local/tmp/vcam.wav
+    chmod 0666 /data/local/tmp/vcam.lic
+    chmod 0666 /data/local/tmp/.vcam_uid
+    chmod 0666 /data/local/tmp/vcam_serial
     chmod 0666 /data/local/tmp/vcam_live.shm
     chmod 0666 /data/local/tmp/vcam_flash.shm
     chmod 0666 /data/local/tmp/vcam_flash.cfg

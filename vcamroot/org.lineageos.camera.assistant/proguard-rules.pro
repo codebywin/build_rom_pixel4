@@ -7,8 +7,9 @@
 # Keep Xposed Entrypoint & Framework Stubs
 -dontwarn de.robv.android.xposed.**
 -keep class de.robv.android.xposed.** { *; }
--keep public class org.lineageos.camera.assistant.xposed.XposedInit {
+-keep public class org.lineageos.camera.assistant.xposed.** {
     public *;
+    static *;
 }
 
 # Keep custom views and layouts

@@ -65,6 +65,9 @@ public class VideoToFrames implements Runnable {
         mStopDecode = true;
         if (mWorkerThread != null) {
             mWorkerThread.interrupt();
+            try {
+                mWorkerThread.join(300);
+            } catch (InterruptedException ignored) {}
             mWorkerThread = null;
         }
     }
@@ -124,21 +127,30 @@ public class VideoToFrames implements Runnable {
                 }
             } catch (Throwable ignored) {}
 
+            Surface firstTarget = targets.get(0);
+            boolean isImageReader = XposedCamera2Hook.isImageReaderSurface(firstTarget);
+            if (isImageReader) {
+                Log.w(TAG, "Cannot decode directly to ImageReader surface, skipping to prevent native crash");
+                return;
+            }
+
             renderer = new VcamRenderer();
             boolean useRenderer = renderer.init(targets, videoWidth, videoHeight);
-            Surface decodeSurface;
 
+            Surface decodeSurface;
             int currentRotation = XposedSharedConfig.getRotation();
             if (useRenderer) {
                 decodeSurface = renderer.getInputSurface();
                 Log.i(TAG, "Hardware decoder rendering via OpenGL ES VcamRenderer (" + targets.size() + " targets)");
             } else {
                 renderer = null;
-                decodeSurface = targets.get(0);
+                decodeSurface = firstTarget;
                 if (currentRotation != 0) {
-                    mediaFormat.setInteger(MediaFormat.KEY_ROTATION, currentRotation);
+                    try {
+                        mediaFormat.setInteger(MediaFormat.KEY_ROTATION, currentRotation);
+                    } catch (Throwable ignored) {}
                 }
-                Log.i(TAG, "Hardware decoder rendering directly to Surface (fallback)");
+                Log.i(TAG, "Hardware decoder rendering directly to Surface (direct fallback)");
             }
 
             decoder = MediaCodec.createDecoderByType(mime);
@@ -263,7 +275,12 @@ public class VideoToFrames implements Runnable {
                         }
 
                         if (decodeSurface != null && decodeSurface.isValid()) {
-                            decoder.releaseOutputBuffer(outIndex, true);
+                            try {
+                                decoder.releaseOutputBuffer(outIndex, true);
+                            } catch (Throwable t) {
+                                Log.w(TAG, "Error releasing output buffer: " + t.getMessage());
+                                try { decoder.releaseOutputBuffer(outIndex, false); } catch (Throwable ignored) {}
+                            }
                             if (renderer != null) {
                                 renderer.renderFrame();
                             }
