@@ -189,7 +189,7 @@ diff --git a/core/java/android/hardware/VcamCamera.java b/core/java/android/hard
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/VcamCamera.java
-@@ -0,0 +1,118 @@
+@@ -0,0 +1,119 @@
 +package android.hardware;
 +
 +import android.graphics.SurfaceTexture;
@@ -198,6 +198,7 @@ new file mode 100644
 +import android.hardware.camera2.impl.VcamEngine;
 +import android.hardware.camera2.impl.VcamLicenseVerifier;
 +import android.hardware.camera2.impl.VcamRenderer;
++import android.hardware.camera2.impl.VcamStreamReceiver;
 +import android.util.Log;
 +import android.view.Surface;
 +import android.view.SurfaceHolder;
