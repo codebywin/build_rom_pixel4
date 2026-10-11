@@ -60,4 +60,14 @@
     <string name="vcam_bright_desc">Khắc phục hiện tượng ảnh chụp bị sáng chói hơn video gốc do thuật toán Google Camera HDR+. Mức 65% giúp ảnh chụp ra chuẩn 1:1 như video.</string>
     <string name="vcam_opacity_title">👁️ Độ Trong Suốt Menu Nổi</string>
     <string name="vcam_opacity_desc" formatted="false">Điều chỉnh độ trong suốt của menu nổi (80%, 85%, 90%, 95%, 100%) để dễ nhìn xuyên qua video preview phía dưới.</string>
+    <string name="bypass_overlay_title">🛡️ Bảo Vệ Icon Nổi (Bypass Anti-Overlay)</string>
+    <string name="bypass_overlay_desc">Giữ icon Camera Assistant và Set GPS luôn hiển thị trên mọi ứng dụng (kể cả app bảo mật/ngân hàng)</string>
+    <string name="toast_bypass_overlay_on">🛡️ Đã BẬT Bypass Anti-Overlay!\nIcon nổi sẽ không bao giờ bị ẩn.</string>
+    <string name="toast_bypass_overlay_off">🛡️ Đã TẮT Bypass Anti-Overlay.</string>
+    <string name="notif_opacity_title">🔔 Độ Trong Suốt Thanh Thông Báo</string>
+    <string name="notif_opacity_desc" formatted="false">Tùy chỉnh độ mờ nền thanh thông báo và Quick Settings (0% trong suốt - 100% đậm)</string>
+    <string name="kyc_flash_switch_title">⚡ Đồng Bộ Chớp Flash KYC (Màn Hình)</string>
+    <string name="kyc_flash_switch_desc">Tự động bắt màu viền chớp của app KYC để đồng bộ vào video. Hoạt động ngầm liên tục kể cả khi tắt icon nổi.</string>
+    <string name="toast_kyc_flash_on">⚡ Đã BẬT Đồng bộ Flash KYC (Màn hình)!\nChạy ngầm liên tục kể cả khi tắt icon nổi.</string>
+    <string name="toast_kyc_flash_off">⚡ Đã TẮT Đồng bộ Flash KYC.</string>
 </resources>

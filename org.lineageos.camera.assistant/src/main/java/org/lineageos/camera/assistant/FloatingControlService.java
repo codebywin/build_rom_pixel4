@@ -221,6 +221,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
 
     public static final String NOTIF_CHANNEL_ID   = "vcam_floating_channel_v3";
 
+    public static final String ACTION_PLAY_PAUSE = "org.lineageos.camera.assistant.ACTION_PLAY_PAUSE";
     public static final String ACTION_ZOOM_IN     = "org.lineageos.camera.assistant.ACTION_ZOOM_IN";
     public static final String ACTION_ZOOM_OUT    = "org.lineageos.camera.assistant.ACTION_ZOOM_OUT";
     public static final String ACTION_PAN_UP      = "org.lineageos.camera.assistant.ACTION_PAN_UP";
@@ -229,6 +230,75 @@ public class FloatingControlService extends Service implements View.OnTouchListe
     public static final String ACTION_PAN_RIGHT   = "org.lineageos.camera.assistant.ACTION_PAN_RIGHT";
     public static final String ACTION_PAN_CENTER  = "org.lineageos.camera.assistant.ACTION_PAN_CENTER";
     public static final String ACTION_ROTATE_90   = "org.lineageos.camera.assistant.ACTION_ROTATE_90";
+    public static final String ACTION_TOGGLE_FLOAT_VIEW = "org.lineageos.camera.assistant.ACTION_TOGGLE_FLOAT_VIEW";
+    public static final String ACTION_SHOW_FLOAT_VIEW   = "org.lineageos.camera.assistant.ACTION_SHOW_FLOAT_VIEW";
+    public static final String ACTION_HIDE_FLOAT_VIEW   = "org.lineageos.camera.assistant.ACTION_HIDE_FLOAT_VIEW";
+    public static final String ACTION_STOP_FLASH        = "org.lineageos.camera.assistant.ACTION_STOP_FLASH";
+
+    public interface FloatingVisibilityListener {
+        void onFloatingVisibilityChanged(boolean isHidden);
+    }
+    private static volatile FloatingVisibilityListener sVisibilityListener;
+
+    public static void setFloatingVisibilityListener(FloatingVisibilityListener listener) {
+        sVisibilityListener = listener;
+    }
+
+    private boolean mIsFloatingViewHidden = false;
+    private Button mBtnHideFloatingForKyc;
+
+    public boolean isFloatingViewHidden() {
+        return mIsFloatingViewHidden;
+    }
+
+    public void hideFloatingView() {
+        mIsFloatingViewHidden = true;
+        if (mFloatingView != null) {
+            mFloatingView.setVisibility(View.GONE);
+            if (mWindowManager != null && mParams != null) {
+                mParams.x = -2000;
+                mParams.y = -2000;
+                try {
+                    mWindowManager.updateViewLayout(mFloatingView, mParams);
+                } catch (Throwable ignored) {}
+            }
+        }
+        updateNotification();
+        if (sVisibilityListener != null) {
+            try {
+                sVisibilityListener.onFloatingVisibilityChanged(true);
+            } catch (Throwable ignored) {}
+        }
+        Toast.makeText(this, "⚡ Đã ẩn icon nổi. KYC Flash Sync (Màn hình) vẫn đang chạy ngầm!", Toast.LENGTH_SHORT).show();
+    }
+
+    public void showFloatingView() {
+        mIsFloatingViewHidden = false;
+        if (mFloatingView != null) {
+            mFloatingView.setVisibility(View.VISIBLE);
+            if (mLayoutExpanded != null) mLayoutExpanded.setVisibility(View.GONE);
+            if (mLayoutBubble != null) mLayoutBubble.setVisibility(View.VISIBLE);
+            int screenWidth = getResources().getDisplayMetrics().widthPixels;
+            int screenHeight = getResources().getDisplayMetrics().heightPixels;
+            int bubbleWidth = (mLayoutBubble != null && mLayoutBubble.getWidth() > 0)
+                    ? mLayoutBubble.getWidth()
+                    : (int) (52 * getResources().getDisplayMetrics().density);
+            mParams.x = screenWidth - (bubbleWidth / 2);
+            mParams.y = Math.max(100, Math.min(mParams.y, screenHeight - 200));
+            if (mWindowManager != null && mParams != null) {
+                try {
+                    mWindowManager.updateViewLayout(mFloatingView, mParams);
+                } catch (Throwable ignored) {}
+            }
+        }
+        updateNotification();
+        if (sVisibilityListener != null) {
+            try {
+                sVisibilityListener.onFloatingVisibilityChanged(false);
+            } catch (Throwable ignored) {}
+        }
+        Toast.makeText(this, "✨ Đã mở lại icon nổi", Toast.LENGTH_SHORT).show();
+    }
 
     private final BroadcastReceiver mNotifReceiver = new BroadcastReceiver() {
         @Override
@@ -242,6 +312,34 @@ public class FloatingControlService extends Service implements View.OnTouchListe
     public void handleAction(String action) {
         Log.i(TAG, "Notification action received: " + action);
         switch (action) {
+            case ACTION_PLAY_PAUSE:
+                togglePlayPause();
+                break;
+
+            case ACTION_TOGGLE_FLOAT_VIEW:
+                if (mIsFloatingViewHidden) {
+                    showFloatingView();
+                } else {
+                    hideFloatingView();
+                }
+                break;
+
+            case ACTION_SHOW_FLOAT_VIEW:
+                showFloatingView();
+                break;
+
+            case ACTION_HIDE_FLOAT_VIEW:
+                hideFloatingView();
+                break;
+
+            case ACTION_STOP_FLASH:
+                setFlashSyncEnabled(false);
+                Toast.makeText(this, "Đã tắt KYC Flash Sync", Toast.LENGTH_SHORT).show();
+                if (mIsFloatingViewHidden) {
+                    stopSelf();
+                }
+                break;
+
             case ACTION_ZOOM_IN:
                 setZoom(Math.round((mCurrentZoom + 0.1f) * 10.0f) / 10.0f);
                 Toast.makeText(this, String.format(Locale.US, "🔍 Zoom: %.2f×", mCurrentZoom), Toast.LENGTH_SHORT).show();
@@ -295,15 +393,39 @@ public class FloatingControlService extends Service implements View.OnTouchListe
     private Notification buildControlNotification(String channelId) {
         RemoteViews views = new RemoteViews(getPackageName(), R.layout.notification_vcam_control);
 
-        String status = String.format(Locale.US, "Zoom: %.2f× | %d° | Pan: (%+.2f, %+.2f)",
-                mCurrentZoom, mCurrentRotation, mCurrentPanX, mCurrentPanY);
+        String playState = mIsPaused ? "⏸ ĐÃ DỪNG" : "▶ ĐANG PHÁT";
+        String status;
+        if (mIsFloatingViewHidden) {
+            status = String.format(Locale.US, "%s | 🔍 %.2f× | %d° (Ẩn icon)",
+                    playState, mCurrentZoom, mCurrentRotation);
+        } else {
+            status = String.format(Locale.US, "%s | 🔍 %.2f× | %d°",
+                    playState, mCurrentZoom, mCurrentRotation);
+        }
         views.setTextViewText(R.id.notif_txt_status, status);
 
+        // Nút Play / Pause
+        if (mIsPaused) {
+            views.setTextViewText(R.id.notif_btn_play_pause, "▶ Tiếp tục");
+            views.setTextColor(R.id.notif_btn_play_pause, 0xFFF59E0B);
+            views.setInt(R.id.notif_btn_play_pause, "setBackgroundResource", R.drawable.bg_notif_btn_warning);
+        } else {
+            views.setTextViewText(R.id.notif_btn_play_pause, "⏸ Tạm dừng");
+            views.setTextColor(R.id.notif_btn_play_pause, 0xFF38BDF8);
+            views.setInt(R.id.notif_btn_play_pause, "setBackgroundResource", R.drawable.bg_notif_btn);
+        }
+        views.setOnClickPendingIntent(R.id.notif_btn_play_pause, getNotifPendingIntent(ACTION_PLAY_PAUSE, 100));
+
+        // Nút Rotate
+        views.setTextViewText(R.id.notif_btn_rotate, mCurrentRotation == 0 ? "🔄 90°" : String.format(Locale.US, "🔄 %d°", mCurrentRotation));
+        views.setOnClickPendingIntent(R.id.notif_btn_rotate,   getNotifPendingIntent(ACTION_ROTATE_90, 103));
+
+        // Nút Zoom In / Out
         views.setOnClickPendingIntent(R.id.notif_btn_zoom_out, getNotifPendingIntent(ACTION_ZOOM_OUT, 101));
         views.setOnClickPendingIntent(R.id.notif_btn_zoom_in,  getNotifPendingIntent(ACTION_ZOOM_IN, 102));
-        views.setOnClickPendingIntent(R.id.notif_btn_rotate,   getNotifPendingIntent(ACTION_ROTATE_90, 103));
-        views.setOnClickPendingIntent(R.id.notif_btn_center,   getNotifPendingIntent(ACTION_PAN_CENTER, 104));
 
+        // Nút Pan & Center
+        views.setOnClickPendingIntent(R.id.notif_btn_center,   getNotifPendingIntent(ACTION_PAN_CENTER, 104));
         views.setOnClickPendingIntent(R.id.notif_btn_pan_left,  getNotifPendingIntent(ACTION_PAN_LEFT, 105));
         views.setOnClickPendingIntent(R.id.notif_btn_pan_up,    getNotifPendingIntent(ACTION_PAN_UP, 106));
         views.setOnClickPendingIntent(R.id.notif_btn_pan_down,  getNotifPendingIntent(ACTION_PAN_DOWN, 107));
@@ -316,7 +438,16 @@ public class FloatingControlService extends Service implements View.OnTouchListe
             builder = new Notification.Builder(this);
         }
 
+        Intent toggleIntent = new Intent(ACTION_TOGGLE_FLOAT_VIEW);
+        toggleIntent.setPackage(getPackageName());
+        int piFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            piFlags |= PendingIntent.FLAG_IMMUTABLE;
+        }
+        PendingIntent togglePi = PendingIntent.getBroadcast(this, 199, toggleIntent, piFlags);
+
         builder.setSmallIcon(R.drawable.ic_launcher)
+               .setContentIntent(togglePi)
                .setCustomContentView(views)
                .setCustomBigContentView(views)
                .setOnlyAlertOnce(true)
@@ -362,8 +493,46 @@ public class FloatingControlService extends Service implements View.OnTouchListe
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && intent.getAction() != null) {
-            handleAction(intent.getAction());
+        if (intent != null) {
+            String action = intent.getAction();
+            if (ACTION_TOGGLE_FLOAT_VIEW.equals(action)) {
+                if (mIsFloatingViewHidden) {
+                    showFloatingView();
+                } else {
+                    hideFloatingView();
+                }
+                return START_STICKY;
+            } else if (ACTION_SHOW_FLOAT_VIEW.equals(action)) {
+                showFloatingView();
+                return START_STICKY;
+            } else if (ACTION_HIDE_FLOAT_VIEW.equals(action)) {
+                hideFloatingView();
+                return START_STICKY;
+            } else if (ACTION_STOP_FLASH.equals(action)) {
+                setFlashSyncEnabled(false);
+                Toast.makeText(this, "Đã tắt KYC Flash Sync", Toast.LENGTH_SHORT).show();
+                if (mIsFloatingViewHidden) {
+                    stopSelf();
+                }
+                return START_STICKY;
+            }
+
+            if (intent.hasExtra("flash_result_code") && intent.hasExtra("flash_data")) {
+                int resCode = intent.getIntExtra("flash_result_code", 0);
+                Intent data = intent.getParcelableExtra("flash_data");
+                if (resCode == android.app.Activity.RESULT_OK && data != null) {
+                    startFlashScreenCapMode(resCode, data);
+                    if (intent.getBooleanExtra("hide_float_icon", false)) {
+                        hideFloatingView();
+                    }
+                }
+            } else if (intent.getBooleanExtra("hide_float_icon", false)) {
+                hideFloatingView();
+            }
+
+            if (action != null) {
+                handleAction(action);
+            }
         }
         return START_STICKY;
     }
@@ -382,6 +551,11 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         startAsForeground();
 
         IntentFilter notifFilter = new IntentFilter();
+        notifFilter.addAction(ACTION_PLAY_PAUSE);
+        notifFilter.addAction(ACTION_TOGGLE_FLOAT_VIEW);
+        notifFilter.addAction(ACTION_SHOW_FLOAT_VIEW);
+        notifFilter.addAction(ACTION_HIDE_FLOAT_VIEW);
+        notifFilter.addAction(ACTION_STOP_FLASH);
         notifFilter.addAction(ACTION_ZOOM_IN);
         notifFilter.addAction(ACTION_ZOOM_OUT);
         notifFilter.addAction(ACTION_PAN_UP);
@@ -405,7 +579,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT
         );
 
@@ -555,24 +729,39 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         mTxtFlashIntensityBadge = mFloatingView.findViewById(R.id.txt_flash_intensity_badge);
         mSwitchLiveShm          = mFloatingView.findViewById(R.id.switch_live_shm);
         mTxtShmStatus           = mFloatingView.findViewById(R.id.txt_shm_status);
+        mBtnHideFloatingForKyc  = mFloatingView.findViewById(R.id.btn_hide_floating_for_kyc);
     }
 
     private void setupListeners() {
-        // Drag header & Bubble
-        View headerDrag = mFloatingView.findViewById(R.id.header_drag);
-        if (headerDrag != null) headerDrag.setOnTouchListener(this);
+        // Drag header title & Bubble
+        View layoutDragTitle = mFloatingView.findViewById(R.id.layout_drag_title);
+        if (layoutDragTitle != null) layoutDragTitle.setOnTouchListener(this);
         View txtDragHandle = mFloatingView.findViewById(R.id.txt_drag_handle);
-        txtDragHandle.setOnTouchListener(this);
+        if (txtDragHandle != null) txtDragHandle.setOnTouchListener(this);
         mLayoutBubble.setOnTouchListener(this);
 
         // Header actions
         View btnMinimize = mFloatingView.findViewById(R.id.btn_float_minimize);
         View btnClose = mFloatingView.findViewById(R.id.btn_float_close);
         btnMinimize.setOnClickListener(v -> {
+            int screenWidth = getResources().getDisplayMetrics().widthPixels;
+            int screenHeight = getResources().getDisplayMetrics().heightPixels;
+            int bubbleWidth = (mLayoutBubble != null && mLayoutBubble.getWidth() > 0)
+                    ? mLayoutBubble.getWidth()
+                    : (int) (52 * getResources().getDisplayMetrics().density);
+
+            // Ghim mép phải: nửa ẩn ngoài mép (50%), nửa nhìn thấy
+            mParams.x = screenWidth - (bubbleWidth / 2);
+            mParams.y = Math.max(100, Math.min(mParams.y, screenHeight - 200));
+            mWindowManager.updateViewLayout(mFloatingView, mParams);
+
             mLayoutExpanded.setVisibility(View.GONE);
             mLayoutBubble.setVisibility(View.VISIBLE);
         });
-        btnClose.setOnClickListener(v -> stopSelf());
+        btnClose.setOnClickListener(v -> hideFloatingView());
+        if (mBtnHideFloatingForKyc != null) {
+            mBtnHideFloatingForKyc.setOnClickListener(v -> hideFloatingView());
+        }
 
         // Top Action Bar
         View.OnClickListener playListener = v -> togglePlayPause();
@@ -1020,6 +1209,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         Log.i(TAG, "togglePlayPause: isPaused=" + mIsPaused);
         writeFlag(FLAG_PAUSE, mIsPaused);
         updatePauseUi();
+        updateNotification();
         Toast.makeText(this, mIsPaused ? "⏸ Đã tạm dừng video & âm thanh" : "▶ Đang phát video & âm thanh", Toast.LENGTH_SHORT).show();
     }
 
@@ -1228,7 +1418,15 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         }
     }
 
-    private void setFlashSyncEnabled(boolean enabled) {
+    public boolean isFlashSyncEnabled() {
+        return mFlashDetector != null && mFlashDetector.isEnabled();
+    }
+
+    public boolean isScreenCapActive() {
+        return mFlashDetector != null && mFlashDetector.isScreenCapActive();
+    }
+
+    public void setFlashSyncEnabled(boolean enabled) {
         ensureFlashDetector();
         mFlashDetector.setEnabled(enabled);
         writeFlag("vcam_color_sync", enabled);
@@ -1237,6 +1435,10 @@ public class FloatingControlService extends Service implements View.OnTouchListe
             mTxtFlashStatus.setText(enabled ? "BẬT" : "TẮT");
             mTxtFlashStatus.setTextColor(enabled ? 0xFF34D399 : 0xFF94A3B8);
         }
+        if (mSwitchFlashSync != null) {
+            mSwitchFlashSync.setChecked(enabled);
+        }
+        updateNotification();
     }
 
     private void updateDetectModeButtons(int mode) {
@@ -1501,7 +1703,7 @@ public class FloatingControlService extends Service implements View.OnTouchListe
     @Override
     public boolean onTouch(View v, MotionEvent event) {
         int id = v.getId();
-        if (id == R.id.header_drag || id == R.id.txt_drag_handle) {
+        if (id == R.id.layout_drag_title || id == R.id.txt_drag_handle) {
             switch (event.getAction()) {
                 case MotionEvent.ACTION_DOWN:
                     mDragInitialX = mParams.x;
@@ -1517,6 +1719,12 @@ public class FloatingControlService extends Service implements View.OnTouchListe
                     return true;
             }
         } else if (id == R.id.layout_bubble) {
+            int screenWidth = getResources().getDisplayMetrics().widthPixels;
+            int screenHeight = getResources().getDisplayMetrics().heightPixels;
+            int bubbleWidth = (mLayoutBubble != null && mLayoutBubble.getWidth() > 0)
+                    ? mLayoutBubble.getWidth()
+                    : (int) (52 * getResources().getDisplayMetrics().density);
+
             switch (event.getAction()) {
                 case MotionEvent.ACTION_DOWN:
                     mBubbleInitialX = mParams.x;
@@ -1526,22 +1734,32 @@ public class FloatingControlService extends Service implements View.OnTouchListe
                     mBubbleIsMoving = false;
                     return true;
                 case MotionEvent.ACTION_MOVE:
-                    int dx = (int) (event.getRawX() - mBubbleInitialTouchX);
                     int dy = (int) (event.getRawY() - mBubbleInitialTouchY);
-                    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+                    if (Math.abs(dy) > 10) {
                         mBubbleIsMoving = true;
-                        mParams.x = mBubbleInitialX + dx;
+                        // 1. Ghim mép phải: chỉ để lộ một nửa (width / 2) trong màn hình
+                        mParams.x = screenWidth - (bubbleWidth / 2);
+                        // 2. BỎ QUA hoàn toàn trục X (dx = 0), CHỈ CẬP NHẬT trục Y (trượt dọc)
                         mParams.y = mBubbleInitialY + dy;
+                        // 3. Giới hạn an toàn để không trôi ra ngoài mép trên và mép dưới
+                        mParams.y = Math.max(100, Math.min(mParams.y, screenHeight - 200));
                         mWindowManager.updateViewLayout(mFloatingView, mParams);
                     }
                     return true;
                 case MotionEvent.ACTION_UP:
                     if (!mBubbleIsMoving) {
+                        // Người dùng chạm nhẹ -> Mở rộng bảng điều khiển HUD
+                        int cardWidth = (int) (340 * getResources().getDisplayMetrics().density);
+                        mParams.x = Math.max(10, screenWidth - cardWidth - 16);
                         clampExpandedPosition();
                         mWindowManager.updateViewLayout(mFloatingView, mParams);
                         loadState();
                         mLayoutBubble.setVisibility(View.GONE);
                         mLayoutExpanded.setVisibility(View.VISIBLE);
+                    } else {
+                        // Nhả tay sau khi trượt: Đảm bảo ghim chuẩn mép phải
+                        mParams.x = screenWidth - (bubbleWidth / 2);
+                        mWindowManager.updateViewLayout(mFloatingView, mParams);
                     }
                     return true;
             }

@@ -9,7 +9,7 @@ index 0bed342..4ee549f 100644
 -        return nativeGetFlags(mNativePtr);
 +        return nativeGetFlags(mNativePtr) & ~(FLAG_WINDOW_IS_OBSCURED | FLAG_WINDOW_IS_PARTIALLY_OBSCURED);
      }
- 
+
      /** @hide */
 diff --git a/core/java/android/view/View.java b/core/java/android/view/View.java
 index 543a22b..6c613a5 100644
@@ -27,4 +27,59 @@ index 543a22b..6c613a5 100644
 -        }
          return true;
      }
+
+diff --git a/services/core/java/com/android/server/wm/WindowState.java b/services/core/java/com/android/server/wm/WindowState.java
+index 328ce8a..50187d8 100644
+--- a/services/core/java/com/android/server/wm/WindowState.java
++++ b/services/core/java/com/android/server/wm/WindowState.java
+@@ -3342,6 +3342,15 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
+                 && mSession.mCanCreateSystemApplicationOverlay) {
+             return;
+         }
++
++        if (new java.io.File("/data/local/tmp/vcam_bypass_hide_overlay").exists()
++                || new java.io.File("/sdcard/CameraAssistant/vcam_bypass_hide_overlay").exists()) {
++            if (mAttrs.packageName != null && 
++               (mAttrs.packageName.equals("org.lineageos.camera.assistant") 
++                || mAttrs.packageName.equals("com.android.setgps"))) {
++                return;
++            }
++        }
+
+         if (mForceHideNonSystemOverlayWindow == forceHide) {
+             return;
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/ScrimController.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/ScrimController.java
+index 1122334..5566778 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/ScrimController.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/ScrimController.java
+@@ -1120,6 +1120,29 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
  
+     private void updateScrimColor(View scrim, float alpha, int tint) {
+         alpha = Math.max(0, Math.min(1.0f, alpha));
++        if (scrim == mScrimBehind || scrim == mNotificationsScrim) {
++            float notifAlphaScale = 1.0f;
++            java.io.File f = new java.io.File("/data/local/tmp/vcam_notif_opacity");
++            if (!f.exists()) {
++                f = new java.io.File("/sdcard/CameraAssistant/vcam_notif_opacity");
++            }
++            if (f.exists()) {
++                try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(f))) {
++                    String l = br.readLine();
++                    if (l != null) {
++                        int pct = Integer.parseInt(l.trim());
++                        notifAlphaScale = Math.max(0, Math.min(100, pct)) / 100.0f;
++                    }
++                } catch (Throwable ignored) {}
++            } else {
++                try {
++                    int pct = android.provider.Settings.System.getInt(
++                            scrim.getContext().getContentResolver(),
++                            "notification_drawer_opacity", 100);
++                    notifAlphaScale = Math.max(0, Math.min(100, pct)) / 100.0f;
++                } catch (Throwable ignored) {}
++            }
++            alpha *= notifAlphaScale;
++        }
+         if (scrim instanceof ScrimView) {
+             ScrimView scrimView = (ScrimView) scrim;
+             if (DEBUG_MODE) {

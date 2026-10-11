@@ -182,6 +182,10 @@ public class FlashColorDetector {
         Log.i(TAG, "Screen capture mode started " + capW + "x" + capH);
     }
 
+    public boolean isScreenCapActive() {
+        return mProjection != null;
+    }
+
     public void stopScreenCapMode() {
         if (mScreenHandler != null && mScreenRunnable != null) {
             mScreenHandler.removeCallbacks(mScreenRunnable);

@@ -4,13 +4,14 @@
     android:layout_width="wrap_content"
     android:layout_height="wrap_content">
 
-    <!-- 1. BONG BÓNG THU NHỎ (MINIMIZED BUBBLE) -->
+    <!-- 1. BONG BÓNG THU NHỎ (MINIMIZED BUBBLE - HÍT MÉP PHẢI) -->
     <LinearLayout
         android:id="@+id/layout_bubble"
         android:layout_width="52dp"
         android:layout_height="52dp"
         android:background="@drawable/bg_floating_bubble"
         android:gravity="center"
+        android:paddingEnd="26dp"
         android:orientation="vertical"
         android:visibility="gone"
         android:outlineProvider="background"
@@ -20,7 +21,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="📷"
-            android:textSize="22sp" />
+            android:textSize="18sp" />
     </LinearLayout>
 
     <!-- 2. CỬA SỔ ĐIỀU KHIỂN NỔI (EXPANDED WCAM HUD) -->
@@ -53,6 +54,7 @@
 
             <!-- Title & Subtitle -->
             <LinearLayout
+                android:id="@+id/layout_drag_title"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -1767,6 +1769,17 @@
                     android:text="💡 Bật khi làm KYC. Flash Diff tự động, Màn hình cần cấp quyền Screen Capture."
                     android:textColor="#64748B"
                     android:textSize="10sp" />
+
+                <Button
+                    android:id="@+id/btn_hide_floating_for_kyc"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:text="🙈 Ẩn Icon Nổi (Chạy Ngầm Cho KYC)"
+                    android:backgroundTint="#0284C7"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="8dp" />
 
                 <View
                     android:layout_width="match_parent"

@@ -50,6 +50,8 @@ public class VcamConfigProvider extends ContentProvider {
         sState.put("color_sync", false);
         sState.put("live_shm", false);
         sState.put("floating_opacity", 0.85f);
+        sState.put("bypass_hide_overlay", false);
+        sState.put("notif_opacity", 100);
         sState.put("license_token", "");
         sState.put("vcam_uid", "");
         sState.put("video_ready", false);
@@ -158,6 +160,21 @@ public class VcamConfigProvider extends ContentProvider {
         return false;
     }
 
+    public static boolean hasValidImage(Context ctx) {
+        if (ctx == null) ctx = sStaticContext != null ? sStaticContext : getStaticContext();
+        if (ctx != null) {
+            File f1 = new File(ctx.getFilesDir(), "vcam.jpg");
+            if (f1.exists() && f1.length() > 0) return true;
+            File f2 = new File(ctx.getCacheDir(), "vcam.jpg");
+            if (f2.exists() && f2.length() > 0) return true;
+        }
+        File f3 = new File("/sdcard/CameraAssistant/vcam.jpg");
+        if (f3.exists() && f3.length() > 0) return true;
+        File f4 = new File("/data/local/tmp/vcam.jpg");
+        if (f4.exists() && f4.length() > 0) return true;
+        return false;
+    }
+
     public static Bundle getAllBundle() {
         Bundle b = new Bundle();
         b.putInt("rotation", getInt("rotation", 0));
@@ -181,6 +198,8 @@ public class VcamConfigProvider extends ContentProvider {
         b.putString("vcam_uid", getString("vcam_uid", ""));
         b.putBoolean("video_ready", hasValidVideo(sStaticContext));
         b.putBoolean("audio_ready", hasValidAudio(sStaticContext));
+        b.putBoolean("image_ready", hasValidImage(sStaticContext));
+        b.putString("media_mode", getString("media_mode", "auto"));
         return b;
     }
 
@@ -286,6 +305,19 @@ public class VcamConfigProvider extends ContentProvider {
                 new File("/data/local/tmp/vcam.wav")
             };
             for (File f : audioCandidates) {
+                if (f.exists() && f.length() > 0) {
+                    target = f;
+                    break;
+                }
+            }
+        } else if (path.contains("image") || path.contains("vcam.jpg")) {
+            File[] imageCandidates = new File[] {
+                new File(ctx.getFilesDir(), "vcam.jpg"),
+                new File(ctx.getCacheDir(), "vcam.jpg"),
+                new File("/sdcard/CameraAssistant/vcam.jpg"),
+                new File("/data/local/tmp/vcam.jpg")
+            };
+            for (File f : imageCandidates) {
                 if (f.exists() && f.length() > 0) {
                     target = f;
                     break;

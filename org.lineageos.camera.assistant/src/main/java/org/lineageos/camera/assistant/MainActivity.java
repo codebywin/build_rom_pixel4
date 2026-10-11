@@ -55,7 +55,19 @@ public class MainActivity extends Activity {
 
     private Switch switchVcam;
     private Switch switchSwapUv;
+    private Switch switchBypassOverlay;
+    private Switch switchKycFlash;
+    private static final String FLAG_BYPASS_OVERLAY = "vcam_bypass_hide_overlay";
+
+    private static final String FILE_NOTIF_OPACITY = "vcam_notif_opacity";
+    private TextView txtNotifOpacityBadge;
+    private SeekBar sbNotifOpacity;
+    private Button btnNotifOpacity0, btnNotifOpacity50, btnNotifOpacity80, btnNotifOpacity100;
+    private int mCurrentNotifOpacity = 100;
+
     private Button btnOpenFloating;
+    private Button btnUseVideo;
+    private Button btnUseImage;
     private TextView txtVideoInfo;
     private TextView txtImageInfo;
     private TextView txtAudioInfo;
@@ -124,6 +136,10 @@ public class MainActivity extends Activity {
 
         switchVcam = findViewById(R.id.switch_vcam);
         switchSwapUv = findViewById(R.id.switch_swap_uv);
+        switchBypassOverlay = findViewById(R.id.switch_bypass_overlay);
+        setupBypassOverlayListener();
+        switchKycFlash = findViewById(R.id.switch_kyc_flash);
+        setupKycFlashListener();
         btnOpenFloating = findViewById(R.id.btn_open_floating);
         txtVideoInfo = findViewById(R.id.txt_video_info);
         txtImageInfo = findViewById(R.id.txt_image_info);
@@ -167,6 +183,46 @@ public class MainActivity extends Activity {
         if (btnMainBright65 != null) btnMainBright65.setOnClickListener(v -> setMainRawBright(65));
         if (btnMainBright80 != null) btnMainBright80.setOnClickListener(v -> setMainRawBright(80));
         if (btnMainBright100 != null) btnMainBright100.setOnClickListener(v -> setMainRawBright(100));
+
+        txtNotifOpacityBadge = findViewById(R.id.txt_notif_opacity_badge);
+        sbNotifOpacity = findViewById(R.id.sb_notif_opacity);
+        btnNotifOpacity0 = findViewById(R.id.btn_notif_opacity_0);
+        btnNotifOpacity50 = findViewById(R.id.btn_notif_opacity_50);
+        btnNotifOpacity80 = findViewById(R.id.btn_notif_opacity_80);
+        btnNotifOpacity100 = findViewById(R.id.btn_notif_opacity_100);
+
+        if (sbNotifOpacity != null) {
+            sbNotifOpacity.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override
+                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    mCurrentNotifOpacity = progress;
+                    if (txtNotifOpacityBadge != null) {
+                        txtNotifOpacityBadge.setText(mCurrentNotifOpacity + "%");
+                    }
+                    updateNotifOpacityButtons();
+                    if (fromUser) {
+                        writeNotifOpacity(mCurrentNotifOpacity);
+                    }
+                }
+                @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+                @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                    writeNotifOpacity(mCurrentNotifOpacity);
+                }
+            });
+        }
+        if (btnNotifOpacity0 != null) btnNotifOpacity0.setOnClickListener(v -> setNotifOpacity(0));
+        if (btnNotifOpacity50 != null) btnNotifOpacity50.setOnClickListener(v -> setNotifOpacity(50));
+        if (btnNotifOpacity80 != null) btnNotifOpacity80.setOnClickListener(v -> setNotifOpacity(80));
+        if (btnNotifOpacity100 != null) btnNotifOpacity100.setOnClickListener(v -> setNotifOpacity(100));
+
+        btnUseVideo = findViewById(R.id.btn_use_video);
+        btnUseImage = findViewById(R.id.btn_use_image);
+        if (btnUseVideo != null) {
+            btnUseVideo.setOnClickListener(v -> activateVideoMode());
+        }
+        if (btnUseImage != null) {
+            btnUseImage.setOnClickListener(v -> activateImageMode());
+        }
 
         Button btnPickVideo = findViewById(R.id.btn_pick_video);
         Button btnPickImage = findViewById(R.id.btn_pick_image);
@@ -222,11 +278,21 @@ public class MainActivity extends Activity {
                 Toast.makeText(this, R.string.license_status_default, Toast.LENGTH_LONG).show();
                 return;
             }
+            FloatingControlService svc = FloatingControlService.getInstance();
+            if (svc != null) {
+                if (svc.isFloatingViewHidden()) {
+                    svc.showFloatingView();
+                } else {
+                    svc.hideFloatingView();
+                }
+                updateFloatingButtonUi();
+                return;
+            }
             if (!android.provider.Settings.canDrawOverlays(this)) {
                 Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                         Uri.parse("package:" + getPackageName()));
                 startActivity(intent);
-                Toast.makeText(this, R.string.toast_overlay_perm, Toast.LENGTH_LONG).show();
+                Toast.makeText(this, R.string.toast_overlay_perm, Toast.LENGTH_SHORT).show();
             } else {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     startForegroundService(new Intent(this, FloatingControlService.class));
@@ -234,6 +300,7 @@ public class MainActivity extends Activity {
                     startService(new Intent(this, FloatingControlService.class));
                 }
                 Toast.makeText(this, R.string.toast_floating_opened, Toast.LENGTH_SHORT).show();
+                btnOpenFloating.postDelayed(this::updateFloatingButtonUi, 500);
             }
         });
 
@@ -321,6 +388,7 @@ public class MainActivity extends Activity {
         LicenseManager.ensureLicenseSharedSync();
         loadCurrentState();
         updateLicenseUI();
+        updateFloatingButtonUi();
         LicenseManager.checkOnlineAsync((isValid, message) -> runOnUiThread(() -> {
             if (!isValid) {
                 updateLicenseUI();
@@ -341,12 +409,16 @@ public class MainActivity extends Activity {
                 setupVcamSwitchListener();
             }
         }));
+        FloatingControlService.setFloatingVisibilityListener(isHidden -> runOnUiThread(() -> {
+            updateFloatingButtonUi();
+        }));
     }
 
     @Override
     protected void onPause() {
         super.onPause();
         FloatingControlService.setVcamStateListener(null);
+        FloatingControlService.setFloatingVisibilityListener(null);
     }
 
     @Override
@@ -380,12 +452,32 @@ public class MainActivity extends Activity {
                 FloatingControlService svc = FloatingControlService.getInstance();
                 if (svc != null) {
                     svc.startFlashScreenCapMode(resultCode, data);
-                    Toast.makeText(this, "✅ Đã cấp quyền Screen Capture cho KYC Flash!", Toast.LENGTH_SHORT).show();
                 } else {
-                    Toast.makeText(this, "Chưa mở Camera Assistant HUD, vui lòng mở trước",
-                            Toast.LENGTH_LONG).show();
+                    Intent serviceIntent = new Intent(this, FloatingControlService.class);
+                    serviceIntent.putExtra("flash_result_code", resultCode);
+                    serviceIntent.putExtra("flash_data", data);
+                    serviceIntent.putExtra("hide_float_icon", true);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startForegroundService(serviceIntent);
+                    } else {
+                        startService(serviceIntent);
+                    }
                 }
+                writeFlag("vcam_color_sync", true);
+                writeFlag("vcam_kyc_flash", true);
+                if (switchKycFlash != null) {
+                    switchKycFlash.setOnCheckedChangeListener(null);
+                    switchKycFlash.setChecked(true);
+                    setupKycFlashListener();
+                }
+                Toast.makeText(this, R.string.toast_kyc_flash_on, Toast.LENGTH_LONG).show();
+                btnOpenFloating.postDelayed(this::updateFloatingButtonUi, 500);
             } else {
+                if (switchKycFlash != null) {
+                    switchKycFlash.setOnCheckedChangeListener(null);
+                    switchKycFlash.setChecked(false);
+                    setupKycFlashListener();
+                }
                 Toast.makeText(this, "❌ Không cấp quyền Screen Capture", Toast.LENGTH_SHORT).show();
             }
             return;
@@ -395,8 +487,11 @@ public class MainActivity extends Activity {
             Uri uri = data.getData();
             if (requestCode == REQ_PICK_VIDEO) {
                 copyUriToDualLocations(uri, TARGET_VIDEO, getString(R.string.toast_video_updated));
+                copyUriToDualLocations(uri, "vcam_original.mp4", null);
+                VcamConfigProvider.setString("media_mode", "video");
             } else if (requestCode == REQ_PICK_IMAGE) {
                 copyUriToDualLocations(uri, TARGET_IMAGE, getString(R.string.toast_image_updated));
+                activateImageModeWithUri(uri);
             } else if (requestCode == REQ_PICK_AUDIO) {
                 copyUriToDualLocations(uri, TARGET_AUDIO, getString(R.string.toast_audio_updated));
             }
@@ -485,6 +580,86 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void setupBypassOverlayListener() {
+        if (switchBypassOverlay == null) return;
+        switchBypassOverlay.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            writeFlag(FLAG_BYPASS_OVERLAY, isChecked);
+            if (isChecked) {
+                Toast.makeText(this, R.string.toast_bypass_overlay_on, Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, R.string.toast_bypass_overlay_off, Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void updateFloatingButtonUi() {
+        if (btnOpenFloating == null) return;
+        FloatingControlService svc = FloatingControlService.getInstance();
+        if (svc != null && !svc.isFloatingViewHidden()) {
+            btnOpenFloating.setText("🙈 ẨN ICON NỔI (CHẠY NGẦM CHO KYC)");
+            btnOpenFloating.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF37474F));
+        } else {
+            btnOpenFloating.setText(R.string.btn_open_floating);
+            btnOpenFloating.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF00E5FF));
+        }
+    }
+
+    private void setupKycFlashListener() {
+        if (switchKycFlash == null) return;
+        switchKycFlash.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isChecked) {
+                FloatingControlService svc = FloatingControlService.getInstance();
+                if (svc != null && svc.isScreenCapActive()) {
+                    svc.setFlashSyncEnabled(true);
+                    writeFlag("vcam_color_sync", true);
+                    writeFlag("vcam_kyc_flash", true);
+                    Toast.makeText(this, R.string.toast_kyc_flash_on, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                requestMediaProjectionPermission();
+            } else {
+                FloatingControlService svc = FloatingControlService.getInstance();
+                if (svc != null) {
+                    svc.setFlashSyncEnabled(false);
+                }
+                writeFlag("vcam_color_sync", false);
+                writeFlag("vcam_kyc_flash", false);
+                Toast.makeText(this, R.string.toast_kyc_flash_off, Toast.LENGTH_SHORT).show();
+                updateFloatingButtonUi();
+            }
+        });
+    }
+
+    private void setNotifOpacity(int val) {
+        mCurrentNotifOpacity = Math.max(0, Math.min(100, val));
+        if (sbNotifOpacity != null) {
+            sbNotifOpacity.setProgress(mCurrentNotifOpacity);
+        }
+        if (txtNotifOpacityBadge != null) {
+            txtNotifOpacityBadge.setText(mCurrentNotifOpacity + "%");
+        }
+        updateNotifOpacityButtons();
+        writeNotifOpacity(mCurrentNotifOpacity);
+    }
+
+    private void updateNotifOpacityButtons() {
+        if (btnNotifOpacity0 != null) btnNotifOpacity0.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mCurrentNotifOpacity == 0 ? 0xFF00838F : 0xFF263238));
+        if (btnNotifOpacity50 != null) btnNotifOpacity50.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mCurrentNotifOpacity == 50 ? 0xFF00838F : 0xFF263238));
+        if (btnNotifOpacity80 != null) btnNotifOpacity80.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mCurrentNotifOpacity == 80 ? 0xFF00838F : 0xFF263238));
+        if (btnNotifOpacity100 != null) btnNotifOpacity100.setBackgroundTintList(android.content.res.ColorStateList.valueOf(mCurrentNotifOpacity == 100 ? 0xFF00838F : 0xFF263238));
+    }
+
+    private void writeNotifOpacity(int val) {
+        VcamConfigProvider.setInt("notif_opacity", val);
+        writeStringFile("/data/local/tmp/" + FILE_NOTIF_OPACITY, String.valueOf(val) + "\n");
+        writeStringFile(SDCARD_DIR + FILE_NOTIF_OPACITY, String.valueOf(val) + "\n");
+        deleteFileSafely(new File("/sdcard/" + FILE_NOTIF_OPACITY));
+        deleteFileSafely(new File("/storage/emulated/0/" + FILE_NOTIF_OPACITY));
+        try {
+            android.provider.Settings.System.putInt(getContentResolver(), "notification_drawer_opacity", val);
+        } catch (Throwable ignored) {}
+    }
+
     private void updateLicenseUI() {
         LicenseManager.LicenseInfo lic = LicenseManager.checkLicense();
         if (lic.isValid) {
@@ -534,6 +709,23 @@ public class MainActivity extends Activity {
             setupSwapUvListener();
         }
 
+        if (switchBypassOverlay != null) {
+            boolean isBypass = isFlagActive(FLAG_BYPASS_OVERLAY);
+            switchBypassOverlay.setOnCheckedChangeListener(null);
+            switchBypassOverlay.setChecked(isBypass);
+            setupBypassOverlayListener();
+        }
+
+        if (switchKycFlash != null) {
+            boolean isKyc = isFlagActive("vcam_kyc_flash") || isFlagActive("vcam_color_sync");
+            FloatingControlService svc = FloatingControlService.getInstance();
+            if (svc != null && (svc.isFlashSyncEnabled() || svc.isScreenCapActive())) isKyc = true;
+            switchKycFlash.setOnCheckedChangeListener(null);
+            switchKycFlash.setChecked(isKyc);
+            setupKycFlashListener();
+        }
+        updateFloatingButtonUi();
+
         if (rgAudioMode != null) {
             rgAudioMode.setOnCheckedChangeListener(null);
         }
@@ -548,66 +740,100 @@ public class MainActivity extends Activity {
         }
         setupAudioModeListener();
 
-        File videoFile = new File("/data/local/tmp/" + TARGET_VIDEO);
-        File intVideo = new File(getFilesDir(), TARGET_VIDEO);
-        if (intVideo.exists() && intVideo.length() > 0) {
+        File sdVideoFile = new File(SDCARD_DIR + TARGET_VIDEO);
+        if (!sdVideoFile.exists()) sdVideoFile = new File("/sdcard/" + TARGET_VIDEO);
+        final File sdVideo = sdVideoFile;
+        final File tmpVideo = new File("/data/local/tmp/" + TARGET_VIDEO);
+        final File intVideo = new File(getFilesDir(), TARGET_VIDEO);
+        File videoFile = sdVideo;
+        if (sdVideo.exists() && sdVideo.length() > 0) {
+            videoFile = sdVideo;
+        } else if (tmpVideo.exists() && tmpVideo.length() > 0) {
+            videoFile = tmpVideo;
+        } else if (intVideo.exists() && intVideo.length() > 0) {
             videoFile = intVideo;
-        } else {
-            File sdVideo = new File(SDCARD_DIR + TARGET_VIDEO);
-            if (!sdVideo.exists()) sdVideo = new File("/sdcard/" + TARGET_VIDEO);
-            if (sdVideo.exists() && sdVideo.length() > 0 && (!videoFile.exists() || videoFile.length() != sdVideo.length())) {
-                final File finalSdVideo = sdVideo;
-                sIoExecutor.execute(() -> {
-                    try {
-                        String cmd = "cp '" + finalSdVideo.getAbsolutePath() + "' '/data/local/tmp/" + TARGET_VIDEO + "' && " +
-                                     "chmod 666 '/data/local/tmp/" + TARGET_VIDEO + "' && " +
-                                     "chown shell:shell '/data/local/tmp/" + TARGET_VIDEO + "' 2>/dev/null";
-                        Runtime.getRuntime().exec(new String[]{"su", "-c", cmd}).waitFor();
-                    } catch (Throwable ignored) {}
-                });
-                videoFile = sdVideo;
-            } else if (!videoFile.exists()) {
-                videoFile = sdVideo;
-            }
         }
-
-        File imgFile = new File("/data/local/tmp/" + TARGET_IMAGE);
-        File sdImg = new File(SDCARD_DIR + TARGET_IMAGE);
-        if (!sdImg.exists()) sdImg = new File("/sdcard/" + TARGET_IMAGE);
-        if (sdImg.exists() && sdImg.length() > 0 && (!imgFile.exists() || imgFile.length() != sdImg.length())) {
-            final File finalSdImg = sdImg;
+        if (videoFile.exists() && videoFile.length() > 0) {
+            final File finalVideo = videoFile;
             sIoExecutor.execute(() -> {
                 try {
-                    String cmd = "cp '" + finalSdImg.getAbsolutePath() + "' '/data/local/tmp/" + TARGET_IMAGE + "' && " +
-                                 "chmod 666 '/data/local/tmp/" + TARGET_IMAGE + "' && " +
-                                 "chown shell:shell '/data/local/tmp/" + TARGET_IMAGE + "' 2>/dev/null";
-                    Runtime.getRuntime().exec(new String[]{"su", "-c", cmd}).waitFor();
+                    if (!tmpVideo.exists() || tmpVideo.length() != finalVideo.length()) {
+                        copyFile(finalVideo, tmpVideo);
+                        tmpVideo.setReadable(true, false);
+                        tmpVideo.setWritable(true, false);
+                    }
+                    if (!sdVideo.exists() || sdVideo.length() != finalVideo.length()) {
+                        copyFile(finalVideo, sdVideo);
+                    }
                 } catch (Throwable ignored) {}
             });
-            imgFile = sdImg;
-        } else if (!imgFile.exists()) {
-            imgFile = sdImg;
         }
 
+        File sdImgFile = new File(SDCARD_DIR + TARGET_IMAGE);
+        if (!sdImgFile.exists()) sdImgFile = new File("/sdcard/" + TARGET_IMAGE);
+        final File sdImg = sdImgFile;
+        final File tmpImg = new File("/data/local/tmp/" + TARGET_IMAGE);
+        final File intImg = new File(getFilesDir(), TARGET_IMAGE);
+        File imgFile = sdImg;
+        if (sdImg.exists() && sdImg.length() > 0) {
+            imgFile = sdImg;
+        } else if (tmpImg.exists() && tmpImg.length() > 0) {
+            imgFile = tmpImg;
+        } else if (intImg.exists() && intImg.length() > 0) {
+            imgFile = intImg;
+        }
+        if (imgFile.exists() && imgFile.length() > 0) {
+            final File finalImg = imgFile;
+            sIoExecutor.execute(() -> {
+                try {
+                    if (!tmpImg.exists() || tmpImg.length() != finalImg.length()) {
+                        copyFile(finalImg, tmpImg);
+                        tmpImg.setReadable(true, false);
+                        tmpImg.setWritable(true, false);
+                    }
+                    if (!sdImg.exists() || sdImg.length() != finalImg.length()) {
+                        copyFile(finalImg, sdImg);
+                    }
+                } catch (Throwable ignored) {}
+            });
+        }
+
+        String mediaMode = VcamConfigProvider.getString("media_mode", "auto");
         boolean hasVideo = videoFile.exists() && videoFile.length() > 0;
         boolean hasImg = imgFile.exists() && imgFile.length() > 0;
-        boolean isImgActive = hasImg && (!hasVideo || imgFile.lastModified() > videoFile.lastModified());
-        boolean isVideoActive = hasVideo && (!hasImg || videoFile.lastModified() >= imgFile.lastModified());
+
+        boolean isImgActive;
+        if ("image".equals(mediaMode)) {
+            isImgActive = hasImg;
+        } else if ("video".equals(mediaMode)) {
+            isImgActive = false;
+        } else {
+            isImgActive = hasImg && (!hasVideo || imgFile.lastModified() > videoFile.lastModified());
+        }
+        boolean isVideoActive = !isImgActive && hasVideo;
 
         if (hasVideo) {
-            String status = isVideoActive ? "  [🟢 ĐANG DÙNG]" : "";
+            String status = isVideoActive ? "  [🟢 ĐANG DÙNG]" : "  [⏸ Tạm tắt - Đang dùng Hình ảnh]";
             txtVideoInfo.setText("Video: " + videoFile.getAbsolutePath() + " (" + (videoFile.length() / 1024 / 1024) + " MB)" + status);
         } else {
-            txtVideoInfo.setText("Chưa có video, hệ thống dùng mặc định");
+            txtVideoInfo.setText("Chưa có video nào");
+        }
+        if (btnUseVideo != null) {
+            btnUseVideo.setEnabled(!isVideoActive && hasVideo);
+            btnUseVideo.setAlpha((!isVideoActive && hasVideo) ? 1.0f : 0.4f);
         }
 
         if (txtImageInfo != null) {
             if (hasImg) {
-                String status = isImgActive ? "  [🟢 ĐANG DÙNG]" : "";
+                String status = isImgActive ? "  [🟢 ĐANG DÙNG]" : "  [Chưa kích hoạt]";
                 txtImageInfo.setText("Hình ảnh: " + imgFile.getAbsolutePath() + " (" + (imgFile.length() / 1024) + " KB)" + status);
             } else {
                 txtImageInfo.setText("Chưa có hình ảnh nào được chọn");
             }
+        }
+        if (btnUseImage != null) {
+            btnUseImage.setEnabled(!isImgActive && hasImg);
+            btnUseImage.setAlpha((!isImgActive && hasImg) ? 1.0f : 0.4f);
         }
 
         File audioFile = new File("/data/local/tmp/" + TARGET_AUDIO);
@@ -656,6 +882,17 @@ public class MainActivity extends Activity {
             txtMainBrightBadge.setText(mCurrentRawBright + "%");
         }
         updateMainBrightButtons();
+
+        mCurrentNotifOpacity = readIntValue(FILE_NOTIF_OPACITY, 100);
+        if (mCurrentNotifOpacity < 0) mCurrentNotifOpacity = 0;
+        if (mCurrentNotifOpacity > 100) mCurrentNotifOpacity = 100;
+        if (sbNotifOpacity != null) {
+            sbNotifOpacity.setProgress(mCurrentNotifOpacity);
+        }
+        if (txtNotifOpacityBadge != null) {
+            txtNotifOpacityBadge.setText(mCurrentNotifOpacity + "%");
+        }
+        updateNotifOpacityButtons();
     }
 
     private void applySettings() {
@@ -663,6 +900,10 @@ public class MainActivity extends Activity {
             boolean isChecked = switchVcam.isChecked();
             writeFlag(FLAG_DISABLE, !isChecked);
             FloatingControlService.syncVcamStateFromActivity(isChecked);
+
+            if (switchBypassOverlay != null) {
+                writeFlag(FLAG_BYPASS_OVERLAY, switchBypassOverlay.isChecked());
+            }
 
             if (rbAudioReal.isChecked()) {
                 writeFlag(FLAG_MIC_DISABLE, true);
@@ -677,6 +918,7 @@ public class MainActivity extends Activity {
 
             writeBoostVal(BOOST_VALS[mCurrentBoostIndex]);
             writeRawBright(mCurrentRawBright);
+            writeNotifOpacity(mCurrentNotifOpacity);
 
             Toast.makeText(this, R.string.toast_saved, Toast.LENGTH_SHORT).show();
             loadCurrentState();
@@ -739,6 +981,9 @@ public class MainActivity extends Activity {
     private int readIntValue(String name, int defVal) {
         if (FILE_RAW_BRIGHT.equals(name)) {
             return VcamConfigProvider.getInt("raw_bright", defVal);
+        }
+        if (FILE_NOTIF_OPACITY.equals(name)) {
+            return VcamConfigProvider.getInt("notif_opacity", defVal);
         }
         String s1 = readStringFile("/data/local/tmp/" + name);
         if (!s1.isEmpty()) {
@@ -867,11 +1112,20 @@ public class MainActivity extends Activity {
         if ("vcam_swap_uv".equals(name)) {
             return VcamConfigProvider.getBoolean("swap_uv", false);
         }
+        if (FLAG_BYPASS_OVERLAY.equals(name)) {
+            return VcamConfigProvider.getBoolean("bypass_hide_overlay", false);
+        }
         if (FLAG_MIC_DISABLE.equals(name)) {
             return VcamConfigProvider.getBoolean("mic_disable", false);
         }
         if (FLAG_MIC_MIX.equals(name)) {
             return VcamConfigProvider.getBoolean("mic_mix", false);
+        }
+        if ("vcam_kyc_flash".equals(name)) {
+            return VcamConfigProvider.getBoolean("kyc_flash", false);
+        }
+        if ("vcam_color_sync".equals(name)) {
+            return VcamConfigProvider.getBoolean("color_sync", false);
         }
         File[] targets = new File[] {
             new File("/data/local/tmp/" + name),
@@ -902,10 +1156,16 @@ public class MainActivity extends Activity {
             VcamConfigProvider.setBoolean("disable", active);
         } else if ("vcam_swap_uv".equals(name)) {
             VcamConfigProvider.setBoolean("swap_uv", active);
+        } else if (FLAG_BYPASS_OVERLAY.equals(name)) {
+            VcamConfigProvider.setBoolean("bypass_hide_overlay", active);
         } else if (FLAG_MIC_DISABLE.equals(name)) {
             VcamConfigProvider.setBoolean("mic_disable", active);
         } else if (FLAG_MIC_MIX.equals(name)) {
             VcamConfigProvider.setBoolean("mic_mix", active);
+        } else if ("vcam_kyc_flash".equals(name)) {
+            VcamConfigProvider.setBoolean("kyc_flash", active);
+        } else if ("vcam_color_sync".equals(name)) {
+            VcamConfigProvider.setBoolean("color_sync", active);
         }
         String val = active ? "1\n" : "0\n";
         writeStringFile("/data/local/tmp/" + name, val);
@@ -916,6 +1176,13 @@ public class MainActivity extends Activity {
             deleteFileSafely(new File("/sdcard/" + name));
             deleteFileSafely(new File("/storage/emulated/0/" + name));
         }
+    }
+
+    private void writeConfig(String name, String val) {
+        writeStringFile("/data/local/tmp/" + name, val);
+        writeStringFile(SDCARD_DIR + name, val);
+        deleteFileSafely(new File("/sdcard/" + name));
+        deleteFileSafely(new File("/storage/emulated/0/" + name));
     }
 
     private static final java.util.concurrent.ExecutorService sIoExecutor =
@@ -962,6 +1229,105 @@ public class MainActivity extends Activity {
                 p.waitFor();
             } catch (Throwable ignored) {}
         });
+    }
+
+    private void activateImageMode() {
+        activateImageModeWithUri(null);
+    }
+
+    private void activateImageModeWithUri(Uri optionalUri) {
+        Toast.makeText(this, "⏳ Đang chuyển đổi và kích hoạt hình ảnh...", Toast.LENGTH_SHORT).show();
+        sIoExecutor.execute(() -> {
+            File imgFile = new File("/data/local/tmp/" + TARGET_IMAGE);
+            if (!imgFile.exists() || imgFile.length() == 0) {
+                imgFile = new File(SDCARD_DIR + TARGET_IMAGE);
+            }
+            if (!imgFile.exists() || imgFile.length() == 0) {
+                imgFile = new File(getFilesDir(), TARGET_IMAGE);
+            }
+
+            File outMp4 = new File(getCacheDir(), "img_converted.mp4");
+            boolean ok = ImageToVideoConverter.convertImageToMp4(this, optionalUri, imgFile, outMp4);
+            if (ok && outMp4.exists() && outMp4.length() > 0) {
+                // 1. Ghi vào internal storage
+                try {
+                    File internalMp4 = new File(getFilesDir(), TARGET_VIDEO);
+                    copyFile(outMp4, internalMp4);
+                    internalMp4.setReadable(true, false);
+                } catch (Throwable ignored) {}
+
+                // 2. Ghi vào /sdcard/CameraAssistant/vcam.mp4
+                try {
+                    File sdMp4 = new File(SDCARD_DIR + TARGET_VIDEO);
+                    copyFile(outMp4, sdMp4);
+                } catch (Throwable ignored) {}
+
+                // 3. Ghi vào /data/local/tmp/vcam.mp4
+                try {
+                    File tmpMp4 = new File("/data/local/tmp/" + TARGET_VIDEO);
+                    copyFile(outMp4, tmpMp4);
+                    tmpMp4.setReadable(true, false);
+                    tmpMp4.setWritable(true, false);
+                } catch (Throwable ignored) {}
+
+                // 4. Root copy nếu có
+                try {
+                    String cmd = "cp '" + outMp4.getAbsolutePath() + "' '/data/local/tmp/" + TARGET_VIDEO + "' && " +
+                                 "chmod 666 '/data/local/tmp/" + TARGET_VIDEO + "' && " +
+                                 "chown shell:shell '/data/local/tmp/" + TARGET_VIDEO + "' 2>/dev/null";
+                    Runtime.getRuntime().exec(new String[]{"su", "-c", cmd}).waitFor();
+                } catch (Throwable ignored) {}
+
+                VcamConfigProvider.setString("media_mode", "image");
+                VcamConfigProvider.setBoolean("video_ready", true);
+                VcamConfigProvider.setBoolean("image_ready", true);
+                writeConfig("vcam_replay", String.valueOf(System.currentTimeMillis()));
+
+                runOnUiThread(() -> {
+                    Toast.makeText(this, "🖼️ Đã kích hoạt hình ảnh làm camera ảo thành công!", Toast.LENGTH_LONG).show();
+                    loadCurrentState();
+                });
+            } else {
+                runOnUiThread(() -> {
+                    Toast.makeText(this, "❌ Lỗi khi đọc và chuyển đổi hình ảnh!", Toast.LENGTH_LONG).show();
+                });
+            }
+        });
+    }
+
+    private void activateVideoMode() {
+        Toast.makeText(this, "⏳ Đang chuyển sang chế độ video...", Toast.LENGTH_SHORT).show();
+        sIoExecutor.execute(() -> {
+            File orig = new File(getFilesDir(), "vcam_original.mp4");
+            if (!orig.exists() || orig.length() == 0) {
+                orig = new File(SDCARD_DIR + "vcam_original.mp4");
+            }
+            if (orig.exists() && orig.length() > 0) {
+                try {
+                    copyFile(orig, new File(getFilesDir(), TARGET_VIDEO));
+                    copyFile(orig, new File(SDCARD_DIR + TARGET_VIDEO));
+                    copyFile(orig, new File("/data/local/tmp/" + TARGET_VIDEO));
+                } catch (Throwable ignored) {}
+            }
+            VcamConfigProvider.setString("media_mode", "video");
+            writeConfig("vcam_replay", String.valueOf(System.currentTimeMillis()));
+
+            runOnUiThread(() -> {
+                Toast.makeText(this, "🎬 Đã kích hoạt video làm camera ảo!", Toast.LENGTH_SHORT).show();
+                loadCurrentState();
+            });
+        });
+    }
+
+    private static void copyFile(File src, File dst) {
+        try (InputStream in = new java.io.FileInputStream(src);
+             OutputStream out = new FileOutputStream(dst)) {
+            byte[] buf = new byte[32768];
+            int len;
+            while ((len = in.read(buf)) > 0) {
+                out.write(buf, 0, len);
+            }
+        } catch (Throwable ignored) {}
     }
 
     private void deleteFileSafely(File file) {
