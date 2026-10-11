@@ -156,6 +156,7 @@ apply_patch "frameworks/base" "spoof_locked_bootloader.patch"
 apply_patch "system/core" "init_spoof_bootloader.patch"
 apply_patch "frameworks/base" "disable_flag_secure.patch"
 apply_patch "frameworks/base" "hide_developer_options.patch"
+apply_patch "frameworks/base" "hide_settings_provider.patch"
 apply_patch "frameworks/base" "hide_accessibility_services.patch"
 apply_patch "frameworks/base" "bypass_overlay_tapjacking.patch"
 apply_patch "frameworks/base" "hide_sensitive_packages.patch"
@@ -173,11 +174,17 @@ echo ">> Setting release-keys in build/make..."
 find build/make -name "sysprop.mk" -exec sed -i 's/BUILD_KEYS := test-keys/BUILD_KEYS := release-keys/g' {} + 2>/dev/null || true
 find build/make -name "Makefile" -exec sed -i 's/BUILD_KEYS := test-keys/BUILD_KEYS := release-keys/g' {} + 2>/dev/null || true
 
-# 10. Install CameraAssistant system app
-echo ">> Setting up CameraAssistant app..."
+# 10. Install CameraAssistant system app & Google Chrome
+echo ">> Setting up CameraAssistant app & Google Chrome..."
 mkdir -p packages/apps/CameraAssistant
-curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/org.lineageos.camera.assistant/CameraAssistant.apk > packages/apps/CameraAssistant/CameraAssistant.apk
-curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/CameraAssistant_Android.bp > packages/apps/CameraAssistant/Android.bp
+if ! curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/org.lineageos.camera.assistant/CameraAssistant.apk" -o packages/apps/CameraAssistant/CameraAssistant.apk; then
+    echo ">> [FATAL] Failed to download CameraAssistant.apk! Aborting!"
+    exit 1
+fi
+if ! curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/CameraAssistant_Android.bp" -o packages/apps/CameraAssistant/Android.bp; then
+    echo ">> [FATAL] Failed to download CameraAssistant Android.bp! Aborting!"
+    exit 1
+fi
 if [ -f device/google/coral/device.mk ]; then
     echo "PRODUCT_PACKAGES += CameraAssistant" >> device/google/coral/device.mk
 fi
@@ -186,6 +193,32 @@ if [ -f device/google/coral/lineage_flame.mk ]; then
 fi
 if [ -f device/google/coral/lineage_coral.mk ]; then
     echo "PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += %/CameraAssistant.apk" >> device/google/coral/lineage_coral.mk
+fi
+
+# Cài đặt Google Chrome Browser
+mkdir -p packages/apps/Chrome
+CHROME_APK="packages/apps/Chrome/Chrome.apk"
+CHROME_URL="https://github.com/JonaNorman/WebViewPackage/releases/download/chrome/106.0.5249.65_min23_arm32%2B64.apk"
+if [ ! -s "$CHROME_APK" ]; then
+    echo ">> Downloading Google Chrome Standalone APK..."
+    curl -fL "$CHROME_URL" -o "$CHROME_APK" || true
+fi
+curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/Chrome_Android.bp" -o packages/apps/Chrome/Android.bp || true
+if [ ! -s "$CHROME_APK" ] || [ ! -s packages/apps/Chrome/Android.bp ]; then
+    echo ">> [FATAL] Failed to setup Google Chrome! Aborting!"
+    exit 1
+fi
+if [ -f device/google/coral/device.mk ]; then
+    echo "PRODUCT_PACKAGES += Chrome" >> device/google/coral/device.mk
+fi
+if [ -f device/google/coral/lineage_flame.mk ]; then
+    echo "PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += %/Chrome.apk" >> device/google/coral/lineage_flame.mk
+fi
+if [ -f device/google/coral/lineage_coral.mk ]; then
+    echo "PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += %/Chrome.apk" >> device/google/coral/lineage_coral.mk
+fi
+if [ -f device/google/coral/BoardConfig.mk ]; then
+    echo "BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES := true" >> device/google/coral/BoardConfig.mk
 fi
 
 # 11. Fix telephony permissions

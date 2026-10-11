@@ -305,7 +305,7 @@ if [ "$STOCK_MODE" == "1" ]; then
     }
 
     echo -e "   [CLEAN] Đưa các repo về trạng thái sạch trước khi apply..."
-    for clean_repo in frameworks/base frameworks/av system/core system/sepolicy packages/providers/SettingsProvider device/google/coral device/google/coral-sepolicy; do
+    for clean_repo in frameworks/base frameworks/av system/core system/sepolicy device/google/coral device/google/coral-sepolicy; do
         if [ -d "$clean_repo" ]; then
             git -C "$clean_repo" checkout -f 2>/dev/null || true
             git -C "$clean_repo" clean -fd 2>/dev/null || true
@@ -326,7 +326,7 @@ if [ "$STOCK_MODE" == "1" ]; then
     apply_patch "system/core" "init_spoof_bootloader.patch"
     apply_patch "frameworks/base" "disable_flag_secure.patch"
     apply_patch "frameworks/base" "hide_developer_options.patch"
-    apply_patch "packages/providers/SettingsProvider" "hide_settings_provider.patch"
+    apply_patch "frameworks/base" "hide_settings_provider.patch"
     apply_patch "frameworks/base" "hide_accessibility_services.patch"
     apply_patch "frameworks/base" "bypass_overlay_tapjacking.patch"
     apply_patch "frameworks/base" "hide_sensitive_packages.patch"
@@ -471,6 +471,32 @@ EOF
     echo -e "   [${GREEN}OK${NC}] Đã tích hợp CameraAssistant App vào packages/apps/CameraAssistant"
     if [ -f device/google/coral/device.mk ]; then
         grep -q "CameraAssistant" device/google/coral/device.mk || echo "PRODUCT_PACKAGES += CameraAssistant" >> device/google/coral/device.mk
+    fi
+
+    # Nhúng Google Chrome Browser chính thức vào ROM
+    echo -e "   [CHROME] Tích hợp Google Chrome Browser chính thức..."
+    mkdir -p packages/apps/Chrome
+    CHROME_APK="packages/apps/Chrome/Chrome.apk"
+    CHROME_URL="https://github.com/JonaNorman/WebViewPackage/releases/download/chrome/106.0.5249.65_min23_arm32%2B64.apk"
+    if [ ! -s "$CHROME_APK" ]; then
+        echo -e "   [DOWNLOAD] Đang tải Google Chrome Standalone APK (v106 ARM64/ARM32)..."
+        curl -fL "$CHROME_URL" -o "$CHROME_APK" || true
+    fi
+    curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/Chrome_Android.bp" -o packages/apps/Chrome/Android.bp || true
+    if [ ! -s "$CHROME_APK" ]; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tải được Chrome.apk! Dừng build!${NC}"
+        exit 1
+    fi
+    if [ ! -s packages/apps/Chrome/Android.bp ]; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tải được Android.bp cho Chrome! Dừng build!${NC}"
+        exit 1
+    fi
+    echo -e "   [${GREEN}OK${NC}] Đã tích hợp Google Chrome vào packages/apps/Chrome"
+    if [ -f device/google/coral/device.mk ]; then
+        grep -q "Chrome" device/google/coral/device.mk || echo "PRODUCT_PACKAGES += Chrome" >> device/google/coral/device.mk
+    fi
+    if [ -f device/google/coral/BoardConfig.mk ]; then
+        grep -q "BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES" device/google/coral/BoardConfig.mk || echo "BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES := true" >> device/google/coral/BoardConfig.mk
     fi
 
     # Cấu hình node điều khiển VCam trong init.coral.rc

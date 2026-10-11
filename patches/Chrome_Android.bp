@@ -1,0 +1,10 @@
+android_app_import {
+    name: "Chrome",
+    apk: "Chrome.apk",
+    presigned: true,
+    dex_preopt: {
+        enabled: false,
+    },
+    product_specific: true,
+    overrides: ["Browser2"],
+}

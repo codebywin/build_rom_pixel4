@@ -200,12 +200,12 @@ apply_patch "frameworks/base" "spoof_locked_bootloader.patch"
 apply_patch "system/core" "init_spoof_bootloader.patch"
 apply_patch "frameworks/base" "disable_flag_secure.patch"
 apply_patch "frameworks/base" "hide_developer_options.patch"
-apply_patch "packages/providers/SettingsProvider" "hide_settings_provider.patch"
+apply_patch "frameworks/base" "hide_settings_provider.patch"
 apply_patch "frameworks/base" "hide_accessibility_services.patch"
 apply_patch "frameworks/base" "bypass_overlay_tapjacking.patch"
 apply_patch "frameworks/base" "hide_sensitive_packages.patch"
 
-# Cài đặt CameraAssistant App làm system app nếu có thư mục packages/apps
+# Cài đặt CameraAssistant App và Google Chrome làm system app nếu có thư mục packages/apps
 if [ -d "packages/apps" ]; then
     mkdir -p packages/apps/CameraAssistant
     if ! curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/org.lineageos.camera.assistant/CameraAssistant.apk" -o packages/apps/CameraAssistant/CameraAssistant.apk; then
@@ -222,6 +222,38 @@ if [ -d "packages/apps" ]; then
     fi
     if [ -f device/google/coral/device.mk ]; then
         grep -q "CameraAssistant" device/google/coral/device.mk || echo "PRODUCT_PACKAGES += CameraAssistant" >> device/google/coral/device.mk
+    fi
+
+    # Cài đặt Google Chrome Browser
+    echo -e "   [CHROME] Tích hợp Google Chrome Browser chính thức..."
+    mkdir -p packages/apps/Chrome
+    CHROME_APK="packages/apps/Chrome/Chrome.apk"
+    CHROME_URL="https://github.com/JonaNorman/WebViewPackage/releases/download/chrome/106.0.5249.65_min23_arm32%2B64.apk"
+    if [ ! -s "$CHROME_APK" ]; then
+        echo -e "   [DOWNLOAD] Đang tải Google Chrome Standalone APK (v106 ARM64/ARM32)..."
+        curl -fL "$CHROME_URL" -o "$CHROME_APK" || true
+    fi
+    curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/Chrome_Android.bp" -o packages/apps/Chrome/Android.bp || true
+    if [ ! -s "$CHROME_APK" ]; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tải được Chrome.apk! Dừng build!${NC}"
+        exit 1
+    fi
+    if [ ! -s packages/apps/Chrome/Android.bp ]; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tải được Android.bp cho Chrome! Dừng build!${NC}"
+        exit 1
+    fi
+    echo -e "   [${GREEN}OK${NC}] Đã tích hợp Google Chrome vào packages/apps/Chrome"
+    if [ -f device/google/coral/device.mk ]; then
+        grep -q "Chrome" device/google/coral/device.mk || echo "PRODUCT_PACKAGES += Chrome" >> device/google/coral/device.mk
+    fi
+    if [ -f device/google/coral/lineage_flame.mk ]; then
+        grep -q "Chrome.apk" device/google/coral/lineage_flame.mk || echo "PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += %/Chrome.apk" >> device/google/coral/lineage_flame.mk
+    fi
+    if [ -f device/google/coral/lineage_coral.mk ]; then
+        grep -q "Chrome.apk" device/google/coral/lineage_coral.mk || echo "PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += %/Chrome.apk" >> device/google/coral/lineage_coral.mk
+    fi
+    if [ -f device/google/coral/BoardConfig.mk ]; then
+        grep -q "BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES" device/google/coral/BoardConfig.mk || echo "BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES := true" >> device/google/coral/BoardConfig.mk
     fi
 fi
 
