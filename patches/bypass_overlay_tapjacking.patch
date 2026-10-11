@@ -9,7 +9,7 @@ index 0bed342..4ee549f 100644
 -        return nativeGetFlags(mNativePtr);
 +        return nativeGetFlags(mNativePtr) & ~(FLAG_WINDOW_IS_OBSCURED | FLAG_WINDOW_IS_PARTIALLY_OBSCURED);
      }
-
+ 
      /** @hide */
 diff --git a/core/java/android/view/View.java b/core/java/android/view/View.java
 index 543a22b..6c613a5 100644
@@ -27,7 +27,7 @@ index 543a22b..6c613a5 100644
 -        }
          return true;
      }
-
+ 
 diff --git a/services/core/java/com/android/server/wm/WindowState.java b/services/core/java/com/android/server/wm/WindowState.java
 index 328ce8a..50187d8 100644
 --- a/services/core/java/com/android/server/wm/WindowState.java
@@ -45,14 +45,14 @@ index 328ce8a..50187d8 100644
 +                return;
 +            }
 +        }
-
+ 
          if (mForceHideNonSystemOverlayWindow == forceHide) {
              return;
 diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/ScrimController.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/ScrimController.java
 index 1122334..5566778 100644
 --- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/ScrimController.java
 +++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/ScrimController.java
-@@ -1120,6 +1120,29 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
+@@ -1120,6 +1120,30 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
  
      private void updateScrimColor(View scrim, float alpha, int tint) {
          alpha = Math.max(0, Math.min(1.0f, alpha));
