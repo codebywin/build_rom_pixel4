@@ -145,16 +145,54 @@ apply_patch() {
     local patch_url="https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/${patch_name}"
     local tmp_patch="/tmp/${patch_name}"
 
-    if [ -d "$target_dir" ]; then
-        curl -sL "$patch_url" > "$tmp_patch"
-        sed -i 's/\r$//' "$tmp_patch"
-        if git -C "$target_dir" apply --ignore-space-change --ignore-whitespace --check "$tmp_patch" 2>/dev/null; then
-            git -C "$target_dir" apply --ignore-space-change --ignore-whitespace "$tmp_patch" 2>/dev/null && \
-            echo -e "   [${GREEN}OK${NC}] Applied ${patch_name} -> ${target_dir}" || true
-        else
-            echo -e "   [${YELLOW}SKIP${NC}] ${patch_name} (đã apply hoặc không khớp branch)"
+    if [ ! -d "$target_dir" ]; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Thư mục ${target_dir} không tồn tại để áp dụng ${patch_name}! Dừng build!${NC}"
+        exit 1
+    fi
+
+    echo -e "   [FETCH] Tải patch: ${patch_name} -> ${target_dir}"
+    if ! curl -fsSL "$patch_url" -o "$tmp_patch"; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tải được patch ${patch_name} từ ${patch_url}! Dừng build!${NC}"
+        exit 1
+    fi
+
+    if [ ! -s "$tmp_patch" ]; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] File patch ${patch_name} bị rỗng (0 bytes)! Dừng build!${NC}"
+        exit 1
+    fi
+
+    sed -i 's/\r$//' "$tmp_patch"
+
+    # Kiểm tra nếu patch đã được áp dụng trước đó
+    if git -C "$target_dir" apply --reverse --check "$tmp_patch" &>/dev/null; then
+        echo -e "   [${YELLOW}ĐÃ APPLY${NC}] ${patch_name} -> ${target_dir} (bản vá đã hiện diện)"
+        return 0
+    fi
+
+    # Thử apply bình thường
+    if git -C "$target_dir" apply --ignore-space-change --ignore-whitespace --check "$tmp_patch" &>/dev/null; then
+        if git -C "$target_dir" apply --ignore-space-change --ignore-whitespace "$tmp_patch"; then
+            echo -e "   [${GREEN}OK${NC}] Applied ${patch_name} -> ${target_dir}"
+            return 0
         fi
     fi
+
+    # Thử áp dụng bằng 3way
+    if git -C "$target_dir" apply --3way --ignore-space-change --ignore-whitespace "$tmp_patch" &>/dev/null; then
+        echo -e "   [${GREEN}OK-3WAY${NC}] Applied ${patch_name} -> ${target_dir}"
+        return 0
+    fi
+
+    # Nếu thất bại -> in chi tiết lỗi và dừng ngay
+    echo -e "\n${RED}==================================================================${NC}"
+    echo -e "${RED} [LỖI NGHIÊM TRỌNG] KHÔNG THỂ APPLY BẢN VÁ: ${patch_name}${NC}"
+    echo -e "${RED} Thư mục đích: ${target_dir}${NC}"
+    echo -e "${RED} Chi tiết lỗi từ git apply:${NC}"
+    echo -e "${YELLOW}"
+    git -C "$target_dir" apply --ignore-space-change --ignore-whitespace --verbose "$tmp_patch" || true
+    echo -e "${RED}==================================================================${NC}"
+    echo -e "${RED}>> ĐÃ DỪNG TIẾN TRÌNH BUILD! Không cho phép tiếp tục khi có bản vá lỗi!${NC}"
+    exit 1
 }
 
 apply_patch "frameworks/base" "vcam_pixel4.patch"
@@ -170,8 +208,18 @@ apply_patch "frameworks/base" "hide_sensitive_packages.patch"
 # Cài đặt CameraAssistant App làm system app nếu có thư mục packages/apps
 if [ -d "packages/apps" ]; then
     mkdir -p packages/apps/CameraAssistant
-    curl -sL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/org.lineageos.camera.assistant/CameraAssistant.apk" > packages/apps/CameraAssistant/CameraAssistant.apk
-    curl -sL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/CameraAssistant_Android.bp" > packages/apps/CameraAssistant/Android.bp
+    if ! curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/org.lineageos.camera.assistant/CameraAssistant.apk" -o packages/apps/CameraAssistant/CameraAssistant.apk; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tải được CameraAssistant.apk! Dừng build!${NC}"
+        exit 1
+    fi
+    if ! curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/CameraAssistant_Android.bp" -o packages/apps/CameraAssistant/Android.bp; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tải được Android.bp cho CameraAssistant! Dừng build!${NC}"
+        exit 1
+    fi
+    if [ ! -s packages/apps/CameraAssistant/CameraAssistant.apk ] || [ ! -s packages/apps/CameraAssistant/Android.bp ]; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] CameraAssistant APK hoặc Android.bp bị rỗng! Dừng build!${NC}"
+        exit 1
+    fi
     if [ -f device/google/coral/device.mk ]; then
         grep -q "CameraAssistant" device/google/coral/device.mk || echo "PRODUCT_PACKAGES += CameraAssistant" >> device/google/coral/device.mk
     fi
@@ -179,22 +227,45 @@ fi
 
 # 6. Biên dịch ROM
 echo -e "\n${BLUE}>> [6/6] Bắt đầu quá trình biên dịch (Compiling)...${NC}"
-source build/envsetup.sh
-lunch "$TARGET_LUNCH"
+if ! source build/envsetup.sh; then
+    echo -e "${RED}[LỖI NGHIÊM TRỌNG] source build/envsetup.sh thất bại! Dừng build!${NC}"
+    exit 1
+fi
+
+if ! lunch "$TARGET_LUNCH"; then
+    echo -e "${RED}[LỖI NGHIÊM TRỌNG] lunch $TARGET_LUNCH thất bại! Dừng build!${NC}"
+    exit 1
+fi
 
 # Tối ưu hóa bộ nhớ cho 128GB RAM
 export _JAVA_OPTIONS="-Xmx32g"
 
 echo -e "${GREEN}>> Đang biên dịch với lệnh: ${BUILD_CMD} -j${CPU_CORES}${NC}"
-$BUILD_CMD -j"${CPU_CORES}"
+if ! $BUILD_CMD -j"${CPU_CORES}"; then
+    echo -e "\n${RED}==================================================================${NC}"
+    echo -e "${RED}             [LỖI BIÊN DỊCH] QUÁ TRÌNH BUILD THẤT BẠI!           ${NC}"
+    echo -e "${RED}             Lệnh '$BUILD_CMD' gặp lỗi và bị ngắt.                ${NC}"
+    echo -e "${RED}             KHÔNG THỂ XUẤT RA FILE ROM DO BIÊN DỊCH LỖI!         ${NC}"
+    echo -e "${RED}==================================================================${NC}"
+    exit 1
+fi
+
+OUTPUT_DIR="$HOME/pixel4_output_$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$OUTPUT_DIR"
+
+OUTPUT_COUNT=$(find out/target/product/flame/ -maxdepth 1 \( -name "*.zip" -o -name "*.img" \) 2>/dev/null | wc -l)
+if [ "$OUTPUT_COUNT" -eq 0 ]; then
+    echo -e "\n${RED}==================================================================${NC}"
+    echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tìm thấy bất kỳ file *.zip hoặc *.img nào trong out/target/product/flame/!${NC}"
+    echo -e "${RED}Biên dịch chưa hoàn thiện. KHÔNG THỂ ĐÓNG GÓI! Dừng build!${NC}"
+    echo -e "${RED}==================================================================${NC}"
+    exit 1
+fi
+
+find out/target/product/flame/ -maxdepth 1 \( -name "*.zip" -o -name "*.img" \) -exec cp {} "$OUTPUT_DIR/" \;
 
 echo -e "\n${GREEN}==================================================================${NC}"
 echo -e "${GREEN}                    BIÊN DỊCH THÀNH CÔNG!                         ${NC}"
 echo -e "${GREEN}==================================================================${NC}"
-
-OUTPUT_DIR="$HOME/pixel4_output_$(date +%Y%m%d_%H%M%S)"
-mkdir -p "$OUTPUT_DIR"
-find out/target/product/flame/ -maxdepth 1 \( -name "*.zip" -o -name "*.img" \) -exec cp {} "$OUTPUT_DIR/" \;
-
 echo -e "File ROM thành phẩm đã được copy ra: ${CYAN}${OUTPUT_DIR}${NC}"
 ls -lh "$OUTPUT_DIR"

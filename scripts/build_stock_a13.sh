@@ -191,19 +191,47 @@ export PAGER=cat
 if [ ! -d "vendor/google_devices/flame" ]; then
     echo ">> Tải Google Driver..."
     rm -f google_devices-flame-* extract-google_devices-flame*
-    curl -sL -O https://dl.google.com/dl/android/aosp/google_devices-flame-tp1a.221005.002.b2-22399ead.tgz
-    tar -xzf google_devices-flame-*.tgz
-    printf "I ACCEPT\n" | ./extract-google_devices-flame.sh
+    if ! curl -sL -O https://dl.google.com/dl/android/aosp/google_devices-flame-tp1a.221005.002.b2-22399ead.tgz; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tải được Google Driver tgz! Dừng build!${NC}"
+        exit 1
+    fi
+    if ! tar -xzf google_devices-flame-*.tgz; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không giải nén được file Google Driver tgz! Dừng build!${NC}"
+        exit 1
+    fi
+    if ! (printf "I ACCEPT\n" | ./extract-google_devices-flame.sh); then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Lỗi khi trích xuất Google Driver! Dừng build!${NC}"
+        exit 1
+    fi
     rm -f google_devices-flame-*.tgz extract-google_devices-flame.sh
+fi
+
+if [ ! -d "vendor/google_devices/flame" ]; then
+    echo -e "${RED}[LỖI NGHIÊM TRỌNG] Thư mục vendor/google_devices/flame không tồn tại sau khi giải nén! Dừng build!${NC}"
+    exit 1
 fi
 
 if [ ! -d "vendor/qcom/flame" ]; then
     echo ">> Tải Qualcomm Driver..."
     rm -f qcom-flame-* extract-qcom-flame*
-    curl -sL -O https://dl.google.com/dl/android/aosp/qcom-flame-tp1a.221005.002.b2-358af558.tgz
-    tar -xzf qcom-flame-*.tgz
-    printf "I ACCEPT\n" | ./extract-qcom-flame.sh
+    if ! curl -sL -O https://dl.google.com/dl/android/aosp/qcom-flame-tp1a.221005.002.b2-358af558.tgz; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tải được Qualcomm Driver tgz! Dừng build!${NC}"
+        exit 1
+    fi
+    if ! tar -xzf qcom-flame-*.tgz; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không giải nén được file Qualcomm Driver tgz! Dừng build!${NC}"
+        exit 1
+    fi
+    if ! (printf "I ACCEPT\n" | ./extract-qcom-flame.sh); then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Lỗi khi trích xuất Qualcomm Driver! Dừng build!${NC}"
+        exit 1
+    fi
     rm -f qcom-flame-*.tgz extract-qcom-flame.sh
+fi
+
+if [ ! -d "vendor/qcom/flame" ]; then
+    echo -e "${RED}[LỖI NGHIÊM TRỌNG] Thư mục vendor/qcom/flame không tồn tại sau khi giải nén! Dừng build!${NC}"
+    exit 1
 fi
 
 # Áp dụng bản vá VCam nếu được chọn
@@ -219,41 +247,61 @@ if [ "$STOCK_MODE" == "1" ]; then
         local patch_url="https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/${patch_name}?v=$(date +%s)"
         local tmp_patch="/tmp/${patch_name}"
 
-        if [ -d "$target_dir" ]; then
-            if [ -f "${LOCAL_PATCH_DIR}/${patch_name}" ]; then
-                echo -e "   [LOCAL] Dùng patch: ${patch_name} -> ${target_dir}"
-                cp "${LOCAL_PATCH_DIR}/${patch_name}" "$tmp_patch"
-            else
-                echo -e "   [ONLINE] Tải patch mới nhất: ${patch_name} -> ${target_dir}"
-                rm -f "$tmp_patch"
-                curl -fsSL "$patch_url" -o "$tmp_patch" || true
-            fi
+        if [ ! -d "$target_dir" ]; then
+            echo -e "${RED}[LỖI NGHIÊM TRỌNG] Thư mục ${target_dir} không tồn tại để áp dụng ${patch_name}! Dừng build!${NC}"
+            exit 1
+        fi
 
-            if [ ! -s "$tmp_patch" ]; then
-                echo -e "   [${RED}LỖI${NC}] Không tải được patch ${patch_name} (file trống hoặc lỗi mạng)!"
-                if [ "$patch_name" == "vcam_pixel4.patch" ]; then exit 1; fi
-                return 1
-            fi
-
-            sed -i 's/\r$//' "$tmp_patch"
-
-            if git -C "$target_dir" apply --ignore-space-change --ignore-whitespace --check "$tmp_patch" 2>/dev/null; then
-                git -C "$target_dir" apply --ignore-space-change --ignore-whitespace "$tmp_patch" && \
-                echo -e "   [${GREEN}OK${NC}] Applied ${patch_name} -> ${target_dir}" || true
-            else
-                # Thử áp dụng bằng 3way
-                if git -C "$target_dir" apply --3way --ignore-space-change --ignore-whitespace "$tmp_patch" 2>/dev/null; then
-                    echo -e "   [${GREEN}OK-3WAY${NC}] Applied ${patch_name} -> ${target_dir}"
-                else
-                    echo -e "   [${RED}THẤT BẠI${NC}] Không thể apply ${patch_name} -> ${target_dir}"
-                    git -C "$target_dir" apply --ignore-space-change --ignore-whitespace --check "$tmp_patch" || true
-                    if [ "$patch_name" == "vcam_pixel4.patch" ] || [ "$patch_name" == "hide_developer_options.patch" ] || [ "$patch_name" == "hide_settings_provider.patch" ] || [ "$patch_name" == "spoof_locked_bootloader.patch" ]; then
-                        echo -e "${RED}[LỖI NGHIÊM TRỌNG] ${patch_name} không thể áp dụng vào ${target_dir}! Dừng build!${NC}"
-                        exit 1
-                    fi
-                fi
+        if [ -f "${LOCAL_PATCH_DIR}/${patch_name}" ]; then
+            echo -e "   [LOCAL] Dùng patch: ${patch_name} -> ${target_dir}"
+            cp "${LOCAL_PATCH_DIR}/${patch_name}" "$tmp_patch"
+        else
+            echo -e "   [ONLINE] Tải patch mới nhất: ${patch_name} -> ${target_dir}"
+            rm -f "$tmp_patch"
+            if ! curl -fsSL "$patch_url" -o "$tmp_patch"; then
+                echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tải được patch ${patch_name} từ ${patch_url}! Dừng build!${NC}"
+                exit 1
             fi
         fi
+
+        if [ ! -s "$tmp_patch" ]; then
+            echo -e "${RED}[LỖI NGHIÊM TRỌNG] File patch ${patch_name} bị rỗng (0 bytes)! Dừng build!${NC}"
+            exit 1
+        fi
+
+        sed -i 's/\r$//' "$tmp_patch"
+
+        # 1. Kiểm tra nếu patch đã được áp dụng trước đó
+        if git -C "$target_dir" apply --reverse --check "$tmp_patch" &>/dev/null; then
+            echo -e "   [${YELLOW}ĐÃ APPLY${NC}] ${patch_name} -> ${target_dir} (bản vá đã hiện diện từ trước)"
+            return 0
+        fi
+
+        # 2. Thử apply bình thường
+        if git -C "$target_dir" apply --ignore-space-change --ignore-whitespace --check "$tmp_patch" &>/dev/null; then
+            if git -C "$target_dir" apply --ignore-space-change --ignore-whitespace "$tmp_patch"; then
+                echo -e "   [${GREEN}OK${NC}] Applied ${patch_name} -> ${target_dir}"
+                return 0
+            fi
+        fi
+
+        # 3. Thử áp dụng bằng 3way
+        if git -C "$target_dir" apply --3way --ignore-space-change --ignore-whitespace "$tmp_patch" &>/dev/null; then
+            echo -e "   [${GREEN}OK-3WAY${NC}] Applied ${patch_name} -> ${target_dir}"
+            return 0
+        fi
+
+        # 4. Nếu thất bại, in chi tiết lỗi và DỪNG NGAY LẬP TỨC
+        echo -e "\n${RED}==================================================================${NC}"
+        echo -e "${RED} [LỖI NGHIÊM TRỌNG] KHÔNG THỂ APPLY BẢN VÁ: ${patch_name}${NC}"
+        echo -e "${RED} Thư mục đích: ${target_dir}${NC}"
+        echo -e "${RED} Chi tiết lỗi từ git apply:${NC}"
+        echo -e "${YELLOW}"
+        git -C "$target_dir" apply --ignore-space-change --ignore-whitespace --verbose "$tmp_patch" || true
+        echo -e "${RED}==================================================================${NC}"
+        echo -e "${RED}>> ĐÃ DỪNG TIẾN TRÌNH BUILD! Không cho phép tiếp tục khi có bản vá lỗi!${NC}"
+        echo -e "${RED}>> Hãy kiểm tra và sửa bản vá trên Git trước khi chạy lại script.${NC}\n"
+        exit 1
     }
 
     echo -e "   [CLEAN] Đưa các repo về trạng thái sạch trước khi apply..."
@@ -411,12 +459,16 @@ EOF
     if [ ! -s packages/apps/CameraAssistant/CameraAssistant.apk ]; then
         curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/org.lineageos.camera.assistant/CameraAssistant.apk" -o packages/apps/CameraAssistant/CameraAssistant.apk || true
     fi
-    curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/CameraAssistant_Android.bp" -o packages/apps/CameraAssistant/Android.bp
-    if [ -s packages/apps/CameraAssistant/CameraAssistant.apk ]; then
-        echo -e "   [${GREEN}OK${NC}] Đã tích hợp CameraAssistant App vào packages/apps/CameraAssistant"
-    else
-        echo -e "   [${RED}CẢNH BÁO${NC}] Không tải được CameraAssistant.apk"
+    curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/CameraAssistant_Android.bp" -o packages/apps/CameraAssistant/Android.bp || true
+    if [ ! -s packages/apps/CameraAssistant/CameraAssistant.apk ]; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tải được CameraAssistant.apk! Dừng build!${NC}"
+        exit 1
     fi
+    if [ ! -s packages/apps/CameraAssistant/Android.bp ]; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tải được Android.bp cho CameraAssistant! Dừng build!${NC}"
+        exit 1
+    fi
+    echo -e "   [${GREEN}OK${NC}] Đã tích hợp CameraAssistant App vào packages/apps/CameraAssistant"
     if [ -f device/google/coral/device.mk ]; then
         grep -q "CameraAssistant" device/google/coral/device.mk || echo "PRODUCT_PACKAGES += CameraAssistant" >> device/google/coral/device.mk
     fi
@@ -471,7 +523,10 @@ if [ "$GAPPS_MODE" == "1" ]; then
     echo -e "\n${CYAN}>> Đang tích hợp Google Play Services & CH Play (MindTheGapps)...${NC}"
     if [ ! -d "vendor/gapps" ]; then
         echo -e "   [CLONE] Tải MindTheGapps (nhánh tau - Android 13 ARM64)..."
-        git clone --depth=1 https://gitlab.com/MindTheGapps/vendor_gapps.git -b tau vendor/gapps
+        if ! git clone --depth=1 https://gitlab.com/MindTheGapps/vendor_gapps.git -b tau vendor/gapps; then
+            echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tải được MindTheGapps repository! Dừng build!${NC}"
+            exit 1
+        fi
     else
         echo -e "   [EXISTS] Thư mục vendor/gapps đã tồn tại."
     fi
@@ -519,8 +574,15 @@ fi
 
 # 6. Thiết lập môi trường và Biên dịch
 echo -e "\n${BLUE}>> [6/6] Sắp xếp môi trường và bắt đầu Build AOSP...${NC}"
-source build/envsetup.sh
-lunch aosp_flame-${BUILD_VARIANT}
+if ! source build/envsetup.sh; then
+    echo -e "${RED}[LỖI NGHIÊM TRỌNG] source build/envsetup.sh thất bại! Dừng build!${NC}"
+    exit 1
+fi
+
+if ! lunch aosp_flame-${BUILD_VARIANT}; then
+    echo -e "${RED}[LỖI NGHIÊM TRỌNG] lunch aosp_flame-${BUILD_VARIANT} thất bại! Dừng build!${NC}"
+    exit 1
+fi
 
 # Tối ưu hóa JVM cho RAM 128GB
 export _JAVA_OPTIONS="-Xmx32g"
@@ -537,14 +599,38 @@ fi
 
 if [ "$GAPPS_MODE" == "1" ]; then
     echo -e "${CYAN}>> Làm sạch thư mục ảnh đĩa phân vùng để tích hợp GApps (installclean)...${NC}"
-    m installclean 2>/dev/null || true
+    if ! m installclean; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] m installclean thất bại! Dừng build!${NC}"
+        exit 1
+    fi
 fi
 
 echo -e "${GREEN}>> Đang build AOSP với ${CPU_CORES} luồng...${NC}"
-m -j"${CPU_CORES}"
+BUILD_START_TIME=$(date +%s)
+if ! m -j"${CPU_CORES}"; then
+    echo -e "\n${RED}==================================================================${NC}"
+    echo -e "${RED}             [LỖI BIÊN DỊCH] QUÁ TRÌNH BUILD THẤT BẠI!           ${NC}"
+    echo -e "${RED}             Lệnh 'm' gặp lỗi và bị ngắt.                         ${NC}"
+    echo -e "${RED}             KHÔNG THỂ XUẤT RA FILE ROM DO BIÊN DỊCH LỖI!         ${NC}"
+    echo -e "${RED}==================================================================${NC}"
+    exit 1
+fi
+BUILD_END_TIME=$(date +%s)
+BUILD_DURATION=$((BUILD_END_TIME - BUILD_START_TIME))
+echo -e "\n${GREEN}>> Thời gian biên dịch: $((BUILD_DURATION / 60)) phút $((BUILD_DURATION % 60)) giây${NC}"
+
+# Kiểm tra chặt chẽ sự tồn tại của các file ảnh đĩa hoàn chỉnh
+IMG_SRC="out/target/product/flame"
+if [ ! -f "${IMG_SRC}/boot.img" ] || { [ ! -f "${IMG_SRC}/system.img" ] && [ ! -f "${IMG_SRC}/super.img" ]; }; then
+    echo -e "\n${RED}==================================================================${NC}"
+    echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tìm thấy boot.img hoặc system.img/super.img trong ${IMG_SRC}!${NC}"
+    echo -e "${RED}Biên dịch chưa trọn vẹn. KHÔNG THỂ ĐÓNG GÓI BẢN ROM NÀY! Dừng build!${NC}"
+    echo -e "${RED}==================================================================${NC}"
+    exit 1
+fi
 
 echo -e "\n${GREEN}==================================================================${NC}"
-echo -e "${GREEN}               BUILD ROM STOCK A13 HOÀN TẤT!                      ${NC}"
+echo -e "${GREEN}               BUILD ROM STOCK A13 HOÀN TẤT THÀNH CÔNG!           ${NC}"
 echo -e "${GREEN}==================================================================${NC}"
 
 # Gom các file image thành phẩm

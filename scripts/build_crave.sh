@@ -103,19 +103,44 @@ apply_patch() {
     local patch_url="https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/${patch_name}"
     local tmp_patch="/tmp/${patch_name}"
 
+    if [ ! -d "$target_dir" ]; then
+        echo ">> [FATAL] Target directory $target_dir does not exist for $patch_name! Aborting build!"
+        exit 1
+    fi
+
     echo ">> Fetching patch: ${patch_name} -> ${target_dir}"
-    curl -sL "$patch_url" > "$tmp_patch"
+    if ! curl -fsSL "$patch_url" -o "$tmp_patch"; then
+        echo ">> [FATAL] Failed to download patch $patch_name! Aborting build!"
+        exit 1
+    fi
+    if [ ! -s "$tmp_patch" ]; then
+        echo ">> [FATAL] Patch $patch_name is empty! Aborting build!"
+        exit 1
+    fi
     sed -i 's/\r$//' "$tmp_patch"
 
-    if git -C "$target_dir" apply --ignore-space-change --ignore-whitespace --check "$tmp_patch" 2>/dev/null; then
-        if git -C "$target_dir" apply --ignore-space-change --ignore-whitespace "$tmp_patch" 2>/dev/null; then
-            echo "   [SUCCESS] Applied ${patch_name}"
-        else
-            echo "   [WARNING] Patch ${patch_name} check passed but apply failed, continuing..."
-        fi
-    else
-        echo "   [WARNING] Patch ${patch_name} check failed or already applied, skipping."
+    # Check if already applied
+    if git -C "$target_dir" apply --reverse --check "$tmp_patch" &>/dev/null; then
+        echo "   [ALREADY APPLIED] ${patch_name}"
+        return 0
     fi
+
+    if git -C "$target_dir" apply --ignore-space-change --ignore-whitespace --check "$tmp_patch" &>/dev/null; then
+        if git -C "$target_dir" apply --ignore-space-change --ignore-whitespace "$tmp_patch"; then
+            echo "   [SUCCESS] Applied ${patch_name}"
+            return 0
+        fi
+    fi
+
+    if git -C "$target_dir" apply --3way --ignore-space-change --ignore-whitespace "$tmp_patch" &>/dev/null; then
+        echo "   [SUCCESS-3WAY] Applied ${patch_name}"
+        return 0
+    fi
+
+    echo ">> [FATAL ERROR] Failed to apply patch ${patch_name} -> ${target_dir}!"
+    git -C "$target_dir" apply --ignore-space-change --ignore-whitespace --verbose "$tmp_patch" || true
+    echo ">> Aborting build to avoid building broken ROM!"
+    exit 1
 }
 
 # 7. Apply all patches
@@ -225,7 +250,13 @@ rm -rf out/target/product/*/obj/DTBO_OBJ
 rm -rf out/target/product/*/obj/PACKAGING/depmod*
 
 echo ">> Starting compilation: $BUILD_COMMAND"
-eval "$BUILD_COMMAND"
+if ! eval "$BUILD_COMMAND"; then
+    echo "=========================================================="
+    echo ">> [FATAL ERROR] Compilation failed! Aborting!"
+    echo " Date: $(date)"
+    echo "=========================================================="
+    exit 1
+fi
 
 echo "=========================================================="
 echo " Compilation Finished Successfully!"
