@@ -39,8 +39,8 @@ index 328ce8a..50187d8 100644
 +
 +        if (new java.io.File("/data/local/tmp/vcam_bypass_hide_overlay").exists()
 +                || new java.io.File("/sdcard/CameraAssistant/vcam_bypass_hide_overlay").exists()) {
-+            if (mAttrs.packageName != null && 
-+               (mAttrs.packageName.equals("org.lineageos.camera.assistant") 
++            if (mAttrs.packageName != null &&
++               (mAttrs.packageName.equals("org.lineageos.camera.assistant")
 +                || mAttrs.packageName.equals("com.android.setgps"))) {
 +                return;
 +            }

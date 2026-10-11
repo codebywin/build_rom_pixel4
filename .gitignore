@@ -62,4 +62,5 @@ repack_vcam_colorsync.py
 update_patch_yuv.py
 setup_test_module.sh
 avbtool.py
+__pycache__/
 

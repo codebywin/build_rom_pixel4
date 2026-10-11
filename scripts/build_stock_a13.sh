@@ -383,34 +383,11 @@ EOF
         echo -e "   [${GREEN}OK${NC}] Đã tích hợp luật SELinux cho VCam vào system/sepolicy!"
     fi
 
-    # Cấu hình AVB 2.0 (Android Verified Boot) để hỗ trợ khóa Bootloader phần cứng (Device state: locked)
-    echo -e "   [AVB] Cấu hình Android Verified Boot (AVB 2.0) để hỗ trợ Khóa Bootloader phần cứng (Titan M)..."
-    mkdir -p certs
-    if [ ! -f certs/avb.pem ]; then
-        openssl genrsa -out certs/avb.pem 4096
-    fi
-    python3 external/avb/avbtool.py extract_public_key --key certs/avb.pem --output certs/avb_custom_key.bin
-
-    sed -i '/BOARD_AVB_ENABLE/d' device/google/coral/BoardConfig.mk 2>/dev/null || true
-    sed -i '/BOARD_AVB_KEY_PATH/d' device/google/coral/BoardConfig.mk 2>/dev/null || true
-    sed -i '/BOARD_AVB_ALGORITHM/d' device/google/coral/BoardConfig.mk 2>/dev/null || true
+    # Đảm bảo cấu hình AVB linh hoạt, tránh Kernel Panic sập vào EDL 9008
+    echo -e "   [AVB] Dọn dẹp cấu hình AVB nghiêm ngặt để tránh lỗi dm-verity Kernel Panic..."
     sed -i '/BOARD_AVB_ROLLBACK_INDEX/d' device/google/coral/BoardConfig.mk 2>/dev/null || true
+    sed -i '/BOARD_AVB_KEY_PATH/d' device/google/coral/BoardConfig.mk 2>/dev/null || true
     sed -i '/BOARD_AVB_VBMETA_SYSTEM/d' device/google/coral/BoardConfig.mk 2>/dev/null || true
-
-    cat << 'EOF' >> device/google/coral/BoardConfig.mk
-
-# Hardware AVB 2.0 Signing Configuration for Bootloader Locking
-BOARD_AVB_ENABLE := true
-BOARD_AVB_KEY_PATH := certs/avb.pem
-BOARD_AVB_ALGORITHM := SHA256_RSA4096
-BOARD_AVB_ROLLBACK_INDEX := 1788220800
-
-BOARD_AVB_VBMETA_SYSTEM := system system_ext product
-BOARD_AVB_VBMETA_SYSTEM_KEY_PATH := certs/avb.pem
-BOARD_AVB_VBMETA_SYSTEM_ALGORITHM := SHA256_RSA4096
-BOARD_AVB_VBMETA_SYSTEM_ROLLBACK_INDEX := 1788220800
-BOARD_AVB_VBMETA_SYSTEM_ROLLBACK_INDEX_LOCATION := 1
-EOF
 
     # Đổi BUILD_ID thành chuẩn Google Stock chính hãng TP1A.221005.002.B2
     if [ -f build/make/core/build_id.mk ]; then
@@ -669,19 +646,6 @@ cp "${IMG_SRC}"/dtbo.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/vbmeta.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/vbmeta_system.img "$OUTPUT_DIR/" 2>/dev/null || true
 
-# Tự động trích xuất trực tiếp Root of Trust Public Key từ chính vbmeta.img vừa build xong (Khớp 100% chữ ký phần cứng)
-python3 -c '
-import struct, sys
-with open(sys.argv[1], "rb") as f:
-    fields = struct.unpack("!4s2L2Q L2Q2Q2Q2Q2Q QLL 48s 80s", f.read(256))
-    f.seek(256 + fields[3] + fields[10])
-    key = f.read(fields[11])
-with open(sys.argv[2], "wb") as out:
-    out.write(key)
-' "${IMG_SRC}/vbmeta.img" "$OUTPUT_DIR/avb_custom_key.bin" 2>/dev/null || \
-python3 external/avb/avbtool.py extract_public_key --key certs/avb.pem --output "$OUTPUT_DIR/avb_custom_key.bin" 2>/dev/null || \
-cp "certs/avb_custom_key.bin" "$OUTPUT_DIR/" 2>/dev/null || true
-
 cp "${IMG_SRC}"/super.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/system.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/system_ext.img "$OUTPUT_DIR/" 2>/dev/null || true
@@ -689,30 +653,30 @@ cp "${IMG_SRC}"/vendor.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/product.img "$OUTPUT_DIR/" 2>/dev/null || true
 cp "${IMG_SRC}"/userdata.img "$OUTPUT_DIR/" 2>/dev/null || true
 
-# Tạo script flash toàn diện hỗ trợ Khóa Bootloader phần cứng thật (Titan M)
+# Tạo script flash an toàn, triệt tiêu lỗi dm-verity Kernel Panic / Qualcomm EDL Mode
 cat << 'EOF' > "$OUTPUT_DIR/flash-all.bat"
 @echo off
 cd /d "%~dp0"
 echo ========================================================
-echo Flashing Signed Stock A13 ROM to Google Pixel 4 (flame)
-echo Support Genuine Hardware Bootloader Lock (Titan M)
+echo Flashing Patched Stock A13 ROM to Google Pixel 4 (flame)
+echo ========================================================
+echo [CHU Y] May phai dang o che do Fastboot (Bootloader Mode).
+echo Bootloader da duoc spoof LOCKED (Green State) qua Kernel/Init,
+echo TUYET DOI KHONG DUOC khoa Bootloader phan cung (tranh hard brick).
 echo ========================================================
 fastboot reboot bootloader
 ping 127.0.0.1 -n 5 > nul
 
-if exist avb_custom_key.bin (
-    echo [1/6] Nap khoa Custom Root of Trust vao chip Titan M...
-    fastboot erase avb_custom_key
-    fastboot flash avb_custom_key avb_custom_key.bin
-)
+echo [1/5] Xoa sach khoa custom trong chip Titan M (neu co)...
+fastboot erase avb_custom_key 2>nul
 
-echo [2/6] Nap boot, dtbo va cac phan vung xac thuc AVB 2.0 (Verity BAT)...
+echo [2/5] Nap boot, dtbo va tat hoan toan dm-verity tranh Kernel Panic / EDL Mode...
 if exist boot.img fastboot flash boot boot.img
 if exist dtbo.img fastboot flash dtbo dtbo.img
-if exist vbmeta.img fastboot flash vbmeta vbmeta.img
-if exist vbmeta_system.img fastboot flash vbmeta_system vbmeta_system.img
+if exist vbmeta.img fastboot --disable-verity --disable-verification flash vbmeta vbmeta.img
+if exist vbmeta_system.img fastboot --disable-verity --disable-verification flash vbmeta_system vbmeta_system.img
 
-echo [3/6] Nap cac phan vung he thong...
+echo [3/5] Nap cac phan vung he thong...
 if exist super.img (
     fastboot flash super super.img
 ) else (
@@ -728,43 +692,14 @@ if exist super.img (
     ping 127.0.0.1 -n 6 > nul
 )
 
-echo [4/6] Wiping userdata...
+echo [4/5] Xoa sach du lieu nguoi dung (wipe userdata)...
 fastboot -w
-echo [5/6] Khoi dong may de kiem tra boot truoc khi khoa...
+
+echo [5/5] Khoi dong Pixel 4 vao Android...
 fastboot reboot
 echo ========================================================
-echo [6/6] Sau khi may khoi dong vao man hinh Android OK,
-echo hay chay tiep file lock-bootloader.bat de KHOA BOOTLOADER THAT!
-echo ========================================================
-pause
-EOF
-
-cat << 'EOF' > "$OUTPUT_DIR/lock-bootloader.bat"
-@echo off
-cd /d "%~dp0"
-echo ========================================================
-echo KHOA BOOTLOADER PHAN CUNG (GENUINE HARDWARE LOCK)
-echo Google Pixel 4 (flame) - Chip Bao Mat Titan M
-echo ========================================================
-echo [CHU Y]: Chi chay script nay SAU KHI da chay flash-all.bat
-echo va dien thoai da khoi dong vao Android thanh cong!
-echo.
-pause
-fastboot reboot bootloader
-ping 127.0.0.1 -n 5 > nul
-echo.
-echo Dang gui lenh khoa Bootloader toi Titan M...
-fastboot flashing lock
-echo.
-echo ========================================================
-echo TREN MAN HINH PIXEL 4 LUC NAY:
-echo 1. Dung phim Am luong de chon dong "LOCK THE BOOTLOADER"
-echo 2. Nhan phim Nguon (Power) de xac nhan!
-echo.
-echo May se hien canh bao mau vang (Yellow State):
-echo "Your device is loading a different operating system..."
-echo Va may se tu dong boot vao Android voi Bootloader LOCKED 100%!
-echo (Vao Fastboot kiem tra se thay: Device state: locked mau xanh!)
+echo NAP ROM THANH CONG!
+echo Da vo hieu hoa dm-verity de chay he thong da mod an toan.
 echo ========================================================
 pause
 EOF
@@ -773,28 +708,25 @@ cat << 'EOF' > "$OUTPUT_DIR/flash-all.sh"
 #!/bin/bash
 cd "$(dirname "$0")"
 echo "========================================================"
-echo "Flashing Signed Stock A13 ROM to Google Pixel 4 (flame)"
-echo "Support Genuine Hardware Bootloader Lock (Titan M)"
+echo "Flashing Patched Stock A13 ROM to Google Pixel 4 (flame)"
 echo "========================================================"
 fastboot reboot bootloader
 sleep 4
 
-if [ -f avb_custom_key.bin ]; then
-    echo "[1/6] Enrolling Custom Root of Trust to Titan M..."
-    fastboot erase avb_custom_key
-    fastboot flash avb_custom_key avb_custom_key.bin
-fi
+echo "[1/5] Erasing custom key from Titan M..."
+fastboot erase avb_custom_key 2>/dev/null || true
 
-echo "[2/6] Flashing boot, dtbo and AVB partitions..."
+echo "[2/5] Flashing boot, dtbo and disabling dm-verity / verification..."
 [ -f boot.img ] && fastboot flash boot boot.img
 [ -f dtbo.img ] && fastboot flash dtbo dtbo.img
-[ -f vbmeta.img ] && fastboot flash vbmeta vbmeta.img
-[ -f vbmeta_system.img ] && fastboot flash vbmeta_system vbmeta_system.img
+[ -f vbmeta.img ] && fastboot --disable-verity --disable-verification flash vbmeta vbmeta.img
+[ -f vbmeta_system.img ] && fastboot --disable-verity --disable-verification flash vbmeta_system vbmeta_system.img
 
 if [ -f super.img ]; then
+    echo "[3/5] Flashing super partition..."
     fastboot flash super super.img
 else
-    echo "Entering fastbootd for dynamic partitions..."
+    echo "[3/5] Entering fastbootd for dynamic partitions..."
     fastboot reboot fastboot
     sleep 6
     [ -f system.img ] && fastboot flash system system.img
@@ -806,27 +738,21 @@ else
     sleep 4
 fi
 
+echo "[4/5] Wiping userdata..."
 fastboot -w
+
+echo "[5/5] Rebooting to Android..."
 fastboot reboot
-echo "DONE! Boot into Android to verify, then run fastboot flashing lock!"
+echo "========================================================"
+echo "DONE! Phone rebooted successfully."
+echo "========================================================"
 EOF
 chmod +x "$OUTPUT_DIR/flash-all.sh"
-
-# Kiểm tra xác thực khóa AVB Root of Trust
-KEY_SHA1=""
-if [ -f "$OUTPUT_DIR/avb_custom_key.bin" ] && [ -s "$OUTPUT_DIR/avb_custom_key.bin" ]; then
-    KEY_SHA1=$(sha1sum "$OUTPUT_DIR/avb_custom_key.bin" | awk '{print $1}')
-    echo -e "\n${GREEN}>> [AVB 2.0] Trích xuất thành công Root of Trust Public Key từ vbmeta.img!${NC}"
-    echo -e "   - File khóa: ${CYAN}$OUTPUT_DIR/avb_custom_key.bin${NC}"
-    echo -e "   - SHA-1: ${YELLOW}${KEY_SHA1}${NC}"
-else
-    echo -e "\n${RED}[CẢNH BÁO] Không trích xuất được avb_custom_key.bin!${NC}"
-fi
 
 # Tự động nén toàn bộ thành file .ZIP duy nhất
 ZIP_FILE="${OUTPUT_DIR}.zip"
 LATEST_ZIP="$HOME/pixel4_latest.zip"
-echo -e "\n${CYAN}>> [ZIP] Đang tự động nén toàn bộ ROM + Khóa AVB thành file ZIP duy nhất để tải siêu tốc...${NC}"
+echo -e "\n${CYAN}>> [ZIP] Đang tự động nén toàn bộ ROM thành file ZIP duy nhất để tải siêu tốc...${NC}"
 
 if command -v zip &>/dev/null; then
     (cd "$HOME" && zip -r -1 "$(basename "$ZIP_FILE")" "$(basename "$OUTPUT_DIR")")
@@ -840,7 +766,7 @@ fi
 ln -sf "$ZIP_FILE" "$LATEST_ZIP" 2>/dev/null || true
 
 echo -e "\n${GREEN}==================================================================${NC}"
-echo -e "${GREEN}       ĐÃ ĐÓNG GÓI HOÀN TẤT BẢN ROM VÀ FILE KHÓA AVB CHUẨN!       ${NC}"
+echo -e "${GREEN}             ĐÃ ĐÓNG GÓI HOÀN TẤT BẢN ROM THÀNH PHẨM!             ${NC}"
 echo -e "${GREEN}==================================================================${NC}"
 echo -e "Thư mục ROM: ${CYAN}${OUTPUT_DIR}${NC}"
 if [ -f "$ZIP_FILE" ]; then
@@ -848,7 +774,6 @@ if [ -f "$ZIP_FILE" ]; then
     echo -e "File nén ZIP: ${YELLOW}${ZIP_FILE}${NC} (${GREEN}${ZIP_SIZE}${NC})"
     echo -e "File nén mới nhất: ${YELLOW}${LATEST_ZIP}${NC}"
 fi
-[ -n "$KEY_SHA1" ] && echo -e "Mã SHA-1 Root of Trust (Titan M): ${GREEN}${KEY_SHA1}${NC}"
 echo -e "\n${CYAN}>> HƯỚNG DẪN TẢI VỀ MÁY TÍNH:${NC}"
 echo -e "   1. Qua RustDesk: Kéo thả file ${YELLOW}$(basename "$ZIP_FILE")${NC} (trong thư mục Home ~/) về máy tính."
 echo -e "   2. Hoặc qua SCP từ máy tính (PowerShell):"
