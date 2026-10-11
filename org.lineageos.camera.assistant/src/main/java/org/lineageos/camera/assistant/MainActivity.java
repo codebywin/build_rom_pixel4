@@ -1320,6 +1320,12 @@ public class MainActivity extends Activity {
     }
 
     private static void copyFile(File src, File dst) {
+        if (src == null || !src.exists()) return;
+        try {
+            if (dst.exists()) {
+                dst.delete();
+            }
+        } catch (Throwable ignored) {}
         try (InputStream in = new java.io.FileInputStream(src);
              OutputStream out = new FileOutputStream(dst)) {
             byte[] buf = new byte[32768];
@@ -1327,7 +1333,9 @@ public class MainActivity extends Activity {
             while ((len = in.read(buf)) > 0) {
                 out.write(buf, 0, len);
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            Log.e("CameraAssistant", "Lỗi copyFile " + src + " -> " + dst, t);
+        }
     }
 
     private void deleteFileSafely(File file) {
