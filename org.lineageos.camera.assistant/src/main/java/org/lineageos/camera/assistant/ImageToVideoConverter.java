@@ -97,6 +97,32 @@ public class ImageToVideoConverter {
             return false;
         }
 
+        // Tự động xoay ảnh theo EXIF nếu có
+        try {
+            android.media.ExifInterface exif = null;
+            if (imageFile != null && imageFile.exists()) {
+                exif = new android.media.ExifInterface(imageFile.getAbsolutePath());
+            } else if (imageUri != null && context != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                try (InputStream is = context.getContentResolver().openInputStream(imageUri)) {
+                    if (is != null) exif = new android.media.ExifInterface(is);
+                }
+            }
+            if (exif != null) {
+                int orientation = exif.getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, android.media.ExifInterface.ORIENTATION_NORMAL);
+                int rotation = 0;
+                if (orientation == android.media.ExifInterface.ORIENTATION_ROTATE_90) rotation = 90;
+                else if (orientation == android.media.ExifInterface.ORIENTATION_ROTATE_180) rotation = 180;
+                else if (orientation == android.media.ExifInterface.ORIENTATION_ROTATE_270) rotation = 270;
+                if (rotation != 0) {
+                    Matrix rotMatrix = new Matrix();
+                    rotMatrix.postRotate(rotation);
+                    Bitmap rotated = Bitmap.createBitmap(srcBitmap, 0, 0, srcBitmap.getWidth(), srcBitmap.getHeight(), rotMatrix, true);
+                    srcBitmap.recycle();
+                    srcBitmap = rotated;
+                }
+            }
+        } catch (Throwable ignored) {}
+
         try {
             int srcW = srcBitmap.getWidth();
             int srcH = srcBitmap.getHeight();
@@ -111,12 +137,12 @@ public class ImageToVideoConverter {
                 targetH = 1080;
             }
 
-            // Create scaled canvas preserving aspect ratio
+            // Chế độ Center-Crop (Fill): Lấp đầy 100% khung hình edge-to-edge, loại bỏ hoàn toàn viền đen, hiển thị như video/camera thật
             Bitmap scaledBitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888);
             Canvas canvas = new Canvas(scaledBitmap);
             canvas.drawColor(Color.BLACK);
 
-            float scale = Math.min((float) targetW / srcW, (float) targetH / srcH);
+            float scale = Math.max((float) targetW / srcW, (float) targetH / srcH);
             float dx = (targetW - srcW * scale) * 0.5f;
             float dy = (targetH - srcH * scale) * 0.5f;
 
