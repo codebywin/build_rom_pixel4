@@ -814,7 +814,8 @@ public class MainActivity extends Activity {
 
         if (hasVideo) {
             String status = isVideoActive ? "  [🟢 ĐANG DÙNG]" : "  [⏸ Tạm tắt - Đang dùng Hình ảnh]";
-            txtVideoInfo.setText("Video: " + videoFile.getAbsolutePath() + " (" + (videoFile.length() / 1024 / 1024) + " MB)" + status);
+            String sizeStr = videoFile.length() < 1024 * 1024 ? (videoFile.length() / 1024) + " KB" : String.format(java.util.Locale.US, "%.1f MB", videoFile.length() / (1024.0 * 1024.0));
+            txtVideoInfo.setText("Video: " + videoFile.getAbsolutePath() + " (" + sizeStr + ")" + status);
         } else {
             txtVideoInfo.setText("Chưa có video nào");
         }
@@ -826,7 +827,8 @@ public class MainActivity extends Activity {
         if (txtImageInfo != null) {
             if (hasImg) {
                 String status = isImgActive ? "  [🟢 ĐANG DÙNG]" : "  [Chưa kích hoạt]";
-                txtImageInfo.setText("Hình ảnh: " + imgFile.getAbsolutePath() + " (" + (imgFile.length() / 1024) + " KB)" + status);
+                String sizeStr = imgFile.length() < 1024 * 1024 ? (imgFile.length() / 1024) + " KB" : String.format(java.util.Locale.US, "%.1f MB", imgFile.length() / (1024.0 * 1024.0));
+                txtImageInfo.setText("Hình ảnh: " + imgFile.getAbsolutePath() + " (" + sizeStr + ")" + status);
             } else {
                 txtImageInfo.setText("Chưa có hình ảnh nào được chọn");
             }
@@ -855,7 +857,8 @@ public class MainActivity extends Activity {
         }
 
         if (audioFile.exists() && audioFile.length() > 0) {
-            txtAudioInfo.setText("Audio: " + audioFile.getAbsolutePath() + " (" + (audioFile.length() / 1024 / 1024) + " MB)");
+            String sizeStr = audioFile.length() < 1024 * 1024 ? (audioFile.length() / 1024) + " KB" : String.format(java.util.Locale.US, "%.1f MB", audioFile.length() / (1024.0 * 1024.0));
+            txtAudioInfo.setText("Audio: " + audioFile.getAbsolutePath() + " (" + sizeStr + ")");
         } else {
             txtAudioInfo.setText("Chưa có audio, hệ thống dùng mặc định");
         }
