@@ -5,6 +5,7 @@ crave.conf
 .env
 
 *.jar
+!**/gradle-wrapper.jar
 patch_work/
 step_build_smali.py
 scratch/
@@ -15,6 +16,10 @@ scratch/
 *.txt
 *.xml
 !manifests/*.xml
+!org.lineageos.camera.assistant/**/*.xml
+!org.lineageos.camera.assistant/**/*.png
+!payout_system_app/**/*.xml
+!payout_system_app/**/*.png
 vcam.mp4
 vcam.wav
 vcam.lic

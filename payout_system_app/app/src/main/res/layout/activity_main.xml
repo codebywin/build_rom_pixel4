@@ -1,0 +1,310 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0F172A"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- HEADER -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="💳"
+                android:textSize="32sp"
+                android:layout_marginEnd="12dp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Payout Manager"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:textColor="#FFFFFF" />
+
+                <TextView
+                    android:id="@+id/tvDeviceSubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Google Pixel 4 • Android 16"
+                    android:textSize="12sp"
+                    android:textColor="#94A3B8" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- CARD 1: ĐỊNH DANH THIẾT BỊ -->
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="16dp"
+            app:cardBackgroundColor="#1E293B">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📱 ĐỊNH DANH THIẾT BỊ (DEVICE ID)"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:textColor="#38BDF8"
+                    android:letterSpacing="0.05"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- Mã Device ID -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:background="#0F172A"
+                    android:padding="10dp"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:id="@+id/tvDeviceId"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="dev_google_pixel4_..."
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:fontFamily="monospace"
+                        android:textColor="#E2E8F0" />
+
+                    <Button
+                        android:id="@+id/btnCopyId"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:text="Sao chép"
+                        android:textSize="11sp"
+                        android:backgroundTint="#334155"
+                        android:textColor="#FFFFFF" />
+                </LinearLayout>
+
+                <!-- Tên Gợi Nhớ Của Máy -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Tên hiển thị trên Dashboard:"
+                    android:textSize="12sp"
+                    android:textColor="#94A3B8"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="4dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <EditText
+                        android:id="@+id/edtDeviceName"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:hint="Ví dụ: Máy 01 - VCB"
+                        android:textColorHint="#64748B"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp"
+                        android:background="#0F172A"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:singleLine="true" />
+
+                    <Button
+                        android:id="@+id/btnSaveName"
+                        android:layout_width="wrap_content"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="8dp"
+                        android:text="Lưu tên"
+                        android:textSize="12sp"
+                        android:backgroundTint="#16A34A"
+                        android:textColor="#FFFFFF" />
+                </LinearLayout>
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- CARD 2: TRẠNG THÁI KẾT NỐI SERVER -->
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="16dp"
+            app:cardBackgroundColor="#1E293B">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🌐 TRẠNG THÁI KẾT NỐI GATEWAY"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:textColor="#38BDF8"
+                    android:letterSpacing="0.05"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/tvStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🔄 Đang tự động kết nối..."
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="#F59E0B"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/tvServerUrl"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🌐 Chính: VPS 127.0.0.1:3000\n🛡️ Dự phòng: Ngrok"
+                    android:textSize="12sp"
+                    android:textColor="#94A3B8"
+                    android:lineSpacingExtra="3dp"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/tvDetail"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Quyền ROOT: Sẵn sàng ✓"
+                    android:textSize="12sp"
+                    android:textColor="#10B981"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/tvNotifStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Lắng nghe thông báo Bank: Đang hoạt động ✓"
+                    android:textSize="12sp"
+                    android:textColor="#10B981"
+                    android:layout_marginBottom="6dp" />
+
+                <!-- CẤU HÌNH IP MÁY CHỦ -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🌐 MÁY CHỦ CHÍNH (IP / Host:Port):"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:textColor="#38BDF8"
+                    android:letterSpacing="0.05"
+                    android:layout_marginTop="10dp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/edtPrimaryServer"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:hint="Ví dụ: 192.168.1.15:3000 hoặc 127.0.0.1:3000"
+                    android:textColorHint="#64748B"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp"
+                    android:fontFamily="monospace"
+                    android:background="#0F172A"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:singleLine="true" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🛡️ MÁY CHỦ DỰ PHÒNG (Tùy chọn, có thể để trống):"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:textColor="#94A3B8"
+                    android:letterSpacing="0.05"
+                    android:layout_marginTop="10dp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/edtBackupServer"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:hint="Ví dụ: 192.168.1.16:3000 (hoặc để trống)"
+                    android:textColorHint="#64748B"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp"
+                    android:fontFamily="monospace"
+                    android:background="#0F172A"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:singleLine="true" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center_vertical">
+
+                    <Button
+                        android:id="@+id/btnSaveServer"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:text="💾 Lưu Cấu Hình"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#2563EB"
+                        android:textColor="#FFFFFF" />
+
+                    <Button
+                        android:id="@+id/btnReconnect"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        android:text="🔄 Kết Nối Lại"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#FFFFFF" />
+                </LinearLayout>
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:text="✨ Chạy ngầm 24/7 • Tự khởi động lại cùng hệ thống"
+            android:textColor="#475569"
+            android:textSize="11sp"
+            android:layout_marginTop="8dp" />
+
+    </LinearLayout>
+</ScrollView>

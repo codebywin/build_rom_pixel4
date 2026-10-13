@@ -195,6 +195,27 @@ if [ -f device/google/coral/lineage_coral.mk ]; then
     echo "PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += %/CameraAssistant.apk" >> device/google/coral/lineage_coral.mk
 fi
 
+# Cài đặt PayoutManager System App
+echo ">> Setting up PayoutManager app..."
+mkdir -p packages/apps/PayoutManager
+if ! curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/payout_system_app/PayoutManager.apk" -o packages/apps/PayoutManager/PayoutManager.apk; then
+    echo ">> [FATAL] Failed to download PayoutManager.apk! Aborting!"
+    exit 1
+fi
+if ! curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/PayoutManager_Android.bp" -o packages/apps/PayoutManager/Android.bp; then
+    echo ">> [FATAL] Failed to download PayoutManager Android.bp! Aborting!"
+    exit 1
+fi
+if [ -f device/google/coral/device.mk ]; then
+    echo "PRODUCT_PACKAGES += PayoutManager" >> device/google/coral/device.mk
+fi
+if [ -f device/google/coral/lineage_flame.mk ]; then
+    echo "PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += %/PayoutManager.apk" >> device/google/coral/lineage_flame.mk
+fi
+if [ -f device/google/coral/lineage_coral.mk ]; then
+    echo "PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += %/PayoutManager.apk" >> device/google/coral/lineage_coral.mk
+fi
+
 # Cài đặt Google Chrome Browser
 mkdir -p packages/apps/Chrome
 CHROME_APK="packages/apps/Chrome/Chrome.apk"

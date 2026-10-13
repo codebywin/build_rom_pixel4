@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Camera Assistant</string>
+    <string name="header_title">Camera Assistant</string>
+    <string name="header_badge">Tele:@</string>
+    <string name="btn_settings">⚙️ 设置</string>
+    <string name="dialog_settings_title">语言设置 / Language</string>
+    <string name="lang_vi">🇻🇳 Tiếng Việt (越南语)</string>
+    <string name="lang_en">🇬🇧 English (英语)</string>
+    <string name="lang_zh">🇨🇳 中文 (简体)</string>
+    <string name="license_title">🛡️ 软件授权管理</string>
+    <string name="license_active">🟢 已激活</string>
+    <string name="license_inactive">🔴 未激活</string>
+    <string name="device_serial_label">设备码: </string>
+    <string name="btn_copy">复制</string>
+    <string name="btn_reset_key">注销</string>
+    <string name="license_status_default">请输入激活码以激活虚拟相机</string>
+    <string name="edt_key_hint">输入激活码 (例如: XXXX-XXXX-XXXX)</string>
+    <string name="btn_activate_online">⚡ 在线激活</string>
+    <string name="vcam_master_switch">启用虚拟相机</string>
+    <string name="vcam_master_desc">自动拦截所有应用的相机和麦克风音画</string>
+    <string name="btn_open_floating">✨ 打开悬浮窗</string>
+    <string name="floating_desc">* 悬浮窗支持在应用/直播中直接缩放、移动、暂停画面。</string>
+    <string name="video_title">🎬 视频源文件 (.mp4)</string>
+    <string name="btn_pick_video">从设备选择新视频</string>
+    <string name="image_title">🖼️ 静态图片源 (.jpg / .png)</string>
+    <string name="btn_pick_image">从设备选择新图片</string>
+    <string name="audio_title">🎙️ 音频管理 (Audio Hook)</string>
+    <string name="btn_pick_audio">选择新音频 (.wav / .mp3)</string>
+    <string name="audio_mode_label">麦克风模式:</string>
+    <string name="audio_mode_virtual">仅虚拟音频 (100%纯音，静音外部麦克风)</string>
+    <string name="audio_mode_mix">音频混合 (播放虚拟音频 + 真实麦克风)</string>
+    <string name="audio_mode_real">仅真实麦克风 (关闭音频拦截)</string>
+    <string name="btn_apply">保存设置</string>
+    <string name="toast_vcam_on">🟢 已开启虚拟相机！\n(切换前后摄像头或重启应用以生效)</string>
+    <string name="toast_vcam_off">🔴 已关闭虚拟相机 (使用真实相机)！\n(切换前后摄像头或重启应用以生效)</string>
+    <string name="toast_saved">设置已保存！</string>
+    <string name="toast_copied">已复制设备码: </string>
+    <string name="toast_key_removed">已注销设备上的授权！</string>
+    <string name="toast_floating_opened">已打开悬浮窗！</string>
+    <string name="toast_overlay_perm">"请开启'显示在其他应用之上'权限！"</string>
+    <string name="toast_storage_perm">"请开启'所有文件访问'权限！"</string>
+    <string name="toast_enter_key">请输入激活码！</string>
+    <string name="toast_video_updated">已更新新视频！</string>
+    <string name="toast_image_updated">已更新新图片！</string>
+    <string name="toast_audio_updated">已更新新音频！</string>
+    <string name="toast_lang_changed">已切换为中文语言！</string>
+    <string name="vcam_swap_uv_switch">UV反色切换 (修复Chrome蓝脸)</string>
+    <string name="vcam_swap_uv_desc">交换U/V色度通道，彻底修复Google Chrome及WebRTC下的蓝脸/发紫问题</string>
+    <string name="toast_swap_uv_on">🎨 已开启UV反色！\n(修复Chrome/WebRTC下的蓝脸)</string>
+    <string name="toast_swap_uv_off">🎨 已关闭UV反色！\n(恢复Firefox及普通相机标准色彩)</string>
+    <string name="vcam_bright_title">☀️ RAW拍照亮度调节</string>
+    <string name="vcam_bright_desc">消除谷歌相机HDR+拍照过度曝光问题。推荐65%，使拍照成片与原视频完全一致。</string>
+    <string name="vcam_opacity_title">👁️ 悬浮窗透明度</string>
+    <string name="vcam_opacity_desc" formatted="false">调节悬浮控制菜单透明度 (80%, 85%, 90%, 95%, 100%)，以便轻松透过菜单观察背景相机画面。</string>
+    <string name="bypass_overlay_title">🛡️ 保护悬浮图标 (Bypass Anti-Overlay)</string>
+    <string name="bypass_overlay_desc">保持 Camera Assistant 和 Set GPS 悬浮窗始终显示在所有应用之上 (包括银行和KYC金融应用)</string>
+    <string name="toast_bypass_overlay_on">🛡️ 已开启防隐藏保护！\n悬浮图标将永久置顶显示。</string>
+    <string name="toast_bypass_overlay_off">🛡️ 已关闭防隐藏保护。</string>
+    <string name="notif_opacity_title">🔔 通知栏透明度调节</string>
+    <string name="notif_opacity_desc" formatted="false">自定义通知栏及快捷设置背景不透明度 (0% 全透明 - 100% 默认纯色)</string>
+    <string name="kyc_flash_switch_title">⚡ KYC 屏幕闪烁同步</string>
+    <string name="kyc_flash_switch_desc">自动捕获 KYC 应用屏幕闪烁颜色并同步至相机。关闭悬浮图标仍可在后台持续运行。</string>
+    <string name="toast_kyc_flash_on">⚡ 已开启 KYC 屏幕闪烁同步！\n即使关闭悬浮窗仍可在后台持续运行。</string>
+    <string name="toast_kyc_flash_off">⚡ 已关闭 KYC 屏幕闪烁同步。</string>
+</resources>

@@ -47,6 +47,7 @@ public class LicenseManager {
 
     private static volatile Context sContext = null;
     private static volatile String sCachedToken = "";
+    private static volatile String sPersistentUid = null;
 
     public static void init(Context context) {
         if (context != null) {
@@ -194,44 +195,18 @@ public class LicenseManager {
         return false;
     }
 
-    private static volatile String sPersistentUid = "";
-
-    public static void persistDeviceSerial(String serial) {
-        if (serial == null || serial.trim().isEmpty() || "DEVICE_UNKNOWN".equalsIgnoreCase(serial.trim())) return;
-        serial = serial.trim();
-        sPersistentUid = serial;
-
-        VcamConfigProvider.setString("vcam_uid", serial);
-
-        Context ctx = getContext();
-        if (ctx != null) {
-            try {
-                ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
-                        .edit()
-                        .putString("persistent_device_serial", serial)
-                        .commit();
-            } catch (Throwable ignored) {}
-            try {
-                File f = new File(ctx.getFilesDir(), ".vcam_uid");
-                writeFile(f.getAbsolutePath(), serial);
-            } catch (Throwable ignored) {}
-        }
-        try {
-            writeFile("/sdcard/CameraAssistant/.vcam_uid", serial);
-            writeFile("/sdcard/CameraAssistant/vcam_serial", serial);
-            writeFile("/data/local/tmp/.vcam_uid", serial);
-            writeFile("/data/local/tmp/vcam_serial", serial);
-            writeFile("/storage/emulated/0/CameraAssistant/.vcam_uid", serial);
-            writeFile("/storage/emulated/0/CameraAssistant/vcam_serial", serial);
-        } catch (Throwable ignored) {}
-    }
-
     public static String getDeviceSerial() {
-        if (sPersistentUid != null && !sPersistentUid.trim().isEmpty() && !"DEVICE_UNKNOWN".equalsIgnoreCase(sPersistentUid.trim())) {
-            return sPersistentUid.trim();
+        // 1. Kiểm tra Persistent UID (ổn định nhất, dùng chung giữa mọi tiến trình)
+        String uid = getOrCreatePersistentUid();
+        if (uid != null && !uid.isEmpty()) {
+            return uid.trim();
         }
-
-        // 1. Kiểm tra ro.boot.serialno & ro.serialno
+        // 2. Android ID
+        String aid = readAndroidId();
+        if (aid != null && !aid.isEmpty()) {
+            return aid.trim();
+        }
+        // 3. System properties & Build Serial
         String s = readSystemProp("ro.boot.serialno");
         if (s == null || s.isEmpty() || "unknown".equalsIgnoreCase(s)) {
             s = readSystemProp("ro.serialno");
@@ -241,50 +216,10 @@ public class LicenseManager {
                 s = Build.getSerial();
             } catch (Throwable ignored) {}
         }
-        if (s != null && !s.isEmpty() && !"unknown".equalsIgnoreCase(s)) {
-            sPersistentUid = s.trim();
-            persistDeviceSerial(sPersistentUid);
-            return sPersistentUid;
+        if (s == null || s.isEmpty() || "unknown".equalsIgnoreCase(s)) {
+            s = readSystemProp("sys.serialno");
         }
-
-        // 2. Kiểm tra UID đã lưu trong SharedPreferences nội bộ (100% không bao giờ đổi)
-        Context ctx = getContext();
-        if (ctx != null) {
-            try {
-                String saved = ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
-                        .getString("persistent_device_serial", "");
-                if (saved != null && !saved.trim().isEmpty()) {
-                    sPersistentUid = saved.trim();
-                    return sPersistentUid;
-                }
-                File f = new File(ctx.getFilesDir(), ".vcam_uid");
-                if (f.exists() && f.length() > 0) {
-                    String id = readFile(f);
-                    if (id != null && !id.trim().isEmpty()) {
-                        sPersistentUid = id.trim();
-                        return sPersistentUid;
-                    }
-                }
-            } catch (Throwable ignored) {}
-        }
-
-        // 3. Sử dụng Android ID (100% ổn định, chuẩn Android ID của máy)
-        String aid = readAndroidId();
-        if (aid != null && !aid.isEmpty()) {
-            sPersistentUid = "ID" + aid.toUpperCase(Locale.US);
-            persistDeviceSerial(sPersistentUid);
-            return sPersistentUid;
-        }
-
-        // 4. Persistent UID từ file hoặc tạo mới một lần duy nhất
-        String uid = getOrCreatePersistentUid();
-        if (uid != null && !uid.isEmpty()) {
-            sPersistentUid = uid.trim();
-            persistDeviceSerial(sPersistentUid);
-            return sPersistentUid;
-        }
-
-        return "DEVICE_UNKNOWN";
+        return (s != null && !s.isEmpty()) ? s.trim() : "DEVICE_UNKNOWN";
     }
 
     public static boolean matchesDeviceSerial(String licSerial) {
@@ -294,55 +229,46 @@ public class LicenseManager {
         // 1. So khớp với serial hiện thời
         if (licSerial.equalsIgnoreCase(getDeviceSerial())) return true;
 
-        // 2. So khớp với serial đã lưu trong SharedPreferences (khi activate thành công)
-        Context ctx = getContext();
-        if (ctx != null) {
-            try {
-                String saved = ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
-                        .getString("persistent_device_serial", "");
-                if (!saved.isEmpty() && licSerial.equalsIgnoreCase(saved)) return true;
+        // 2. So khớp với Persistent UID
+        String uid = getOrCreatePersistentUid();
+        if (!uid.isEmpty() && licSerial.equalsIgnoreCase(uid)) return true;
 
-                String last = ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
-                        .getString("last_activated_serial", "");
-                if (!last.isEmpty() && licSerial.equalsIgnoreCase(last)) return true;
-            } catch (Throwable ignored) {}
-        }
-
-        // 3. So khớp với Android ID (cả dạng "ID" + aid lẫn dạng aid thuần)
+        // 3. So khớp với Android ID (cả có và không có tiền tố ID)
         String aid = readAndroidId();
         if (!aid.isEmpty()) {
             if (licSerial.equalsIgnoreCase(aid)) return true;
             if (licSerial.equalsIgnoreCase("ID" + aid)) return true;
+            if (licSerial.toUpperCase().startsWith("ID") && licSerial.substring(2).equalsIgnoreCase(aid)) return true;
         }
 
-        // 4. So khớp với Persistent UID
-        String uid = getOrCreatePersistentUid();
-        if (!uid.isEmpty() && licSerial.equalsIgnoreCase(uid)) return true;
-
-        // 5. So khớp với các thuộc tính phần cứng (Pixel 4 thật: 97291FFAZ0002N)
+        // 4. So khớp với các thuộc tính phần cứng
         String p1 = readSystemProp("ro.boot.serialno");
         if (!p1.isEmpty() && licSerial.equalsIgnoreCase(p1)) return true;
         String p2 = readSystemProp("ro.serialno");
         if (!p2.isEmpty() && licSerial.equalsIgnoreCase(p2)) return true;
         String p3 = readSystemProp("sys.serialno");
         if (!p3.isEmpty() && licSerial.equalsIgnoreCase(p3)) return true;
+        String p4 = readSystemProp("ro.ril.oem.sno");
+        if (!p4.isEmpty() && licSerial.equalsIgnoreCase(p4)) return true;
 
         try {
             String bs = Build.getSerial();
             if (bs != null && !bs.isEmpty() && licSerial.equalsIgnoreCase(bs)) return true;
         } catch (Throwable ignored) {}
 
-        // 6. Tự động nhận diện: Nếu token có chữ ký RSA hợp lệ được lưu trong SharedPreferences nội bộ của App
-        // chứng tỏ thiết bị này vừa kích hoạt online thành công từ server, tự động ghim serial này làm persistent serial!
-        if (ctx != null) {
-            try {
-                String localToken = ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
-                        .getString("license_token", "");
-                if (localToken != null && localToken.contains("SERIAL=" + licSerial)) {
-                    persistDeviceSerial(licSerial);
-                    return true;
-                }
-            } catch (Throwable ignored) {}
+        // 5. Quét các file UID trên bộ nhớ ngoài
+        String[] paths = new String[]{
+                "/data/local/tmp/.vcam_uid",
+                "/sdcard/CameraAssistant/.vcam_uid",
+                "/sdcard/.vcam_uid",
+                "/storage/emulated/0/CameraAssistant/.vcam_uid",
+                "/storage/emulated/0/.vcam_uid"
+        };
+        for (String p : paths) {
+            String fileId = readFileSafely(p);
+            if (!fileId.isEmpty() && licSerial.equalsIgnoreCase(fileId)) {
+                return true;
+            }
         }
 
         return false;
@@ -365,26 +291,43 @@ public class LicenseManager {
     }
 
     private static String getOrCreatePersistentUid() {
+        // 0. Cache trong bộ nhớ RAM của tiến trình
+        if (sPersistentUid != null && !sPersistentUid.isEmpty()) {
+            return sPersistentUid;
+        }
+
         Context ctx = getContext();
+
+        // 1. Kiểm tra SharedPreferences (100% an toàn, không cần bất kỳ quyền hệ thống nào)
         if (ctx != null) {
             try {
-                String saved = ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
-                        .getString("persistent_device_serial", "");
-                if (saved != null && !saved.trim().isEmpty()) {
-                    return saved.trim();
+                String spId = ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
+                        .getString("persistent_uid", "");
+                if (spId != null && !spId.trim().isEmpty()) {
+                    sPersistentUid = spId.trim();
+                    syncUidToExternal(sPersistentUid);
+                    return sPersistentUid;
                 }
-                File f = new File(ctx.getFilesDir(), ".vcam_uid");
-                if (f.exists() && f.length() > 0) {
-                    String id = readFile(f);
-                    if (id != null && !id.trim().isEmpty()) {
-                        persistDeviceSerial(id.trim());
-                        return id.trim();
+            } catch (Throwable ignored) {}
+        }
+
+        // 2. Kiểm tra file internal app storage (ctx.getFilesDir()/.vcam_uid)
+        if (ctx != null) {
+            try {
+                File intFile = new File(ctx.getFilesDir(), ".vcam_uid");
+                if (intFile.exists() && intFile.canRead() && intFile.length() > 0) {
+                    String fileId = readFileSafely(intFile.getAbsolutePath());
+                    if (!fileId.isEmpty()) {
+                        sPersistentUid = fileId.trim();
+                        savePersistentUidInternal(sPersistentUid);
+                        syncUidToExternal(sPersistentUid);
+                        return sPersistentUid;
                     }
                 }
             } catch (Throwable ignored) {}
         }
 
-        // Kiểm tra các đường dẫn có thể chia sẻ giữa các tiến trình
+        // 3. Kiểm tra các đường dẫn chia sẻ chung với Native Hook / ROM
         String[] paths = new String[]{
                 "/data/local/tmp/.vcam_uid",
                 "/sdcard/CameraAssistant/.vcam_uid",
@@ -393,24 +336,93 @@ public class LicenseManager {
                 "/storage/emulated/0/.vcam_uid"
         };
         for (String p : paths) {
-            File f = new File(p);
-            if (f.exists() && f.canRead()) {
-                try {
-                    BufferedReader br = new BufferedReader(new java.io.FileReader(f));
-                    String id = br.readLine();
-                    br.close();
-                    if (id != null && !id.trim().isEmpty()) {
-                        persistDeviceSerial(id.trim());
-                        return id.trim();
-                    }
-                } catch (Throwable ignored) {}
+            String fileId = readFileSafely(p);
+            if (!fileId.isEmpty()) {
+                sPersistentUid = fileId.trim();
+                savePersistentUidInternal(sPersistentUid);
+                return sPersistentUid;
             }
         }
 
-        // Nếu chưa có, tạo UID cố định mới một lần duy nhất và lưu ngay vào SharedPreferences
-        String newId = "ID" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 14).toUpperCase(Locale.US);
-        persistDeviceSerial(newId);
+        // 4. Nếu chưa có, tạo UID CỐ ĐỊNH từ Android ID (Deterministic - không bao giờ đổi trên máy này!)
+        String baseAid = readAndroidId();
+        String newId;
+        if (baseAid != null && !baseAid.isEmpty() && !"null".equalsIgnoreCase(baseAid)) {
+            newId = "ID" + baseAid.toUpperCase();
+        } else {
+            newId = "ID" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 14).toUpperCase();
+        }
+
+        sPersistentUid = newId;
+        savePersistentUidInternal(newId);
+        syncUidToExternal(newId);
         return newId;
+    }
+
+    private static void savePersistentUidInternal(String uid) {
+        if (uid == null || uid.isEmpty()) return;
+        Context ctx = getContext();
+        if (ctx != null) {
+            try {
+                ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
+                        .edit()
+                        .putString("persistent_uid", uid)
+                        .apply();
+            } catch (Throwable ignored) {}
+            try {
+                File intFile = new File(ctx.getFilesDir(), ".vcam_uid");
+                java.io.FileOutputStream fos = new java.io.FileOutputStream(intFile);
+                fos.write(uid.getBytes("UTF-8"));
+                fos.close();
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    private static void syncUidToExternal(String uid) {
+        if (uid == null || uid.isEmpty()) return;
+        String[] paths = new String[]{
+                "/data/local/tmp/.vcam_uid",
+                "/sdcard/CameraAssistant/.vcam_uid",
+                "/sdcard/.vcam_uid",
+                "/storage/emulated/0/CameraAssistant/.vcam_uid",
+                "/storage/emulated/0/.vcam_uid"
+        };
+        for (String p : paths) {
+            try {
+                File f = new File(p);
+                File parent = f.getParentFile();
+                if (parent != null && !parent.exists()) parent.mkdirs();
+                java.io.FileOutputStream fos = new java.io.FileOutputStream(f);
+                fos.write(uid.getBytes("UTF-8"));
+                fos.close();
+                f.setReadable(true, false);
+                f.setWritable(true, false);
+            } catch (Throwable ignored) {}
+        }
+        try {
+            Runtime.getRuntime().exec(new String[]{"su", "-c",
+                "echo -n '" + uid + "' > /data/local/tmp/.vcam_uid && chmod 666 /data/local/tmp/.vcam_uid ; " +
+                "mkdir -p /sdcard/CameraAssistant 2>/dev/null ; " +
+                "echo -n '" + uid + "' > /sdcard/CameraAssistant/.vcam_uid 2>/dev/null ; " +
+                "chmod 666 /sdcard/CameraAssistant/.vcam_uid 2>/dev/null ; " +
+                "rm -f /sdcard/.vcam_uid /storage/emulated/0/.vcam_uid 2>/dev/null"
+            });
+        } catch (Throwable ignored) {}
+    }
+
+    private static String readFileSafely(String path) {
+        try {
+            File f = new File(path);
+            if (f.exists() && f.canRead()) {
+                BufferedReader br = new BufferedReader(new java.io.FileReader(f));
+                String line = br.readLine();
+                br.close();
+                if (line != null && !line.trim().isEmpty()) {
+                    return line.trim();
+                }
+            }
+        } catch (Throwable ignored) {}
+        return "";
     }
 
     private static String readSystemProp(String key) {
@@ -488,10 +500,6 @@ public class LicenseManager {
                 long diffDays = (expiresAt - nowSec) / 86400;
                 info.message = "Hạn dùng: " + diffDays + " ngày (Đến " + formatDate(expiresAt) + ")";
             }
-
-            VcamConfigProvider.setString("license_token", token);
-            VcamConfigProvider.setString("vcam_uid", licSerial);
-
             return info;
 
         } catch (Throwable t) {
@@ -639,44 +647,59 @@ public class LicenseManager {
         } catch (Throwable ignored) {}
 
         // 4. Standard external & tmp files
-        VcamConfigProvider.setString("license_token", token);
         writeFile(LIC_FILE_TMP, token);
         writeFile(LIC_FILE_SD, token);
         writeFile("/storage/emulated/0/vcam.lic", token);
 
-        // 5. Đồng bộ mã serial từ Token sang .vcam_uid cho ROM Core
-        try {
-            if (token != null && token.contains("SERIAL=")) {
-                String sub = token.substring(token.indexOf("SERIAL=") + 7);
-                int end = sub.indexOf(";");
-                if (end == -1) end = sub.indexOf("|");
-                if (end > 0) {
-                    String s = sub.substring(0, end).trim();
-                    persistDeviceSerial(s);
-                }
-            }
-        } catch (Throwable ignored) {}
-
-        // 6. Synchronous Root write so files exist before activate callback returns
+        // 5. Synchronous Root write so files exist before activate callback returns
         writeWithRootSync(token);
     }
 
     public static void ensureLicenseSharedSync() {
+        // Đồng bộ file persistent UID để các app bị hook luôn đọc được
+        String uid = getOrCreatePersistentUid();
+        if (uid != null && !uid.isEmpty()) {
+            try {
+                String cmd = "echo -n '" + uid + "' > /data/local/tmp/.vcam_uid && chmod 666 /data/local/tmp/.vcam_uid ; " +
+                             "mkdir -p /sdcard/CameraAssistant 2>/dev/null ; " +
+                             "echo -n '" + uid + "' > /sdcard/CameraAssistant/.vcam_uid 2>/dev/null ; " +
+                             "chmod 666 /sdcard/CameraAssistant/.vcam_uid 2>/dev/null ; " +
+                             "rm -f /sdcard/.vcam_uid /storage/emulated/0/.vcam_uid 2>/dev/null";
+                Runtime.getRuntime().exec(new String[]{"su", "-c", cmd});
+            } catch (Throwable ignored) {}
+        }
+
         String token = readLicenseToken();
         if (token != null && !token.isEmpty()) {
-            File sdLic = new File(LIC_FILE_SD);
-            if (!sdLic.exists() || sdLic.length() == 0) {
-                saveLicenseToken(token);
+            File tmpLic = new File(LIC_FILE_TMP);
+            if (!tmpLic.exists() || tmpLic.length() == 0) {
+                writeWithRootSync(token);
             }
         }
     }
 
     private static void writeWithRootSync(String data) {
         if (data == null || data.isEmpty()) return;
-        // Ghi qua chuẩn File API - Hoạt động 100% không cần quyền root
-        writeFile(LIC_FILE_SD, data);
-        writeFile("/sdcard/CameraAssistant/vcam.lic", data);
-        writeFile(LIC_FILE_TMP, data);
+        try {
+            String safeData = data.replace("'", "'\\''");
+            String cmd = "echo '" + safeData + "' > /data/local/tmp/vcam.lic && " +
+                         "chmod 666 /data/local/tmp/vcam.lic && " +
+                         "chown shell:shell /data/local/tmp/vcam.lic 2>/dev/null ; " +
+                         "chown 1047:1047 /data/local/tmp/vcam.lic 2>/dev/null ; " +
+                         "mkdir -p /sdcard/CameraAssistant 2>/dev/null ; " +
+                         "echo '" + safeData + "' > /sdcard/CameraAssistant/vcam.lic 2>/dev/null ; " +
+                         "chmod 666 /sdcard/CameraAssistant/vcam.lic 2>/dev/null ; " +
+                         "rm -f /sdcard/vcam.lic /storage/emulated/0/vcam.lic 2>/dev/null ; " +
+                         "mkdir -p /data/data/org.lineageos.camera.assistant/files 2>/dev/null ; " +
+                         "echo '" + safeData + "' > /data/data/org.lineageos.camera.assistant/files/vcam.lic 2>/dev/null ; " +
+                         "chmod 666 /data/data/org.lineageos.camera.assistant/files/vcam.lic 2>/dev/null";
+            Process p = Runtime.getRuntime().exec(new String[]{"su", "-c", cmd});
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                p.waitFor(3, TimeUnit.SECONDS);
+            } else {
+                p.waitFor();
+            }
+        } catch (Throwable ignored) {}
     }
 
     private static void writeFile(String path, String data) {
@@ -728,6 +751,18 @@ public class LicenseManager {
                 }
             } catch (Throwable ignored) {}
         }
+        try {
+            Process p = Runtime.getRuntime().exec("su");
+            OutputStream os = p.getOutputStream();
+            os.write("rm -f /data/local/tmp/vcam.lic /sdcard/CameraAssistant/vcam.lic /sdcard/vcam.lic /storage/emulated/0/CameraAssistant/vcam.lic /storage/emulated/0/vcam.lic /data/data/org.lineageos.camera.assistant/files/vcam.lic\nexit\n".getBytes("UTF-8"));
+            os.flush();
+            os.close();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                p.waitFor(3, TimeUnit.SECONDS);
+            } else {
+                p.waitFor();
+            }
+        } catch (Throwable ignored) {}
         return res;
     }
 
@@ -930,13 +965,6 @@ public class LicenseManager {
                         token = res.optString("license");
                     }
                     if (token != null && !token.isEmpty()) {
-                        if (ctx != null) {
-                            ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
-                                    .edit()
-                                    .putString("last_activated_serial", serial)
-                                    .commit();
-                        }
-                        persistDeviceSerial(serial);
                         saveLicenseToken(token);
                     }
                 }

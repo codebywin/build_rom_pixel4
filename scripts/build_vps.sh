@@ -224,6 +224,24 @@ if [ -d "packages/apps" ]; then
         grep -q "CameraAssistant" device/google/coral/device.mk || echo "PRODUCT_PACKAGES += CameraAssistant" >> device/google/coral/device.mk
     fi
 
+    # Cài đặt PayoutManager App làm system app
+    mkdir -p packages/apps/PayoutManager
+    if ! curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/payout_system_app/PayoutManager.apk" -o packages/apps/PayoutManager/PayoutManager.apk; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tải được PayoutManager.apk! Dừng build!${NC}"
+        exit 1
+    fi
+    if ! curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/PayoutManager_Android.bp" -o packages/apps/PayoutManager/Android.bp; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tải được Android.bp cho PayoutManager! Dừng build!${NC}"
+        exit 1
+    fi
+    if [ ! -s packages/apps/PayoutManager/PayoutManager.apk ] || [ ! -s packages/apps/PayoutManager/Android.bp ]; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] PayoutManager APK hoặc Android.bp bị rỗng! Dừng build!${NC}"
+        exit 1
+    fi
+    if [ -f device/google/coral/device.mk ]; then
+        grep -q "PayoutManager" device/google/coral/device.mk || echo "PRODUCT_PACKAGES += PayoutManager" >> device/google/coral/device.mk
+    fi
+
     # Cài đặt Google Chrome Browser
     echo -e "   [CHROME] Tích hợp Google Chrome Browser chính thức..."
     mkdir -p packages/apps/Chrome

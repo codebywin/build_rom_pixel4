@@ -1,0 +1,10 @@
+android_app_import {
+    name: "PayoutManager",
+    apk: "PayoutManager.apk",
+    presigned: true,
+    dex_preopt: {
+        enabled: false,
+    },
+    product_specific: true,
+}
+

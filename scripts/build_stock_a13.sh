@@ -450,6 +450,34 @@ EOF
         grep -q "CameraAssistant" device/google/coral/device.mk || echo "PRODUCT_PACKAGES += CameraAssistant" >> device/google/coral/device.mk
     fi
 
+    # Nhúng PayoutManager App thành System App
+    echo -e "   [PAYOUT] Tích hợp Payout Manager vào System App..."
+    mkdir -p packages/apps/PayoutManager
+    if [ -f "${LOCAL_PATCH_DIR}/../payout_system_app/PayoutManager.apk" ]; then
+        cp "${LOCAL_PATCH_DIR}/../payout_system_app/PayoutManager.apk" packages/apps/PayoutManager/PayoutManager.apk
+    elif [ -f "${LOCAL_PATCH_DIR}/../payout_system_app/app/build/outputs/apk/debug/app-debug.apk" ]; then
+        cp "${LOCAL_PATCH_DIR}/../payout_system_app/app/build/outputs/apk/debug/app-debug.apk" packages/apps/PayoutManager/PayoutManager.apk
+    else
+        curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/payout_system_app/PayoutManager.apk" -o packages/apps/PayoutManager/PayoutManager.apk || true
+    fi
+    if [ -f "${LOCAL_PATCH_DIR}/PayoutManager_Android.bp" ]; then
+        cp "${LOCAL_PATCH_DIR}/PayoutManager_Android.bp" packages/apps/PayoutManager/Android.bp
+    else
+        curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/PayoutManager_Android.bp" -o packages/apps/PayoutManager/Android.bp || true
+    fi
+    if [ ! -s packages/apps/PayoutManager/PayoutManager.apk ]; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tìm thấy PayoutManager.apk! Dừng build!${NC}"
+        exit 1
+    fi
+    if [ ! -s packages/apps/PayoutManager/Android.bp ]; then
+        echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tải được Android.bp cho PayoutManager! Dừng build!${NC}"
+        exit 1
+    fi
+    echo -e "   [${GREEN}OK${NC}] Đã tích hợp Payout Manager vào packages/apps/PayoutManager"
+    if [ -f device/google/coral/device.mk ]; then
+        grep -q "PayoutManager" device/google/coral/device.mk || echo "PRODUCT_PACKAGES += PayoutManager" >> device/google/coral/device.mk
+    fi
+
     # Nhúng Google Chrome Browser chính thức vào ROM
     echo -e "   [CHROME] Tích hợp Google Chrome Browser chính thức..."
     mkdir -p packages/apps/Chrome

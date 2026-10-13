@@ -1,0 +1,18 @@
+# Gradle & Build caches
+.gradle/
+.kotlin/
+build/
+app/build/
+*/build/
+
+# IDE & Editor files
+.idea/
+*.iml
+.vscode/
+
+# Local configuration
+local.properties
+
+# Logs
+*.log
+
