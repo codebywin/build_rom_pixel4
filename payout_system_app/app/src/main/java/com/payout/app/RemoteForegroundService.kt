@@ -81,6 +81,8 @@ class RemoteForegroundService : Service() {
                     service.startConnect(forceNext = false, forceReconnect = true)
                 }
             }
+        }
+
         fun startService(context: Context) {
             try {
                 val intent = Intent(context, RemoteForegroundService::class.java)

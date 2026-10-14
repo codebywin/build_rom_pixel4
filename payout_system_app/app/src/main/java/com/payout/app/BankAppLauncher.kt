@@ -120,7 +120,20 @@ object BankAppLauncher {
         val packages = BankRegistry.getPackagesForBank(upper)
 
         for (pkg in packages) {
-            // 1. Thử lấy ComponentName Activity chính của ngân hàng và mở bằng am start
+            // 1. Ưu tiên mở bằng Android Intent thuần (startActivity)
+            try {
+                val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg)
+                if (launchIntent != null) {
+                    launchIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    context.startActivity(launchIntent)
+                    Log.i(TAG, "🟢 Đã mở App ngân hàng $upper ($pkg) bằng startActivity Intent!")
+                    return true
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Không thể mở $pkg bằng startActivity Intent, thử am start...", e)
+            }
+
+            // 2. Fallback qua am start shell
             try {
                 val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg)
                 val component = launchIntent?.component?.flattenToString()
@@ -133,7 +146,7 @@ object BankAppLauncher {
                 Log.w(TAG, "Không lấy được component từ PackageManager cho $pkg", e)
             }
 
-            // 2. Fallback monkey launcher nếu không biết ComponentName
+            // 3. Fallback monkey launcher nếu không biết ComponentName
             try {
                 RootTouchManager.sendCommandSync("monkey -p $pkg -c android.intent.category.LAUNCHER 1")
                 Log.i(TAG, "🟢 Đã mở App ngân hàng $upper ($pkg) bằng monkey launcher!")

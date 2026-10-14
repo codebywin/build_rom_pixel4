@@ -8,8 +8,11 @@ echo.
 
 cd /d "%~dp0"
 
-REM Thiet lap JDK tu Android Studio
-if exist "C:\Program Files\Android\Android Studio\jbr" (
+REM Thiet lap JDK
+if exist "C:\Users\Git\jdk-17\jdk-17.0.12+7" (
+    set "JAVA_HOME=C:\Users\Git\jdk-17\jdk-17.0.12+7"
+    set "PATH=C:\Users\Git\jdk-17\jdk-17.0.12+7\bin;%PATH%"
+) else if exist "C:\Program Files\Android\Android Studio\jbr" (
     set "JAVA_HOME=C:\Program Files\Android\Android Studio\jbr"
     set "PATH=C:\Program Files\Android\Android Studio\jbr\bin;%PATH%"
 )

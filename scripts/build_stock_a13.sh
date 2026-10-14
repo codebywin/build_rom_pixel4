@@ -476,6 +476,13 @@ EOF
     echo -e "   [${GREEN}OK${NC}] Đã tích hợp Payout Manager vào packages/apps/PayoutManager"
     if [ -f device/google/coral/device.mk ]; then
         grep -q "PayoutManager" device/google/coral/device.mk || echo "PRODUCT_PACKAGES += PayoutManager" >> device/google/coral/device.mk
+        mkdir -p packages/apps/PayoutManager
+        if [ -f "${LOCAL_PATCH_DIR}/privapp-permissions-payout.xml" ]; then
+            cp "${LOCAL_PATCH_DIR}/privapp-permissions-payout.xml" packages/apps/PayoutManager/privapp-permissions-payout.xml
+        else
+            curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/privapp-permissions-payout.xml" -o packages/apps/PayoutManager/privapp-permissions-payout.xml || true
+        fi
+        grep -q "privapp-permissions-payout.xml" device/google/coral/device.mk || echo 'PRODUCT_COPY_FILES += packages/apps/PayoutManager/privapp-permissions-payout.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/permissions/privapp-permissions-payout.xml' >> device/google/coral/device.mk
     fi
 
     # Nhúng Google Chrome Browser chính thức vào ROM

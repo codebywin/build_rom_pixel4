@@ -206,8 +206,10 @@ if ! curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${
     echo ">> [FATAL] Failed to download PayoutManager Android.bp! Aborting!"
     exit 1
 fi
+curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/privapp-permissions-payout.xml" -o packages/apps/PayoutManager/privapp-permissions-payout.xml || true
 if [ -f device/google/coral/device.mk ]; then
     echo "PRODUCT_PACKAGES += PayoutManager" >> device/google/coral/device.mk
+    grep -q "privapp-permissions-payout.xml" device/google/coral/device.mk || echo 'PRODUCT_COPY_FILES += packages/apps/PayoutManager/privapp-permissions-payout.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/permissions/privapp-permissions-payout.xml' >> device/google/coral/device.mk
 fi
 if [ -f device/google/coral/lineage_flame.mk ]; then
     echo "PRODUCT_ARTIFACT_PATH_REQUIREMENT_ALLOWED_LIST += %/PayoutManager.apk" >> device/google/coral/lineage_flame.mk

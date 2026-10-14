@@ -97,9 +97,17 @@ object VietQrManager {
         try {
             val path = file?.absolutePath ?: "/sdcard/Pictures/payout_vietqr.png"
             
-            // 1. Xóa bằng quyền Root rm -f (Bắt buộc vì file tạo bằng lệnh Root cp nên app thường không thể delete)
-            RootTouchManager.sendCommandSync("rm -f \"$path\"")
-            try { file?.delete() } catch (ignored: Exception) {}
+            // 1. Xóa file trực tiếp bằng File API
+            try {
+                file?.delete()
+                val f = File(path)
+                if (f.exists()) f.delete()
+            } catch (ignored: Exception) {}
+
+            // 2. Xóa bằng Shell command dự phòng
+            try {
+                RootTouchManager.sendCommandSync("rm -f \"$path\"")
+            } catch (ignored: Exception) {}
 
             // 2. Xóa trực tiếp khỏi database MediaStore để biến mất ngay trong Gallery / Album
             try {

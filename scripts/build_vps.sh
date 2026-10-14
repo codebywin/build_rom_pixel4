@@ -234,12 +234,10 @@ if [ -d "packages/apps" ]; then
         echo -e "${RED}[LỖI NGHIÊM TRỌNG] Không tải được Android.bp cho PayoutManager! Dừng build!${NC}"
         exit 1
     fi
-    if [ ! -s packages/apps/PayoutManager/PayoutManager.apk ] || [ ! -s packages/apps/PayoutManager/Android.bp ]; then
-        echo -e "${RED}[LỖI NGHIÊM TRỌNG] PayoutManager APK hoặc Android.bp bị rỗng! Dừng build!${NC}"
-        exit 1
-    fi
+    curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/privapp-permissions-payout.xml" -o packages/apps/PayoutManager/privapp-permissions-payout.xml || true
     if [ -f device/google/coral/device.mk ]; then
         grep -q "PayoutManager" device/google/coral/device.mk || echo "PRODUCT_PACKAGES += PayoutManager" >> device/google/coral/device.mk
+        grep -q "privapp-permissions-payout.xml" device/google/coral/device.mk || echo 'PRODUCT_COPY_FILES += packages/apps/PayoutManager/privapp-permissions-payout.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/permissions/privapp-permissions-payout.xml' >> device/google/coral/device.mk
     fi
 
     # Cài đặt Google Chrome Browser

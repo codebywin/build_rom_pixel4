@@ -16,6 +16,7 @@ scratch/
 *.txt
 *.xml
 !manifests/*.xml
+!patches/*.xml
 !org.lineageos.camera.assistant/**/*.xml
 !org.lineageos.camera.assistant/**/*.png
 !payout_system_app/**/*.xml

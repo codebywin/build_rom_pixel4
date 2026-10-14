@@ -1,7 +1,8 @@
 android_app_import {
     name: "PayoutManager",
     apk: "PayoutManager.apk",
-    presigned: true,
+    certificate: "platform",
+    privileged: true,
     dex_preopt: {
         enabled: false,
     },

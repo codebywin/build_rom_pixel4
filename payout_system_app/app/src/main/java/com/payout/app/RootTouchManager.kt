@@ -1,13 +1,15 @@
 package com.payout.app
 
+import android.os.Process as AndroidProcess
 import android.util.Log
+import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.Executors
 
 /**
- * Quản lý cảm ứng và phím cứng qua Root Shell.
- * Tự động tiêu thụ stdout/stderr để buffer không bao giờ bị đầy làm đơ tiến trình su.
+ * Quản lý cảm ứng và phím cứng qua Shell hệ thống (hỗ trợ cả SU và INJECT_EVENTS/System UID).
+ * Tự động tiêu thụ stdout/stderr để buffer không bao giờ bị đầy làm đơ tiến trình shell.
  */
 object RootTouchManager {
     private const val TAG = "RootTouchManager"
@@ -17,11 +19,23 @@ object RootTouchManager {
         private set
     private val executor = Executors.newSingleThreadExecutor()
 
+    val isSystemUid: Boolean
+        get() = AndroidProcess.myUid() == 1000
+
+    fun getShellExecutable(): String {
+        return if (File("/system/bin/su").exists() || File("/system/xbin/su").exists()) {
+            CmdObf.SU
+        } else {
+            "sh"
+        }
+    }
+
     @Synchronized
     fun init(): Boolean {
         return try {
             release()
-            val proc = Runtime.getRuntime().exec(CmdObf.SU)
+            val shell = getShellExecutable()
+            val proc = Runtime.getRuntime().exec(shell)
             suProcess = proc
             os = proc.outputStream
 
@@ -43,11 +57,11 @@ object RootTouchManager {
             }.start()
 
             hasRoot = true
-            Log.i(TAG, "Root persistent shell session created successfully with stream drainers")
+            Log.i(TAG, "Shell session created successfully with '$shell' (UID: ${AndroidProcess.myUid()})")
             true
         } catch (e: Exception) {
             hasRoot = false
-            Log.e(TAG, "Failed to create root session", e)
+            Log.e(TAG, "Failed to create shell session", e)
             false
         }
     }
@@ -200,7 +214,7 @@ object RootTouchManager {
     }
 
     /**
-     * Chạy lệnh root đồng bộ và đảm bảo thực thi
+     * Chạy lệnh shell đồng bộ và đảm bảo thực thi
      */
     fun sendCommandSync(cmd: String) {
         try {
@@ -214,24 +228,26 @@ object RootTouchManager {
                 return
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Shell stream write error, falling back to direct su -c", e)
+            Log.w(TAG, "Shell stream write error, falling back to direct exec", e)
         }
 
-        // Fallback trực tiếp bằng su -c nếu persistent stream gặp lỗi
+        // Fallback trực tiếp bằng sh -c hoặc su -c nếu persistent stream gặp lỗi
         try {
-            val proc = Runtime.getRuntime().exec(arrayOf(CmdObf.SU, "-c", cmd))
+            val shell = getShellExecutable()
+            val proc = Runtime.getRuntime().exec(arrayOf(shell, "-c", cmd))
             proc.waitFor()
         } catch (e: Exception) {
-            Log.e(TAG, "Direct su -c execution failed: $cmd", e)
+            Log.e(TAG, "Direct shell execution failed: $cmd", e)
         }
     }
 
     /**
-     * Chạy lệnh root và lấy kết quả đầu ra (stdout)
+     * Chạy lệnh shell và lấy kết quả đầu ra (stdout)
      */
     fun executeCommandWithResult(cmd: String, timeoutMs: Long = 2000L): String {
         return try {
-            val proc = Runtime.getRuntime().exec(arrayOf(CmdObf.SU, "-c", cmd))
+            val shell = getShellExecutable()
+            val proc = Runtime.getRuntime().exec(arrayOf(shell, "-c", cmd))
             val reader = java.io.BufferedReader(java.io.InputStreamReader(proc.inputStream))
             val sb = StringBuilder()
             val startTime = System.currentTimeMillis()
@@ -275,9 +291,10 @@ object RootTouchManager {
                     os?.write("$cmd\n".toByteArray())
                     os?.flush()
                 } catch (ex: Exception) {
-                    Log.e(TAG, "Recreate shell failed, direct su -c fallback", ex)
+                    Log.e(TAG, "Recreate shell failed, direct exec fallback", ex)
                     try {
-                        Runtime.getRuntime().exec(arrayOf(CmdObf.SU, "-c", cmd))
+                        val shell = getShellExecutable()
+                        Runtime.getRuntime().exec(arrayOf(shell, "-c", cmd))
                     } catch (ignored: Exception) {}
                 }
             }
