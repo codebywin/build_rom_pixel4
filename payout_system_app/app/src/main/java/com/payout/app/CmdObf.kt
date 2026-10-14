@@ -12,7 +12,6 @@ object CmdObf {
         return String(o, Charsets.UTF_8)
     }
 
-    val SU get() = d(byteArrayOf(41, 47))
     val MINUS_C get() = d(byteArrayOf(119, 57))
     val INPUT_TAP get() = d(byteArrayOf(51, 52, 42, 47, 46, 122, 46, 59, 42, 122))
     val INPUT_SWIPE get() = d(byteArrayOf(51, 52, 42, 47, 46, 122, 41, 45, 51, 42, 63, 122))

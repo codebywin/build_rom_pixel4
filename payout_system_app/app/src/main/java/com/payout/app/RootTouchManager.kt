@@ -8,7 +8,7 @@ import java.io.OutputStream
 import java.util.concurrent.Executors
 
 /**
- * Quản lý cảm ứng và phím cứng qua Shell hệ thống (hỗ trợ cả SU và INJECT_EVENTS/System UID).
+ * Quản lý cảm ứng và phím cứng qua Shell hệ thống (chạy qua System UID 1000 / INJECT_EVENTS).
  * Tự động tiêu thụ stdout/stderr để buffer không bao giờ bị đầy làm đơ tiến trình shell.
  */
 object RootTouchManager {
@@ -23,11 +23,7 @@ object RootTouchManager {
         get() = AndroidProcess.myUid() == 1000
 
     fun getShellExecutable(): String {
-        return if (File("/system/bin/su").exists() || File("/system/xbin/su").exists()) {
-            CmdObf.SU
-        } else {
-            "sh"
-        }
+        return "sh"
     }
 
     @Synchronized
@@ -231,7 +227,7 @@ object RootTouchManager {
             Log.w(TAG, "Shell stream write error, falling back to direct exec", e)
         }
 
-        // Fallback trực tiếp bằng sh -c hoặc su -c nếu persistent stream gặp lỗi
+        // Fallback trực tiếp bằng sh -c nếu persistent stream gặp lỗi
         try {
             val shell = getShellExecutable()
             val proc = Runtime.getRuntime().exec(arrayOf(shell, "-c", cmd))

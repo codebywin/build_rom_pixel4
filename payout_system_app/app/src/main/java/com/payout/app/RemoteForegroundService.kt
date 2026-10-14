@@ -525,12 +525,10 @@ class RemoteForegroundService : Service() {
                 var sW = 1080
                 var sH = 2280
 
-                // Đọc kích thước màn hình vật lý chuẩn từ wm size
+                // Đọc kích thước màn hình vật lý chuẩn từ wm size (chạy qua System shell)
                 try {
-                    val wmProc = Runtime.getRuntime().exec(arrayOf("su", "-c", "wm size"))
-                    val wmReader = BufferedReader(InputStreamReader(wmProc.inputStream))
-                    var wmLine = wmReader.readLine()
-                    while (wmLine != null) {
+                    val wmOutput = RootTouchManager.executeCommandWithResult("wm size")
+                    for (wmLine in wmOutput.lines()) {
                         if (wmLine.contains("Physical size:") || wmLine.contains("Override size:")) {
                             val match = Regex("""(\d+)x(\d+)""").find(wmLine)
                             if (match != null) {
@@ -538,9 +536,7 @@ class RemoteForegroundService : Service() {
                                 sH = match.groupValues[2].toInt()
                             }
                         }
-                        wmLine = wmReader.readLine()
                     }
-                    wmProc.waitFor()
                 } catch (ignored: Exception) {}
 
                 val json = JSONObject().apply {

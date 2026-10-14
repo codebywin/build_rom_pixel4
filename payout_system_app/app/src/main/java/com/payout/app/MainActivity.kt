@@ -118,24 +118,24 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 3. Khởi tạo quyền ROOT và Dịch vụ nền ngầm
+        // 3. Khởi tạo quyền HỆ THỐNG (UID 1000) và Dịch vụ nền ngầm
         thread(name = "MainInitThread") {
-            val hasRoot = RootTouchManager.init()
             val isSystem = RootTouchManager.isSystemUid
+            val isReady = RootTouchManager.init()
             runOnUiThread {
                 if (isSystem) {
                     tvDetail.text = "Quyền HỆ THỐNG (UID 1000 • INJECT_EVENTS): Sẵn sàng ✓"
                     tvDetail.setTextColor(getColor(android.R.color.holo_green_light))
-                } else if (hasRoot) {
-                    tvDetail.text = "Quyền ROOT: Sẵn sàng ✓ (Đã bật tự khởi động)"
+                } else if (isReady) {
+                    tvDetail.text = "Quyền SHELL: Sẵn sàng ✓"
                     tvDetail.setTextColor(getColor(android.R.color.holo_green_light))
                 } else {
-                    tvDetail.text = "Cảnh báo: Chưa cấp quyền HỆ THỐNG / ROOT"
+                    tvDetail.text = "Cảnh báo: Chưa cấp quyền HỆ THỐNG"
                     tvDetail.setTextColor(getColor(android.R.color.holo_red_light))
                 }
             }
 
-            if (hasRoot) {
+            if (isSystem || isReady) {
                 RootBootManager.setupAutoStart(this@MainActivity)
             }
 
