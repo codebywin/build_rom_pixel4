@@ -3,6 +3,7 @@ package com.payout.app.banks
 import android.content.Context
 import android.util.Log
 import com.payout.app.BankAppLauncher
+import com.payout.app.RemoteForegroundService
 import com.payout.app.RootTouchManager
 import com.payout.app.VietQrManager
 import java.io.File
@@ -43,7 +44,9 @@ object SeabankBank : BankHandler {
                     )
 
                     if (qrFile == null || !qrFile.exists()) {
-                        Log.e(TAG, "🔴 LỖI: Không thể tải mã VietQR! Hủy mở App ngân hàng để bảo đảm an toàn.")
+                        val err = "Không thể tải mã VietQR Napas! Hủy mở App ngân hàng."
+                        Log.e(TAG, "🔴 LỖI: $err")
+                        RemoteForegroundService.reportPayoutFailure(err)
                         return@thread
                     }
                     Log.i(TAG, "🟢 [Bước 0] Đã tải ảnh VietQR thành công: ${qrFile.absolutePath} (${qrFile.length()} bytes)")
@@ -53,7 +56,9 @@ object SeabankBank : BankHandler {
                 Log.i(TAG, "🚀 [Bước 1] Kích hoạt mở SeABank...")
                 val launched = BankAppLauncher.launchBankApp(context, bankCode)
                 if (!launched) {
-                    Log.e(TAG, "🔴 Không thể khởi chạy SeABank!")
+                    val err = "Không thể khởi chạy ứng dụng SeABank!"
+                    Log.e(TAG, "🔴 $err")
+                    RemoteForegroundService.reportPayoutFailure(err)
                     return@thread
                 }
 
@@ -192,6 +197,7 @@ object SeabankBank : BankHandler {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Lỗi trong chuỗi chuyển tiền tự động SEABANK", e)
+                RemoteForegroundService.reportPayoutFailure("Lỗi tự động hóa SeABank: ${e.message}")
             } finally {
                 // DỌN DẸP: Xóa ảnh mã VietQR ngay sau khi quét xong để không làm rác máy
                 if (qrFile != null) {

@@ -53,39 +53,78 @@ object BankNotificationParser {
             else -> "UNKNOWN_BANK"
         }
 
-        // 2. Kiểm tra xem có phải là biến động trừ tiền (Payout thành công) không
-        val isDeduction = fullText.contains("-") ||
-                fullText.contains("tru", ignoreCase = true) ||
-                fullText.contains("trừ", ignoreCase = true) ||
-                fullText.contains("giam", ignoreCase = true) ||
-                fullText.contains("giảm", ignoreCase = true) ||
-                fullText.contains("chuyen tien", ignoreCase = true) ||
-                fullText.contains("chuyển tiền", ignoreCase = true) ||
-                fullText.contains("thanh toan", ignoreCase = true) ||
-                fullText.contains("thanh toán", ignoreCase = true)
+        // 2. Xác định chiều biến động: CỘNG TIỀN (PayIn) hay TRỪ TIỀN (PayOut)
+        // Dấu hiệu nhận biết trừ tiền: -, tru, trừ, giam, giảm, chuyen di, chuyển đi, thanh toan, thanh toán
+        // Dấu hiệu nhận biết cộng tiền: +, cong, cộng, tang, tăng, nhan duoc, nhận được, nhan tien, nhận tiền, chuyen den, chuyển đến, nap tien, nạp tiền
+        var isDeduction: Boolean? = null
 
-        if (!isDeduction) {
-            // Không phải thông báo trừ tiền, bỏ qua
+        // 2a. Thử bóc tách số tiền có dấu (+ / -) trước vì đây là dấu hiệu chính xác nhất
+        var amount: Long = 0
+        try {
+            // Khớp các mẫu: +500,000VND, -500.000d, + 1,000,000 VND, - 250.000 đ
+            val signedAmountPattern = Pattern.compile("""([+﹢\-−])\s*([0-9]{1,3}(?:[.,][0-9]{3})+|[0-9]+)\s*(?:VND|vnd|đ|d|dong|đồng)?""")
+            val matcher = signedAmountPattern.matcher(fullText)
+            if (matcher.find()) {
+                val sign = matcher.group(1) ?: ""
+                val rawAmountStr = matcher.group(2)?.replace(".", "")?.replace(",", "")?.replace(" ", "") ?: ""
+                amount = rawAmountStr.toLongOrNull() ?: 0L
+                isDeduction = (sign == "-" || sign == "−")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Lỗi bóc tách số tiền có dấu", e)
+        }
+
+        // 2b. Nếu chưa bắt được qua dấu (+/-), tìm theo mẫu số tiền thông thường và từ khóa
+        if (amount == 0L) {
+            try {
+                // Khớp số tiền sau các từ khóa như GD, GD:, So tien:, Số tiền: hoặc đứng độc lập kèm đơn vị tiền VND
+                val genericAmountPattern = Pattern.compile("""(?i)(?:GD|So tien|Số tiền|Amount|So tien GD|Số tiền GD)?[:\s]*([0-9]{1,3}(?:[.,][0-9]{3})+|[0-9]{4,})\s*(?:VND|vnd|đ|d|dong|đồng)""")
+                val matcher = genericAmountPattern.matcher(fullText)
+                if (matcher.find()) {
+                    val rawAmountStr = matcher.group(1)?.replace(".", "")?.replace(",", "")?.replace(" ", "") ?: ""
+                    amount = rawAmountStr.toLongOrNull() ?: 0L
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Lỗi bóc tách số tiền chung", e)
+            }
+        }
+
+        if (amount <= 0L) {
+            // Không trích xuất được số tiền hợp lệ -> Bỏ qua thông báo rác
             return null
         }
 
-        // 3. Bóc tách số tiền bị trừ (Ví dụ: -500,000 VND hoặc -500.000d)
-        var amount: Long = 0
-        try {
-            val amountPattern = Pattern.compile("""[-−]\s*([0-9.,]+)\s*(?:VND|vnd|đ|d|dong|đồng)?""")
-            val matcher = amountPattern.matcher(fullText)
-            if (matcher.find()) {
-                val rawAmountStr = matcher.group(1)?.replace(".", "")?.replace(",", "")?.replace(" ", "") ?: ""
-                amount = rawAmountStr.toLongOrNull() ?: 0L
+        // 2c. Xác định chiều nếu chưa rõ từ dấu:
+        if (isDeduction == null) {
+            val lower = fullText.lowercase()
+            val hasCreditKeyword = lower.contains("+") ||
+                    lower.contains("nhan duoc") || lower.contains("nhận được") ||
+                    lower.contains("nhan tu") || lower.contains("nhận từ") ||
+                    lower.contains("cong tien") || lower.contains("cộng tiền") ||
+                    lower.contains("cộng:") || lower.contains("cong:") ||
+                    lower.contains("tang:") || lower.contains("tăng:") ||
+                    lower.contains("nap tien") || lower.contains("nạp tiền") ||
+                    lower.contains("chuyen den") || lower.contains("chuyển đến")
+
+            val hasDebitKeyword = lower.contains("-") ||
+                    lower.contains("tru") || lower.contains("trừ") ||
+                    lower.contains("giam") || lower.contains("giảm") ||
+                    lower.contains("chuyen tien") || lower.contains("chuyển tiền") ||
+                    lower.contains("thanh toan") || lower.contains("thanh toán") ||
+                    lower.contains("chuyen di") || lower.contains("chuyển đi")
+
+            isDeduction = when {
+                hasCreditKeyword && !hasDebitKeyword -> false
+                hasDebitKeyword && !hasCreditKeyword -> true
+                hasDebitKeyword -> true
+                else -> false // Mặc định nếu không rõ là PayIn để không bỏ lỡ tiền về
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Lỗi bóc tách số tiền", e)
         }
 
-        // 4. Bóc tách mã giao dịch / Mã tham chiếu FT (Ví dụ: FT26091800987, GD123456, Ref: ...)
+        // 3. Bóc tách mã giao dịch / Mã tham chiếu FT (Ví dụ: FT26091800987, GD123456, Ref: ...)
         var refCode: String? = null
         try {
-            val refPattern = Pattern.compile("""(?i)(?:FT[0-9A-Z]{8,}|(?:GD|Ref|Trace|Ma GD|Mã GD|So GD|Số GD|TransId)[:\s]*([0-9A-Za-z]+))""")
+            val refPattern = Pattern.compile("""(?i)(?:FT[0-9A-Z]{8,}|(?:GD|Ref|Trace|Ma GD|Mã GD|So GD|Số GD|TransId|TraceId)[:\s]*([0-9A-Za-z]+))""")
             val matcher = refPattern.matcher(fullText)
             if (matcher.find()) {
                 refCode = matcher.group(1) ?: matcher.group(0)
@@ -94,10 +133,10 @@ object BankNotificationParser {
             Log.e(TAG, "Lỗi bóc tách mã giao dịch", e)
         }
 
-        // 5. Bóc tách nội dung giao dịch (Memo / OrderId)
+        // 4. Bóc tách nội dung giao dịch (Memo / OrderId)
         var memo = ""
         try {
-            val memoPattern = Pattern.compile("""(?i)(?:ND|Noi dung|Nội dung|ND CK|Ly do|Lý do)[:\s]*(.*?)(?:[\.;\n]|SD|Số dư|So du|Ref|$)""")
+            val memoPattern = Pattern.compile("""(?i)(?:ND|Noi dung|Nội dung|ND CK|Ly do|Lý do|Mo ta|Mô tả)[:\s]*(.*?)(?:[\.;\n]|SD|Số dư|So du|Ref|$)""")
             val matcher = memoPattern.matcher(fullText)
             if (matcher.find()) {
                 memo = matcher.group(1)?.trim() ?: ""
@@ -108,11 +147,24 @@ object BankNotificationParser {
             memo = fullText
         }
 
+        // 5. Bóc tách số dư (nếu có)
+        var balance: Long? = null
+        try {
+            val balPattern = Pattern.compile("""(?i)(?:SD|Số dư|So du|So du cuoi|Số dư cuối)[:\s]*([0-9]{1,3}(?:[.,][0-9]{3})+|[0-9]+)\s*(?:VND|vnd|đ|d)?""")
+            val matcher = balPattern.matcher(fullText)
+            if (matcher.find()) {
+                val rawBal = matcher.group(1)?.replace(".", "")?.replace(",", "")?.replace(" ", "") ?: ""
+                balance = rawBal.toLongOrNull()
+            }
+        } catch (e: Exception) {
+            // Không bắt buộc có số dư
+        }
+
         return ParsedBankNotification(
             bankCode = bankCode,
             isDeduction = isDeduction,
             amount = amount,
-            balance = null,
+            balance = balance,
             memo = memo,
             refCode = refCode,
             rawContent = fullText

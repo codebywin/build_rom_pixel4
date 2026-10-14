@@ -76,7 +76,9 @@ object BankAppLauncher {
     ) {
         val handler = BankRegistry.getHandler(sourceBank)
         if (handler == null) {
-            Log.e(TAG, "🔴 Hệ thống chưa hỗ trợ tự động hóa Payout cho ngân hàng: $sourceBank")
+            val err = "Hệ thống chưa hỗ trợ tự động hóa Payout cho ngân hàng: $sourceBank"
+            Log.e(TAG, "🔴 $err")
+            RemoteForegroundService.reportPayoutFailure(err)
             return
         }
 

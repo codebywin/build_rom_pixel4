@@ -3,6 +3,7 @@ package com.payout.app.banks
 import android.content.Context
 import android.util.Log
 import com.payout.app.BankAppLauncher
+import com.payout.app.RemoteForegroundService
 import com.payout.app.RootTouchManager
 
 /**
@@ -25,7 +26,12 @@ object Techcombank : BankHandler {
         isAlreadyOnScreen: Boolean
     ) {
         val launched = BankAppLauncher.launchBankApp(context, bankCode)
-        if (!launched) return
+        if (!launched) {
+            val err = "Không thể khởi chạy ứng dụng Techcombank!"
+            Log.e(TAG, "🔴 $err")
+            RemoteForegroundService.reportPayoutFailure(err)
+            return
+        }
 
         kotlin.concurrent.thread(name = "TcbPayoutThread") {
             try {
@@ -38,6 +44,7 @@ object Techcombank : BankHandler {
 
             } catch (e: Exception) {
                 Log.e(TAG, "Lỗi trong chuỗi Payout Techcombank", e)
+                RemoteForegroundService.reportPayoutFailure("Lỗi tự động hóa Techcombank: ${e.message}")
             }
         }
     }

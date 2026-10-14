@@ -3,6 +3,7 @@ package com.payout.app.banks
 import android.content.Context
 import android.util.Log
 import com.payout.app.BankAppLauncher
+import com.payout.app.RemoteForegroundService
 import com.payout.app.RootTouchManager
 
 /**
@@ -25,7 +26,12 @@ object MbBank : BankHandler {
         isAlreadyOnScreen: Boolean
     ) {
         val launched = BankAppLauncher.launchBankApp(context, bankCode)
-        if (!launched) return
+        if (!launched) {
+            val err = "Không thể khởi chạy ứng dụng MBBank!"
+            Log.e(TAG, "🔴 $err")
+            RemoteForegroundService.reportPayoutFailure(err)
+            return
+        }
 
         kotlin.concurrent.thread(name = "MbPayoutThread") {
             try {
@@ -38,6 +44,7 @@ object MbBank : BankHandler {
 
             } catch (e: Exception) {
                 Log.e(TAG, "Lỗi trong chuỗi Payout MBBank", e)
+                RemoteForegroundService.reportPayoutFailure("Lỗi tự động hóa MBBank: ${e.message}")
             }
         }
     }

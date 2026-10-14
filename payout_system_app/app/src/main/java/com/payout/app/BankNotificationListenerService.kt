@@ -44,8 +44,9 @@ class BankNotificationListenerService : NotificationListenerService() {
             Log.i(TAG, "📩 Nhận thông báo từ [${packageName}]: Title='$title', Text='$text'")
 
             val parsed = BankNotificationParser.parse(packageName, title, text)
-            if (parsed != null && parsed.isDeduction) {
-                Log.i(TAG, "🎯 PHÁT HIỆN BIẾN ĐỘNG TRỪ TIỀN: Bank=${parsed.bankCode}, Amount=${parsed.amount}, Ref=${parsed.refCode}, Memo='${parsed.memo}'")
+            if (parsed != null) {
+                val dir = if (parsed.isDeduction) "TRỪ TIỀN (DEBIT/PAYOUT)" else "CỘNG TIỀN (CREDIT/PAYIN)"
+                Log.i(TAG, "🎯 PHÁT HIỆN BIẾN ĐỘNG $dir: Bank=${parsed.bankCode}, Amount=${parsed.amount}, Ref=${parsed.refCode}, Memo='${parsed.memo}'")
 
                 // Chuyển tiếp tới RemoteForegroundService để bắn WebSocket về Server Gateway
                 RemoteForegroundService.handleBankNotification(parsed)

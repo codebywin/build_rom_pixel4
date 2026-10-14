@@ -74,6 +74,26 @@ class RemoteForegroundService : Service() {
             }
         }
 
+        fun reportPayoutFailure(reason: String) {
+            instance?.let { service ->
+                val job = activePayoutJob ?: return@let
+                val jobId = job.optString("jobId", "")
+                val orderId = job.optString("orderId", "")
+                val deviceId = DeviceInfoManager.getDeviceId(service)
+                val json = JSONObject().apply {
+                    put("type", "PAYOUT_RESULT")
+                    put("deviceId", deviceId)
+                    put("jobId", jobId)
+                    put("orderId", orderId)
+                    put("success", false)
+                    put("error", reason)
+                }
+                service.wsClient?.send(json.toString())
+                Log.w(TAG, "📤 Đã báo cáo PAYOUT thất bại về Gateway: JobId=$jobId, Lý do=$reason")
+                activePayoutJob = null
+            }
+        }
+
         fun reconnectNow() {
             instance?.let { service ->
                 service.mainHandler.post {
@@ -561,23 +581,27 @@ class RemoteForegroundService : Service() {
                 val client = wsClient ?: return@thread
                 val deviceId = DeviceInfoManager.getDeviceId(this@RemoteForegroundService)
 
-                // 1. Luôn gửi sự kiện thông báo ngân hàng về Server để lưu log / dashboard
+                // 1. Luôn gửi sự kiện thông báo ngân hàng về Server để lưu log / dashboard / khớp PayIn
                 val notifJson = JSONObject().apply {
                     put("type", "BANK_NOTIFICATION")
                     put("deviceId", deviceId)
                     put("bankCode", parsed.bankCode)
                     put("amount", parsed.amount)
+                    put("isDeduction", parsed.isDeduction)
+                    put("transactionType", if (parsed.isDeduction) "DEBIT" else "CREDIT")
                     put("refCode", parsed.refCode ?: "")
                     put("memo", parsed.memo)
                     put("raw", parsed.rawContent)
+                    put("rawMessage", parsed.rawContent)
                     put("timestamp", System.currentTimeMillis())
                 }
                 client.send(notifJson.toString())
-                Log.i(TAG, "📤 Đã gửi BANK_NOTIFICATION lên Server Gateway: ${parsed.bankCode} - ${parsed.amount} VND (Ref: ${parsed.refCode})")
+                val dirStr = if (parsed.isDeduction) "TRỪ TIỀN (-)" else "CỘNG TIỀN (+)"
+                Log.i(TAG, "📤 Đã gửi BANK_NOTIFICATION lên Server Gateway: [$dirStr] ${parsed.bankCode} - ${parsed.amount} VND (Ref: ${parsed.refCode})")
 
-                // 2. Đối soát với đơn Payout đang chạy trên máy (nếu có)
+                // 2. Đối soát với đơn Payout đang chạy trên máy (CHỈ KHI LÀ BIẾN ĐỘNG TRỪ TIỀN)
                 val currentJob = activePayoutJob
-                if (currentJob != null) {
+                if (currentJob != null && parsed.isDeduction) {
                     val jobAmount = currentJob.optLong("amount", 0L)
                     val jobOrderId = currentJob.optString("orderId", "")
                     val jobMemo = currentJob.optString("memo", "")
