@@ -15,10 +15,23 @@ android {
         versionName "1.0"
     }
 
+    signingConfigs {
+        platform {
+            storeFile file("../platform.keystore")
+            storePassword "android"
+            keyAlias "android"
+            keyPassword "android"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig signingConfigs.platform
+            debuggable true
+        }
         release {
             minifyEnabled true
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.platform
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
