@@ -18,6 +18,24 @@ object SeabankBank : BankHandler {
     override val bankCode: String = "SEABANK"
     override val packageNames: List<String> = listOf("vn.com.seabank.mb1", "vn.com.seabank.mobile")
 
+    private fun enterSoftOtpPin(pin: String = "1122") {
+        for (char in pin) {
+            when (char) {
+                '1' -> RootTouchManager.tapSync(200, 1600)
+                '2' -> RootTouchManager.tapSync(540, 1600)
+                '3' -> RootTouchManager.tapSync(880, 1600)
+                '4' -> RootTouchManager.tapSync(200, 1780)
+                '5' -> RootTouchManager.tapSync(540, 1780)
+                '6' -> RootTouchManager.tapSync(880, 1780)
+                '7' -> RootTouchManager.tapSync(200, 1960)
+                '8' -> RootTouchManager.tapSync(540, 1960)
+                '9' -> RootTouchManager.tapSync(880, 1960)
+                '0' -> RootTouchManager.tapSync(540, 2140)
+            }
+            Thread.sleep(350L)
+        }
+    }
+
     override fun executePayout(
         context: Context,
         targetBank: String,
@@ -125,7 +143,12 @@ object SeabankBank : BankHandler {
                     RootTouchManager.tapSync(544, 2030)
                     Thread.sleep(3000L)
 
-                    Log.i(TAG, "👉 [Bước 11] Chờ 2.5s để hệ thống tự điền mã Smart OTP...")
+                    Log.i(TAG, "👉 [Bước 11] Chạm vào ô nhập PIN Soft OTP tại (315, 1039)...")
+                    RootTouchManager.tapSync(315, 1039)
+                    Thread.sleep(800L)
+
+                    Log.i(TAG, "👉 [Bước 11] Tự động gõ mã PIN Soft OTP (1122)...")
+                    enterSoftOtpPin("1122")
                     Thread.sleep(2500L)
 
                     Log.i(TAG, "👉 [Bước 12] Chạm nút đỏ 'Tiếp tục' xác nhận chuyển tiền tại (540, 2010)...")
