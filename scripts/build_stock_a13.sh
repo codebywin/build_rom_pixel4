@@ -524,6 +524,8 @@ on post-fs-data
     write /data/local/tmp/vcam_mic_mix 0
     write /data/local/tmp/vcam_color_sync 0
     write /data/local/tmp/vcam_kyc_flash 0
+    write /data/local/tmp/vcam_gps ""
+    write /data/local/tmp/vcam_face ""
     write /data/local/tmp/vcam.mp4 ""
     write /data/local/tmp/vcam.wav ""
     write /data/local/tmp/vcam.lic ""
@@ -536,6 +538,8 @@ on post-fs-data
     chmod 0666 /data/local/tmp/vcam_color_sync
     chmod 0666 /data/local/tmp/vcam_kyc_flash
     chmod 0666 /data/local/tmp/vcam_color_val
+    chmod 0666 /data/local/tmp/vcam_gps
+    chmod 0666 /data/local/tmp/vcam_face
     chmod 0666 /data/local/tmp/vcam.mp4
     chmod 0666 /data/local/tmp/vcam.wav
     chmod 0666 /data/local/tmp/vcam.lic
@@ -591,6 +595,18 @@ EOF
             echo '' >> device/google/coral/device.mk
             echo '# Include MindTheGapps (Google Play Services & CH Play)' >> device/google/coral/device.mk
             echo '$(call inherit-product, vendor/gapps/arm64/arm64-vendor.mk)' >> device/google/coral/device.mk
+        fi
+
+        # Cấu hình tự động cấp quyền Location & Sensors cho Google Play Services (GmsCore)
+        echo -e "   [GMS] Cấu hình tự động cấp quyền Location & Sensors cho Google Play Services..."
+        mkdir -p device/google/coral/permissions
+        if [ -f "${LOCAL_PATCH_DIR}/default-permissions-gms.xml" ]; then
+            cp "${LOCAL_PATCH_DIR}/default-permissions-gms.xml" device/google/coral/permissions/default-permissions-gms.xml
+        else
+            curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/default-permissions-gms.xml" -o device/google/coral/permissions/default-permissions-gms.xml || true
+        fi
+        if [ -f device/google/coral/permissions/default-permissions-gms.xml ]; then
+            grep -q "default-permissions-gms.xml" device/google/coral/device.mk || echo 'PRODUCT_COPY_FILES += device/google/coral/permissions/default-permissions-gms.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/default-permissions/default-permissions-gms.xml' >> device/google/coral/device.mk
         fi
     fi
 

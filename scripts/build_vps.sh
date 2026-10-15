@@ -271,6 +271,18 @@ if [ -d "packages/apps" ]; then
     if [ -f device/google/coral/BoardConfig.mk ]; then
         grep -q "BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES" device/google/coral/BoardConfig.mk || echo "BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES := true" >> device/google/coral/BoardConfig.mk
     fi
+
+    # Cấu hình tự động cấp quyền Location & Sensors cho Google Play Services (GmsCore)
+    echo -e "   [GMS] Cấu hình tự động cấp quyền Location & Sensors cho Google Play Services..."
+    mkdir -p device/google/coral/permissions
+    if [ -f "${LOCAL_PATCH_DIR}/default-permissions-gms.xml" ]; then
+        cp "${LOCAL_PATCH_DIR}/default-permissions-gms.xml" device/google/coral/permissions/default-permissions-gms.xml
+    else
+        curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/default-permissions-gms.xml" -o device/google/coral/permissions/default-permissions-gms.xml || true
+    fi
+    if [ -f device/google/coral/permissions/default-permissions-gms.xml ]; then
+        grep -q "default-permissions-gms.xml" device/google/coral/device.mk || echo 'PRODUCT_COPY_FILES += device/google/coral/permissions/default-permissions-gms.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/default-permissions/default-permissions-gms.xml' >> device/google/coral/device.mk
+    fi
 fi
 
 # 6. Biên dịch ROM
