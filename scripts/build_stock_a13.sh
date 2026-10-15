@@ -421,8 +421,55 @@ PRODUCT_BUILD_PROP_OVERRIDES += \
     BUILD_DISPLAY_ID=TP1A.221005.002.B2 \
     BUILD_FINGERPRINT="google/flame/flame:13/TP1A.221005.002.B2/9382335:user/release-keys" \
     PRIVATE_BUILD_DESC="flame-user 13 TP1A.221005.002.B2 9382335 release-keys"
+
+# VoLTE & IMS Telephony Configuration for Vietnam (Viettel, VinaPhone, MobiFone, Vietnamobile) & Global
+PRODUCT_PROPERTY_OVERRIDES += \
+    persist.vendor.radio.volte_is_enabled=1 \
+    persist.vendor.radio.calls.on.ims=1 \
+    persist.vendor.radio.ims_volte_enable=1 \
+    persist.radio.calls.on.ims=1 \
+    persist.radio.volte_enabled=1 \
+    persist.dbg.volte_avail_ovr=1 \
+    persist.dbg.ims_volte_enable=1 \
+    persist.radio.VT_ENABLE=1 \
+    persist.radio.VT_HYBRID_ENABLE=1 \
+    persist.radio.data_ltd_sys_ind=1 \
+    persist.radio.data_con_rprt=1 \
+    persist.radio.rat_on=combine
 EOF
     fi
+
+    # Cấu hình VoLTE Overlay Framework (device/google/coral/overlay/frameworks/base/core/res/res/values/config.xml)
+    echo -e "\n${CYAN}>> [CONFIG] Kích hoạt VoLTE Overlay Framework & CarrierConfig Vietnam...${NC}"
+    CORAL_OVERLAY_CONFIG="device/google/coral/overlay/frameworks/base/core/res/res/values/config.xml"
+    if [ -f "$CORAL_OVERLAY_CONFIG" ]; then
+        if ! grep -q "config_device_volte_available" "$CORAL_OVERLAY_CONFIG"; then
+            sed -i '/<\/resources>/i \    <!-- VoLTE & WFC Support -->\n    <bool name="config_device_volte_available">true</bool>\n    <bool name="config_device_vt_available">true</bool>\n    <bool name="config_device_wfc_ims_available">true</bool>' "$CORAL_OVERLAY_CONFIG"
+            echo -e "   [${GREEN}OK${NC}] Đã bật config_device_volte_available trong overlay"
+        fi
+    fi
+
+    # Cấu hình CarrierConfig XML cho mạng Việt Nam (Viettel, VinaPhone, MobiFone, Vietnamobile, Wintel, iTelecom)
+    mkdir -p packages/apps/CarrierConfig/assets
+    CARRIER_XMLS=(
+        "carrier_config_carrierid_1899_Viettel.xml"
+        "carrier_config_carrierid_1900_Vinaphone.xml"
+        "carrier_config_carrierid_1901_Mobifone.xml"
+        "carrier_config_carrierid_1902_Vietnamobile.xml"
+        "carrier_config_mccmnc_45204.xml"
+        "carrier_config_mccmnc_45202.xml"
+        "carrier_config_mccmnc_45201.xml"
+        "carrier_config_mccmnc_45205.xml"
+        "carrier_config_mcc452.xml"
+    )
+    for ccfg in "${CARRIER_XMLS[@]}"; do
+        if [ -f "${LOCAL_PATCH_DIR}/${ccfg}" ]; then
+            cp "${LOCAL_PATCH_DIR}/${ccfg}" "packages/apps/CarrierConfig/assets/${ccfg}"
+        else
+            curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/${ccfg}" -o "packages/apps/CarrierConfig/assets/${ccfg}" || true
+        fi
+    done
+    echo -e "   [${GREEN}OK${NC}] Đã nạp cấu hình CarrierConfig VoLTE cho toàn bộ nhà mạng Việt Nam"
 
     # Nhúng CameraAssistant App thành System App (Zero-Root, cài sẵn trong ROM flash xong có ngay)
     mkdir -p packages/apps/CameraAssistant

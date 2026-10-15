@@ -150,6 +150,7 @@ if [[ "$LOCAL_MANIFEST_URL" =~ flame_los23 || "$LOCAL_MANIFEST_BRANCH" =~ (23|a1
     apply_patch "frameworks/base" "vcam_pixel4_a16.patch"
 else
     apply_patch "frameworks/base" "vcam_pixel4.patch"
+    apply_patch "frameworks/av" "vcam_cameraserver_face.patch"
 fi
 apply_patch "device/google/coral" "sepolicy_vcam_coral.patch"
 apply_patch "frameworks/base" "spoof_locked_bootloader.patch"
@@ -244,9 +245,56 @@ if [ -f device/google/coral/BoardConfig.mk ]; then
     echo "BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES := true" >> device/google/coral/BoardConfig.mk
 fi
 
-# 11. Fix telephony permissions
-echo ">> Fixing telephony permissions..."
+# 11. Fix telephony permissions & Configure VoLTE
+echo ">> Fixing telephony permissions & Configuring VoLTE..."
 (curl -sL https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/fix_telephony.py | python3) 2>/dev/null || true
+
+if [ -f device/google/coral/device.mk ]; then
+    if ! grep -q "persist.vendor.radio.volte_is_enabled" device/google/coral/device.mk; then
+        cat << 'EOF' >> device/google/coral/device.mk
+
+# VoLTE & IMS Telephony Configuration for Vietnam (Viettel, VinaPhone, MobiFone, Vietnamobile) & Global
+PRODUCT_PROPERTY_OVERRIDES += \
+    persist.vendor.radio.volte_is_enabled=1 \
+    persist.vendor.radio.calls.on.ims=1 \
+    persist.vendor.radio.ims_volte_enable=1 \
+    persist.radio.calls.on.ims=1 \
+    persist.radio.volte_enabled=1 \
+    persist.dbg.volte_avail_ovr=1 \
+    persist.dbg.ims_volte_enable=1 \
+    persist.radio.VT_ENABLE=1 \
+    persist.radio.VT_HYBRID_ENABLE=1 \
+    persist.radio.data_ltd_sys_ind=1 \
+    persist.radio.data_con_rprt=1 \
+    persist.radio.rat_on=combine
+EOF
+    fi
+fi
+
+# Cấu hình VoLTE Overlay Framework (device/google/coral/overlay/frameworks/base/core/res/res/values/config.xml)
+CORAL_OVERLAY_CONFIG="device/google/coral/overlay/frameworks/base/core/res/res/values/config.xml"
+if [ -f "$CORAL_OVERLAY_CONFIG" ]; then
+    if ! grep -q "config_device_volte_available" "$CORAL_OVERLAY_CONFIG"; then
+        sed -i '/<\/resources>/i \    <!-- VoLTE & WFC Support -->\n    <bool name="config_device_volte_available">true</bool>\n    <bool name="config_device_vt_available">true</bool>\n    <bool name="config_device_wfc_ims_available">true</bool>' "$CORAL_OVERLAY_CONFIG"
+    fi
+fi
+
+# Cấu hình CarrierConfig XML cho mạng Việt Nam (Viettel, VinaPhone, MobiFone, Vietnamobile, Wintel, iTelecom)
+mkdir -p packages/apps/CarrierConfig/assets
+CARRIER_XMLS=(
+    "carrier_config_carrierid_1899_Viettel.xml"
+    "carrier_config_carrierid_1900_Vinaphone.xml"
+    "carrier_config_carrierid_1901_Mobifone.xml"
+    "carrier_config_carrierid_1902_Vietnamobile.xml"
+    "carrier_config_mccmnc_45204.xml"
+    "carrier_config_mccmnc_45202.xml"
+    "carrier_config_mccmnc_45201.xml"
+    "carrier_config_mccmnc_45205.xml"
+    "carrier_config_mcc452.xml"
+)
+for ccfg in "${CARRIER_XMLS[@]}"; do
+    curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/${ccfg}" -o "packages/apps/CarrierConfig/assets/${ccfg}" || true
+done
 
 # 12. Setup VCAM runtime control nodes in init.coral.rc
 echo ">> Setting up VCAM control nodes in init.coral.rc..."
