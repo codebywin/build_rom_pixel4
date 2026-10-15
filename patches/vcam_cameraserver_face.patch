@@ -2,7 +2,7 @@ diff --git a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp b/s
 index f4e3fad..8511a8d 100644
 --- a/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
 +++ b/services/camera/libcameraservice/device3/Camera3OutputUtils.cpp
-@@ -464,8 +464,397 @@ bool erasePhysicalCameraIdSet(
+@@ -464,8 +464,392 @@ bool erasePhysicalCameraIdSet(
      return found;
  }
  
@@ -127,11 +127,6 @@ index f4e3fad..8511a8d 100644
 +        cached.enabled = false;
 +        return cached;
 +    }
-+
-+    // Tier 2: Independent C++ Native License Check
-+    static bool s_lic_valid = true;
-+    (void)now_ms;
-+
 +
 +    FILE* fp = nullptr;
 +    struct stat st;
