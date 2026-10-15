@@ -155,9 +155,16 @@ object SeabankBank : BankHandler {
                     RootTouchManager.tapSync(540, 2010)
                     Thread.sleep(3500L)
 
-                    Log.i(TAG, "👉 [Bước 13] Chạm 'Giao dịch khác' tại (760, 2035) để trở về Dashboard...")
+                    Log.i(TAG, "🎉 Giao dịch thành công! Chờ 3s trước khi ẩn app xuống...")
+                    Thread.sleep(3000L)
+
+                    Log.i(TAG, "👉 [Bước 13] Chạm 'Giao dịch khác' tại (760, 2035) để reset trạng thái...")
                     RootTouchManager.tapSync(760, 2035)
-                    Thread.sleep(1500L)
+                    Thread.sleep(800L)
+
+                    Log.i(TAG, "🏠 Ẩn ứng dụng xuống màn hình chính (Home)...")
+                    RootTouchManager.sendCommandSync("input keyevent 3")
+                    Thread.sleep(500L)
 
                     Log.i(TAG, "🎉 Đã hoàn tất chuỗi quét VietQR chuyển tiền tự động trên SEABANK!")
                 } else if (accountNo.isNotBlank()) {
