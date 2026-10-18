@@ -75,7 +75,7 @@ index 3c30b0c..eb1dfa4 100644
 +                } catch (Throwable ignored) {}
 +            }
 +            drawable.setAlpha((int) (255 * notifAlphaScale));
-             int top = 0;
+             int top = mBackgroundTop;
              int bottom = getActualHeight();
              if (mBottomIsRounded
 diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/ScrimController.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/ScrimController.java
