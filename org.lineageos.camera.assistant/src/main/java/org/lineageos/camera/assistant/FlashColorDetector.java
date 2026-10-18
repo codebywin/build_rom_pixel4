@@ -143,8 +143,9 @@ public class FlashColorDetector {
         mScreenThread.start();
         mScreenHandler = new Handler(mScreenThread.getLooper());
 
-        // Hardware GPU downscale: 32x32 buffer is scaled by Hardware Composer in < 0.5ms (0% CPU load)
-        int capW = 32, capH = 32;
+        // Hardware GPU downscale: 96x96 buffer is scaled by Hardware Composer in < 0.5ms (0% CPU load)
+        // High enough resolution to clearly capture thin KYC oval borders without smearing into background
+        int capW = 96, capH = 96;
         mScreenReader = ImageReader.newInstance(capW, capH, PixelFormat.RGBA_8888, 2);
 
         mScreenReader.setOnImageAvailableListener(reader -> {
@@ -256,59 +257,68 @@ public class FlashColorDetector {
         int minCh = Math.min(r, Math.min(g, b));
         int delta = maxCh - minCh;
 
-        // Tính bước nhảy độ sáng so với baseline tĩnh (nếu có)
         float deltaBright = (baseline >= 0) ? (brightness - baseline) : 0;
+        boolean hasJump = (deltaBright >= 22);
+        boolean isHighBright = (brightness >= 135 || maxCh >= 160);
 
-        // Tiêu chuẩn 1: Bước nhảy độ sáng đột biến (Flash chớp sáng)
-        boolean hasJump = (deltaBright >= 26);
-
-        // Tiêu chuẩn 2: Độ sáng cao tuyệt đối (Màn hình/viền sáng rực)
-        boolean isHighBright = (brightness >= 135 || maxCh >= 170);
-
-        // Nếu cả 2 tiêu chuẩn đều không đạt -> Bỏ qua (tránh bẫy màu nền tĩnh, xanh navy, nền tối)
-        if (!hasJump && !isHighBright) {
+        if (!hasJump && !isHighBright && delta < 30) {
             res.isFlash = false;
             return res;
         }
 
-        // --- PHÂN LOẠI MÀU FLASH ---
+        // --- PRECISE COLOR CLASSIFICATION ---
         // 1. Trắng (White): Độ sáng cao, 3 kênh cân bằng
-        if (r >= 140 && g >= 140 && b >= 140 && delta <= 40 && brightness >= 135) {
+        if (r >= 135 && g >= 135 && b >= 135 && delta <= 35 && (hasJump || brightness >= 140)) {
             res.mode = MODE_WHITE;
+            res.rgb = 0xFFFFFF;
             res.isFlash = true;
             return res;
         }
 
-        // 2. Đỏ (Red): Kênh R vượt trội hoàn toàn
-        if (r >= 125 && r > g * 1.45f && r > b * 1.45f) {
+        // 2. Đỏ (Red): Kênh R vượt trội
+        if (r >= 120 && r > g * 1.30f && r > b * 1.30f) {
             res.mode = MODE_RED;
+            res.rgb = (r << 16) | (g << 8) | b;
             res.isFlash = true;
             return res;
         }
 
-        // 3. Xanh Lá (Green): Kênh G vượt trội hoàn toàn
-        if (g >= 125 && g > r * 1.30f && g > b * 1.30f) {
+        // 3. Xanh Lá (Green): Kênh G vượt trội
+        if (g >= 120 && g > r * 1.22f && g > b * 1.22f) {
             res.mode = MODE_GREEN;
+            res.rgb = (r << 16) | (g << 8) | b;
             res.isFlash = true;
             return res;
         }
 
-        // 4. Xanh Dương (Blue): Kênh B vượt trội và phải sáng thật sự (B >= 145 để không nhầm Navy B=119)
-        if (b >= 145 && b > r * 1.45f && b > g * 1.25f) {
+        // 4. Xanh Dương (Blue): Kênh B vượt trội
+        if (b >= 125 && b > r * 1.30f && b > g * 1.18f) {
             res.mode = MODE_BLUE;
+            res.rgb = (r << 16) | (g << 8) | b;
             res.isFlash = true;
             return res;
         }
 
-        // 5. Tùy chỉnh (Custom): Ví dụ vàng, cam, tím hoặc độ lệch màu rõ khi có bước nhảy sáng
-        if (hasJump && delta >= 35 && maxCh >= 120) {
+        // 5. Vàng (Yellow): R và G cùng cao, B thấp
+        if (r >= 120 && g >= 120 && b < r * 0.65f) {
             res.mode = MODE_CUSTOM;
+            res.rgb = (r << 16) | (g << 8) | b;
             res.isFlash = true;
             return res;
         }
 
-        if (isHighBright && delta >= 45) {
+        // 6. Cyan / Xanh Lơ: G và B cùng cao, R thấp
+        if (g >= 115 && b >= 115 && r < g * 0.75f) {
             res.mode = MODE_CUSTOM;
+            res.rgb = (r << 16) | (g << 8) | b;
+            res.isFlash = true;
+            return res;
+        }
+
+        // 7. Tùy chỉnh (Custom): Độ lệch màu rõ khi có bước nhảy sáng hoặc bão hòa cao
+        if ((hasJump && delta >= 30) || (isHighBright && delta >= 40)) {
+            res.mode = MODE_CUSTOM;
+            res.rgb = (r << 16) | (g << 8) | b;
             res.isFlash = true;
             return res;
         }
@@ -340,14 +350,14 @@ public class FlashColorDetector {
             // ==============================================================
             int[][] regionsA = new int[][] {
                 { (int)(w * 0.15f), (int)(h * 0.03f), (int)(w * 0.85f), (int)(h * 0.14f) }, // Top banner
-                { (int)(w * 0.02f), (int)(h * 0.20f), (int)(w * 0.12f), (int)(h * 0.70f) }, // Left border
-                { (int)(w * 0.88f), (int)(h * 0.20f), (int)(w * 0.98f), (int)(h * 0.70f) }, // Right border
+                { (int)(w * 0.02f), (int)(h * 0.20f), (int)(w * 0.10f), (int)(h * 0.70f) }, // Left border
+                { (int)(w * 0.90f), (int)(h * 0.20f), (int)(w * 0.98f), (int)(h * 0.70f) }, // Right border
                 { (int)(w * 0.15f), (int)(h * 0.84f), (int)(w * 0.85f), (int)(h * 0.96f) }  // Bottom controls
             };
 
             long sumRA = 0, sumGA = 0, sumBA = 0;
             int cntA = 0;
-            int stepA = 3;
+            int stepA = Math.max(1, w / 32);
 
             for (int[] reg : regionsA) {
                 int x0 = reg[0], y0 = reg[1], x1 = reg[2], y1 = reg[3];
@@ -370,35 +380,58 @@ public class FlashColorDetector {
             int brightA = (avgRA * 77 + avgGA * 150 + avgBA * 29) >> 8;
 
             // ==============================================================
-            // ZONE B: CENTER OVAL PERIMETER RING (Viền khuôn mặt KYC)
-            // Lấy mẫu tại vành elip quanh tâm (cx, cy) với bán kính (rx, ry)
+            // ZONE B: CENTER OVAL PERIMETER BAND (Viền elip khuôn mặt KYC)
+            // Lấy mẫu trên dải vành elip đa bán kính quanh tâm (cx, cy)
+            // Chuẩn hóa theo thực tế banking apps (ABBank, VPBank, Techcombank)
             // ==============================================================
             float cx = w * 0.50f;
-            float cy = h * 0.44f;
-            float rx = w * 0.33f;
-            float ry = h * 0.23f;
+            float cy = h * 0.46f;
+
+            // 3 bán kính đồng tâm quét trọn vẹn viền oval dù app vẽ to hay nhỏ
+            float[] rxRatios = new float[] { 0.33f, 0.37f, 0.41f };
+            float[] ryRatios = new float[] { 0.18f, 0.20f, 0.23f };
 
             long sumRB = 0, sumGB = 0, sumBB = 0;
             int cntB = 0;
-            int numPoints = 20;
 
-            for (int i = 0; i < numPoints; i++) {
-                double angle = (2.0 * Math.PI * i) / numPoints;
-                int ox = (int)(cx + rx * Math.cos(angle));
-                int oy = (int)(cy + ry * Math.sin(angle));
+            // Bộ tích lũy riêng cho các pixel flash có độ bão hòa / tương phản cao
+            long sumFlashR = 0, sumFlashG = 0, sumFlashB = 0;
+            int flashPixelCount = 0;
+            int maxDeltaOnRing = 0;
 
-                // Lấy mẫu cụm 3x3 pixel quanh mỗi điểm viền oval
-                for (int dy = -1; dy <= 1; dy++) {
-                    for (int dx = -1; dx <= 1; dx++) {
-                        int sx = ox + dx;
-                        int sy = oy + dy;
-                        if (sx >= 0 && sx < w && sy >= 0 && sy < h) {
-                            int pos = sy * rowStride + sx * pixStride;
-                            if (pos + 3 < buf.limit()) {
-                                sumRB += (buf.get(pos)     & 0xFF);
-                                sumGB += (buf.get(pos + 1) & 0xFF);
-                                sumBB += (buf.get(pos + 2) & 0xFF);
-                                cntB++;
+            int numAngles = 28;
+            for (int rIdx = 0; rIdx < rxRatios.length; rIdx++) {
+                float rx = w * rxRatios[rIdx];
+                float ry = h * ryRatios[rIdx];
+
+                for (int i = 0; i < numAngles; i++) {
+                    double angle = (2.0 * Math.PI * i) / numAngles;
+                    int ox = (int)(cx + rx * Math.cos(angle));
+                    int oy = (int)(cy + ry * Math.sin(angle));
+
+                    if (ox >= 0 && ox < w && oy >= 0 && oy < h) {
+                        int pos = oy * rowStride + ox * pixStride;
+                        if (pos + 3 < buf.limit()) {
+                            int pr = buf.get(pos)     & 0xFF;
+                            int pg = buf.get(pos + 1) & 0xFF;
+                            int pb = buf.get(pos + 2) & 0xFF;
+
+                            sumRB += pr;
+                            sumGB += pg;
+                            sumBB += pb;
+                            cntB++;
+
+                            int maxC = Math.max(pr, Math.max(pg, pb));
+                            int minC = Math.min(pr, Math.min(pg, pb));
+                            int d = maxC - minC;
+                            if (d > maxDeltaOnRing) maxDeltaOnRing = d;
+
+                            // Lọc các pixel có màu phát quang / viền sáng rực
+                            if (d >= 28 && maxC >= 100) {
+                                sumFlashR += pr;
+                                sumFlashG += pg;
+                                sumFlashB += pb;
+                                flashPixelCount++;
                             }
                         }
                     }
@@ -410,12 +443,22 @@ public class FlashColorDetector {
             int avgBB = cntB > 0 ? (int)(sumBB / cntB) : 0;
             int brightB = (avgRB * 77 + avgGB * 150 + avgBB * 29) >> 8;
 
-            // Phân tích trạng thái Flash cho từng Zone
+            FlashDetectionResult resB;
+            if (flashPixelCount >= 4) {
+                // Có viền flash màu rõ rệt -> Tính màu chính xác từ các pixel phát sáng
+                int fR = (int)(sumFlashR / flashPixelCount);
+                int fG = (int)(sumFlashG / flashPixelCount);
+                int fB = (int)(sumFlashB / flashPixelCount);
+                int fBright = (fR * 77 + fG * 150 + fB * 29) >> 8;
+                resB = evaluateZoneFlash("OvalFlashRing", fR, fG, fB, fBright, mBaselineBrightnessB);
+            } else {
+                // Kiểm tra flash trắng hoặc thay đổi độ sáng trên toàn bộ viền
+                resB = evaluateZoneFlash("OvalRing", avgRB, avgGB, avgBB, brightB, mBaselineBrightnessB);
+            }
+
             FlashDetectionResult resA = evaluateZoneFlash("Outer", avgRA, avgGA, avgBA, brightA, mBaselineBrightnessA);
-            FlashDetectionResult resB = evaluateZoneFlash("OvalRing", avgRB, avgGB, avgBB, brightB, mBaselineBrightnessB);
 
             FlashDetectionResult activeResult = null;
-            // Ưu tiên zone có flash rõ ràng nhất
             if (resB.isFlash && (!resA.isFlash || resB.brightness >= resA.brightness)) {
                 activeResult = resB;
             } else if (resA.isFlash) {
@@ -431,14 +474,12 @@ public class FlashColorDetector {
                         activeResult.zone, activeResult.mode, activeResult.rgb,
                         activeResult.r, activeResult.g, activeResult.b, activeResult.brightness));
             } else {
-                // Kiểm tra xem có đang trong thời gian giữ flash (debounce hold) không
                 if (now < mFlashActiveUntilMs && mLastScreenFlashMode != MODE_OFF) {
                     writeFlashState(mLastScreenFlashMode, mIntensity, mLastScreenFlashRgb, true);
                 } else {
                     mLastScreenFlashMode = MODE_OFF;
                     writeFlashState(MODE_OFF, 0, 0, false);
 
-                    // Cập nhật baseline độ sáng nền tĩnh khi màn hình không có flash
                     if (mBaselineBrightnessA < 0) {
                         mBaselineBrightnessA = brightA;
                     } else {
@@ -560,6 +601,9 @@ public class FlashColorDetector {
     private void writeFlashState(int mode, int intensity, int rgb, boolean enabled) {
         int seq = mSeq.incrementAndGet();
         long tsMs = System.currentTimeMillis();
+
+        // 0. Update in-memory IPC Provider (Zero-disk, 0.1ms Binder IPC, bypasses Android 13 Scoped Storage & SELinux)
+        VcamConfigProvider.setFlashState(mode, intensity, rgb, enabled, tsMs);
 
         ByteBuffer buf = ByteBuffer.allocate(SHM_SIZE);
         buf.order(ByteOrder.LITTLE_ENDIAN);

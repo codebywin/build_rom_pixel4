@@ -905,7 +905,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamConfig.java b/core/java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamConfig.java
-@@ -0,0 +1,458 @@
+@@ -0,0 +1,459 @@
 +package android.hardware.camera2.impl;
 +
 +import android.app.Application;
@@ -975,7 +975,8 @@ new file mode 100644
 +
 +    public static Bundle getProviderConfig() {
 +        long now = System.currentTimeMillis();
-+        if (now - sLastProviderCheck < 80 && sCachedProviderBundle != null) {
++        long cacheLimit = (isColorSyncEnabled() || isKycFlashEnabled()) ? 25 : 80;
++        if (now - sLastProviderCheck < cacheLimit && sCachedProviderBundle != null) {
 +            return sCachedProviderBundle;
 +        }
 +        sLastProviderCheck = now;
@@ -1908,7 +1909,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamRenderer.java b/core/ja
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamRenderer.java
-@@ -0,0 +1,686 @@
+@@ -0,0 +1,688 @@
 +package android.hardware.camera2.impl;
 +
 +import android.graphics.Bitmap;
@@ -2002,9 +2003,11 @@ new file mode 100644
 +        "  }\n" +
 +        "  if (uFlashColor.a > 0.0) {\n" +
 +        "    vec2 ndc = vTextureCoord * 2.0 - 1.0;\n" +
-+        "    float radial = clamp(1.0 - dot(ndc * vec2(0.8, 1.0), ndc * vec2(0.8, 1.0)) * 0.5, 0.4, 1.0);\n" +
-+        "    vec3 flashDelta = (uFlashColor.rgb - vec3(0.5)) * (uFlashColor.a * radial * 0.35);\n" +
-+        "    c.rgb += flashDelta;\n" +
++        "    float radial = clamp(1.0 - dot(ndc * vec2(0.7, 0.9), ndc * vec2(0.7, 0.9)) * 0.4, 0.5, 1.0);\n" +
++        "    float flashStrength = uFlashColor.a * radial;\n" +
++        "    vec3 addLight = uFlashColor.rgb * (flashStrength * 0.40);\n" +
++        "    vec3 tintLight = mix(vec3(1.0), uFlashColor.rgb, flashStrength * 0.45);\n" +
++        "    c.rgb = c.rgb * tintLight + addLight;\n" +
 +        "  }\n" +
 +        "  c.rgb = clamp(c.rgb, 0.0, 1.0);\n" +
 +        "  gl_FragColor = c;\n" +
@@ -2599,7 +2602,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamColorSync.java b/core/j
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamColorSync.java
-@@ -0,0 +1,513 @@
+@@ -0,0 +1,546 @@
 +package android.hardware.camera2.impl;
 +
 +import android.app.Activity;
@@ -2747,6 +2750,12 @@ new file mode 100644
 +            return;
 +        }
 +
++        // 0. Try reading ContentProvider Binder IPC first (fastest, zero-disk, bypasses SELinux & Scoped Storage)
++        if (tryReadProvider(now)) {
++            applySmoothing();
++            return;
++        }
++
 +        // 1. Try reading SHM binary protocol first (fastest & lowest latency, < 0.1ms)
 +        if (tryReadShm(now)) {
 +            applySmoothing();
@@ -2786,6 +2795,30 @@ new file mode 100644
 +        }
 +
 +        applySmoothing();
++    }
++
++    private static boolean tryReadProvider(long now) {
++        try {
++            android.os.Bundle b = VcamConfig.getProviderConfig();
++            if (b != null && b.containsKey("flash_active")) {
++                boolean active = b.getBoolean("flash_active", false);
++                int mode = b.getInt("flash_mode", 0);
++                int rgb = b.getInt("flash_rgb", 0);
++                int intensity = b.getInt("flash_intensity", 35);
++                long ts = b.getLong("flash_ts", 0L);
++
++                if (active && mode != 0 && (now - ts < 1200 || ts == 0)) {
++                    sTargetColor = colorFromMode(mode, rgb);
++                    sTargetIntensity = Math.max(0.12f, Math.min(0.55f, (intensity / 100.0f) * 0.45f));
++                    return true;
++                } else if (!active || mode == 0) {
++                    sTargetColor = Color.TRANSPARENT;
++                    sTargetIntensity = 0.0f;
++                    return true;
++                }
++            }
++        } catch (Throwable ignored) {}
++        return false;
 +    }
 +
 +    private static boolean tryReadShm(long now) {
@@ -2858,6 +2891,9 @@ new file mode 100644
 +    }
 +
 +    private static int colorFromMode(int mode, int rgb) {
++        if (rgb != 0) {
++            return (rgb & 0xFFFFFF) | 0xFF000000;
++        }
 +        switch (mode) {
 +            case 1: return 0xFFFF0000; // RED
 +            case 2: return 0xFF00FF00; // GREEN

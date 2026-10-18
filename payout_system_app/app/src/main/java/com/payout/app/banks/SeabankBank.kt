@@ -18,6 +18,16 @@ object SeabankBank : BankHandler {
     override val bankCode: String = "SEABANK"
     override val packageNames: List<String> = listOf("vn.com.seabank.mb1", "vn.com.seabank.mobile")
 
+    private fun enterSoftOtpPin(pin: String = "1122") {
+        Log.i(TAG, "⚡ [Bước 11] Bơm trực tiếp mã PIN Soft OTP ($pin) qua WindowManager (100% không trượt phím)...")
+        // Xóa sạch ký tự tồn dư nếu có
+        RootTouchManager.sendCommandSync("input keyevent 67 67 67 67")
+        Thread.sleep(250L)
+        // Tiêm thẳng mã PIN vào ô input chuẩn
+        RootTouchManager.typeTextSync(pin)
+        Thread.sleep(1500L)
+    }
+
     override fun executePayout(
         context: Context,
         targetBank: String,
@@ -78,7 +88,10 @@ object SeabankBank : BankHandler {
 
                 // BƯỚC 3: Điền mật khẩu và Đăng nhập
                 if (password.isNotBlank()) {
-                    Log.i(TAG, "⌨️ [Bước 3] Tự động điền mật khẩu SEABANK...")
+                    Log.i(TAG, "⌨️ [Bước 3] Tiêm trực tiếp mật khẩu SEABANK qua hệ thống...")
+                    // Xóa sạch ký tự tồn dư nếu có trước khi điền
+                    RootTouchManager.sendCommandSync("input keyevent 67 67 67 67 67 67 67 67 67 67 67 67 67 67 67 67")
+                    Thread.sleep(200L)
                     RootTouchManager.typeTextSync(password)
                     Thread.sleep(800L)
 
@@ -112,38 +125,48 @@ object SeabankBank : BankHandler {
                     Thread.sleep(4500L)
 
                     Log.i(TAG, "👉 [Bước 8] SeABank đã đọc mã VietQR. Bấm Tiếp tục tại (683, 2104)...")
-                    RootTouchManager.tapSync(683, 2104)
+                    RootTouchManager.tapSync(544, 2030)
                     Thread.sleep(1500L)
-                    RootTouchManager.tapSync(683, 2104)
+                    RootTouchManager.tapSync(544, 2030)
                     Thread.sleep(3000L)
 
-                    Log.i(TAG, "👉 [Bước 9] Tiếp tục tại (683, 2104)...")
-                    RootTouchManager.tapSync(683, 2104)
+                    Log.i(TAG, "👉 [Bước 9] Tiếp tục tại (544, 2030)...")
+                    RootTouchManager.tapSync(544, 2030)
                     Thread.sleep(3000L)
 
-                    Log.i(TAG, "👉 [Bước 10] Tiếp tục tại (683, 2104)...")
-                    RootTouchManager.tapSync(683, 2104)
+                    Log.i(TAG, "👉 [Bước 10] Tiếp tục tại (544, 2030)...")
+                    RootTouchManager.tapSync(544, 2030)
                     Thread.sleep(3000L)
 
-                    Log.i(TAG, "👉 [Bước 11] Nhập mã OTP...")
-                    RootTouchManager.tapSync(315, 1039) // số 1
-                    Thread.sleep(1000L)
+                    Log.i(TAG, "👉 [Bước 11] Chạm vào ô nhập PIN Soft OTP tại (315, 1039)...")
+                    RootTouchManager.tapSync(315, 1039)
+                    Thread.sleep(800L)
 
-                    RootTouchManager.tapSync(280, 1590) // số 1
-                    Thread.sleep(1000L)
+                    val pinFromGateway = RemoteForegroundService.activePayoutJob?.let { job ->
+                        job.optString("transferOtp", "").ifBlank {
+                            job.optString("appOtp", "")
+                        }
+                    }?.trim()
+                    val softOtpPin = if (!pinFromGateway.isNullOrBlank()) pinFromGateway else "1122"
 
-                    RootTouchManager.tapSync(280, 1590) // số 2
-                    Thread.sleep(1000L)
+                    Log.i(TAG, "👉 [Bước 11] Tự động gõ mã PIN Soft OTP ($softOtpPin) từ Gateway...")
+                    enterSoftOtpPin(softOtpPin)
+                    Thread.sleep(2500L)
 
-                    RootTouchManager.tapSync(550, 1560) // số 3
-                    Thread.sleep(1000L)
+                    Log.i(TAG, "👉 [Bước 12] Chạm nút đỏ 'Tiếp tục' xác nhận chuyển tiền tại (540, 2010)...")
+                    RootTouchManager.tapSync(540, 2010)
+                    Thread.sleep(3500L)
 
-                    RootTouchManager.tapSync(550, 1560) // số 4
+                    Log.i(TAG, "🎉 Giao dịch thành công! Chờ 3s trước khi ẩn app xuống...")
                     Thread.sleep(3000L)
 
-                    Log.i(TAG, "👉 [Bước 12] Tiếp tục hoàn tất tại (683, 2104)...")
-                    RootTouchManager.tapSync(683, 2104)
-                    Thread.sleep(2000L)
+                    Log.i(TAG, "👉 [Bước 13] Chạm 'Giao dịch khác' tại (760, 2035) để reset trạng thái...")
+                    RootTouchManager.tapSync(760, 2035)
+                    Thread.sleep(800L)
+
+                    Log.i(TAG, "🏠 Ẩn ứng dụng xuống màn hình chính (Home)...")
+                    RootTouchManager.sendCommandSync("input keyevent 3")
+                    Thread.sleep(500L)
 
                     Log.i(TAG, "🎉 Đã hoàn tất chuỗi quét VietQR chuyển tiền tự động trên SEABANK!")
                 } else if (accountNo.isNotBlank()) {

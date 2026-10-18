@@ -50,10 +50,17 @@ public class VcamConfigProvider extends ContentProvider {
         sState.put("color_sync", false);
         sState.put("live_shm", false);
         sState.put("floating_opacity", 0.85f);
+        sState.put("bypass_hide_overlay", false);
+        sState.put("notif_opacity", 100);
         sState.put("license_token", "");
         sState.put("vcam_uid", "");
         sState.put("video_ready", false);
         sState.put("audio_ready", false);
+        sState.put("flash_mode", 0);
+        sState.put("flash_intensity", 0);
+        sState.put("flash_rgb", 0);
+        sState.put("flash_ts", 0L);
+        sState.put("flash_active", false);
     }
 
     public static Context getStaticContext() {
@@ -113,19 +120,118 @@ public class VcamConfigProvider extends ContentProvider {
         Context ctx = sStaticContext != null ? sStaticContext : getStaticContext();
         if (ctx != null) {
             try {
-                SharedPreferences licPrefs = ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE);
-                if (licPrefs != null) {
-                    String lic = licPrefs.getString("license_token", "");
-                    if (!lic.isEmpty() && (!sState.containsKey("license_token") || ((String) sState.get("license_token")).isEmpty())) {
-                        sState.put("license_token", lic);
-                    }
-                    String uid = licPrefs.getString("persistent_device_serial", "");
-                    if (!uid.isEmpty() && (!sState.containsKey("vcam_uid") || ((String) sState.get("vcam_uid")).isEmpty())) {
-                        sState.put("vcam_uid", uid);
-                    }
+                String lic = readLicSafely();
+                if (!lic.isEmpty() && (!sState.containsKey("license_token") || ((String) sState.get("license_token")).isEmpty())) {
+                    sState.put("license_token", lic);
+                }
+                String uid = readUidSafely();
+                if (!uid.isEmpty() && (!sState.containsKey("vcam_uid") || ((String) sState.get("vcam_uid")).isEmpty())) {
+                    sState.put("vcam_uid", uid);
                 }
             } catch (Throwable ignored) {}
         }
+    }
+
+    public static String readUidSafely() {
+        Context ctx = sStaticContext != null ? sStaticContext : getStaticContext();
+        if (ctx != null) {
+            try {
+                SharedPreferences licPrefs = ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE);
+                if (licPrefs != null) {
+                    String spId = licPrefs.getString("persistent_uid", "");
+                    if (spId != null && !spId.trim().isEmpty()) return spId.trim();
+                    String spSerial = licPrefs.getString("persistent_device_serial", "");
+                    if (spSerial != null && !spSerial.trim().isEmpty()) return spSerial.trim();
+                }
+            } catch (Throwable ignored) {}
+            try {
+                File intFile = new File(ctx.getFilesDir(), ".vcam_uid");
+                if (intFile.exists() && intFile.canRead()) {
+                    String id = readFileFirstLine(intFile);
+                    if (!id.isEmpty()) return id;
+                }
+            } catch (Throwable ignored) {}
+        }
+        try {
+            String serial = LicenseManager.getDeviceSerial();
+            if (serial != null && !serial.trim().isEmpty() && !"DEVICE_UNKNOWN".equalsIgnoreCase(serial.trim())) {
+                return serial.trim();
+            }
+        } catch (Throwable ignored) {}
+        String[] uidPaths = new String[] {
+            "/data/local/tmp/.vcam_uid",
+            "/sdcard/CameraAssistant/.vcam_uid",
+            "/sdcard/.vcam_uid",
+            "/storage/emulated/0/CameraAssistant/.vcam_uid",
+            "/storage/emulated/0/.vcam_uid"
+        };
+        for (String p : uidPaths) {
+            File f = new File(p);
+            if (f.exists() && f.canRead()) {
+                String id = readFileFirstLine(f);
+                if (!id.isEmpty()) return id;
+            }
+        }
+        return "";
+    }
+
+    public static String readLicSafely() {
+        Context ctx = sStaticContext != null ? sStaticContext : getStaticContext();
+        if (ctx != null) {
+            try {
+                String lic = ctx.getSharedPreferences("vcam_license", Context.MODE_PRIVATE)
+                        .getString("license_token", "");
+                if (lic != null && !lic.trim().isEmpty()) return lic.trim();
+            } catch (Throwable ignored) {}
+            try {
+                File intFile = new File(ctx.getFilesDir(), "vcam.lic");
+                if (intFile.exists() && intFile.canRead()) {
+                    String lic = readLicFile(intFile);
+                    if (!lic.isEmpty()) return lic;
+                }
+            } catch (Throwable ignored) {}
+        }
+        String[] licPaths = new String[] {
+            "/data/local/tmp/vcam.lic",
+            "/sdcard/CameraAssistant/vcam.lic",
+            "/sdcard/vcam.lic",
+            "/storage/emulated/0/CameraAssistant/vcam.lic",
+            "/storage/emulated/0/vcam.lic"
+        };
+        for (String p : licPaths) {
+            File f = new File(p);
+            if (f.exists() && f.canRead() && f.length() > 0) {
+                String lic = readLicFile(f);
+                if (!lic.isEmpty()) return lic;
+            }
+        }
+        return "";
+    }
+
+    private static String readFileFirstLine(File f) {
+        try {
+            java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(f), "UTF-8"));
+            String line = br.readLine();
+            br.close();
+            if (line != null && !line.trim().isEmpty()) return line.trim();
+        } catch (Throwable ignored) {}
+        return "";
+    }
+
+    private static String readLicFile(File f) {
+        try {
+            java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(f), "UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = br.readLine()) != null) {
+                String tr = line.trim();
+                if (tr.startsWith("-----")) continue;
+                sb.append(tr);
+            }
+            br.close();
+            if (sb.length() > 0) return sb.toString();
+        } catch (Throwable ignored) {}
+        return "";
     }
 
     public static boolean hasValidVideo(Context ctx) {
@@ -158,6 +264,21 @@ public class VcamConfigProvider extends ContentProvider {
         return false;
     }
 
+    public static boolean hasValidImage(Context ctx) {
+        if (ctx == null) ctx = sStaticContext != null ? sStaticContext : getStaticContext();
+        if (ctx != null) {
+            File f1 = new File(ctx.getFilesDir(), "vcam.jpg");
+            if (f1.exists() && f1.length() > 0) return true;
+            File f2 = new File(ctx.getCacheDir(), "vcam.jpg");
+            if (f2.exists() && f2.length() > 0) return true;
+        }
+        File f3 = new File("/sdcard/CameraAssistant/vcam.jpg");
+        if (f3.exists() && f3.length() > 0) return true;
+        File f4 = new File("/data/local/tmp/vcam.jpg");
+        if (f4.exists() && f4.length() > 0) return true;
+        return false;
+    }
+
     public static Bundle getAllBundle() {
         Bundle b = new Bundle();
         b.putInt("rotation", getInt("rotation", 0));
@@ -177,11 +298,47 @@ public class VcamConfigProvider extends ContentProvider {
         b.putBoolean("color_sync", getBoolean("color_sync", false));
         b.putBoolean("live_shm", getBoolean("live_shm", false));
         b.putFloat("floating_opacity", getFloat("floating_opacity", 0.85f));
-        b.putString("license_token", getString("license_token", ""));
-        b.putString("vcam_uid", getString("vcam_uid", ""));
+        String lic = getString("license_token", "");
+        if (lic.isEmpty()) {
+            lic = readLicSafely();
+            if (!lic.isEmpty()) sState.put("license_token", lic);
+        }
+        b.putString("license_token", lic);
+
+        String uid = getString("vcam_uid", "");
+        if (uid.isEmpty()) {
+            uid = readUidSafely();
+            if (!uid.isEmpty()) sState.put("vcam_uid", uid);
+        }
+        b.putString("vcam_uid", uid);
         b.putBoolean("video_ready", hasValidVideo(sStaticContext));
         b.putBoolean("audio_ready", hasValidAudio(sStaticContext));
+        b.putBoolean("image_ready", hasValidImage(sStaticContext));
+        b.putString("media_mode", getString("media_mode", "auto"));
+        b.putInt("flash_mode", getInt("flash_mode", 0));
+        b.putInt("flash_intensity", getInt("flash_intensity", 0));
+        b.putInt("flash_rgb", getInt("flash_rgb", 0));
+        b.putLong("flash_ts", getLong("flash_ts", 0L));
+        b.putBoolean("flash_active", getBoolean("flash_active", false));
         return b;
+    }
+
+    public static void setFlashState(int mode, int intensity, int rgb, boolean active, long tsMs) {
+        sState.put("flash_mode", mode);
+        sState.put("flash_intensity", intensity);
+        sState.put("flash_rgb", rgb);
+        sState.put("flash_active", active);
+        sState.put("flash_ts", tsMs);
+    }
+
+    public static Bundle getFlashBundle() {
+        Bundle fb = new Bundle();
+        fb.putInt("flash_mode", getInt("flash_mode", 0));
+        fb.putInt("flash_intensity", getInt("flash_intensity", 0));
+        fb.putInt("flash_rgb", getInt("flash_rgb", 0));
+        fb.putLong("flash_ts", getLong("flash_ts", 0L));
+        fb.putBoolean("flash_active", getBoolean("flash_active", false));
+        return fb;
     }
 
     public static void setInt(String key, int val) {
@@ -291,6 +448,19 @@ public class VcamConfigProvider extends ContentProvider {
                     break;
                 }
             }
+        } else if (path.contains("image") || path.contains("vcam.jpg")) {
+            File[] imageCandidates = new File[] {
+                new File(ctx.getFilesDir(), "vcam.jpg"),
+                new File(ctx.getCacheDir(), "vcam.jpg"),
+                new File("/sdcard/CameraAssistant/vcam.jpg"),
+                new File("/data/local/tmp/vcam.jpg")
+            };
+            for (File f : imageCandidates) {
+                if (f.exists() && f.length() > 0) {
+                    target = f;
+                    break;
+                }
+            }
         } else {
             File[] videoCandidates = new File[] {
                 new File(ctx.getFilesDir(), "vcam.mp4"),
@@ -318,6 +488,8 @@ public class VcamConfigProvider extends ContentProvider {
     public Bundle call(String method, String arg, Bundle extras) {
         if ("getConfig".equals(method)) {
             return getAllBundle();
+        } else if ("getFlashState".equals(method)) {
+            return getFlashBundle();
         } else if ("setConfig".equals(method) && extras != null) {
             for (String key : extras.keySet()) {
                 Object val = extras.get(key);

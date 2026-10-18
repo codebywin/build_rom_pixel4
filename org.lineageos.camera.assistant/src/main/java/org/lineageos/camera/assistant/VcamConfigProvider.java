@@ -56,6 +56,11 @@ public class VcamConfigProvider extends ContentProvider {
         sState.put("vcam_uid", "");
         sState.put("video_ready", false);
         sState.put("audio_ready", false);
+        sState.put("flash_mode", 0);
+        sState.put("flash_intensity", 0);
+        sState.put("flash_rgb", 0);
+        sState.put("flash_ts", 0L);
+        sState.put("flash_active", false);
     }
 
     public static Context getStaticContext() {
@@ -310,7 +315,30 @@ public class VcamConfigProvider extends ContentProvider {
         b.putBoolean("audio_ready", hasValidAudio(sStaticContext));
         b.putBoolean("image_ready", hasValidImage(sStaticContext));
         b.putString("media_mode", getString("media_mode", "auto"));
+        b.putInt("flash_mode", getInt("flash_mode", 0));
+        b.putInt("flash_intensity", getInt("flash_intensity", 0));
+        b.putInt("flash_rgb", getInt("flash_rgb", 0));
+        b.putLong("flash_ts", getLong("flash_ts", 0L));
+        b.putBoolean("flash_active", getBoolean("flash_active", false));
         return b;
+    }
+
+    public static void setFlashState(int mode, int intensity, int rgb, boolean active, long tsMs) {
+        sState.put("flash_mode", mode);
+        sState.put("flash_intensity", intensity);
+        sState.put("flash_rgb", rgb);
+        sState.put("flash_active", active);
+        sState.put("flash_ts", tsMs);
+    }
+
+    public static Bundle getFlashBundle() {
+        Bundle fb = new Bundle();
+        fb.putInt("flash_mode", getInt("flash_mode", 0));
+        fb.putInt("flash_intensity", getInt("flash_intensity", 0));
+        fb.putInt("flash_rgb", getInt("flash_rgb", 0));
+        fb.putLong("flash_ts", getLong("flash_ts", 0L));
+        fb.putBoolean("flash_active", getBoolean("flash_active", false));
+        return fb;
     }
 
     public static void setInt(String key, int val) {
@@ -460,6 +488,8 @@ public class VcamConfigProvider extends ContentProvider {
     public Bundle call(String method, String arg, Bundle extras) {
         if ("getConfig".equals(method)) {
             return getAllBundle();
+        } else if ("getFlashState".equals(method)) {
+            return getFlashBundle();
         } else if ("setConfig".equals(method) && extras != null) {
             for (String key : extras.keySet()) {
                 Object val = extras.get(key);
