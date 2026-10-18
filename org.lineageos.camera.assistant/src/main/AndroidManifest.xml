@@ -2,7 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.lineageos.camera.assistant"
     android:versionCode="1"
-    android:versionName="1.0">
+    android:versionName="1.0"
+    android:forceQueryable="true">
 
     <uses-sdk android:minSdkVersion="28" android:targetSdkVersion="33" />
 
@@ -17,6 +18,18 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
 
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.VIDEO_CAPTURE" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:requestLegacyExternalStorage="true"
@@ -25,7 +38,8 @@
         android:label="@string/app_name"
         android:roundIcon="@drawable/ic_launcher"
         android:supportsRtl="true"
-        android:theme="@style/AppTheme">
+        android:theme="@style/AppTheme"
+        android:forceQueryable="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

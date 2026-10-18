@@ -505,7 +505,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamEngine.java b/core/java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamEngine.java
-@@ -0,0 +1,395 @@
+@@ -0,0 +1,407 @@
 +package android.hardware.camera2.impl;
 +
 +import android.hardware.Camera;
@@ -611,7 +611,7 @@ new file mode 100644
 +                    if (!running || !decodeSurface.isValid()) break;
 +                }
 +
-+                if ((file == null || !file.exists() || !file.canRead()) && !VcamConfig.hasVideoSource()) {
++                if ((file == null || !file.exists()) && !VcamConfig.hasVideoSource()) {
 +                    try {
 +                        Thread.sleep(100);
 +                    } catch (InterruptedException ignored) {
@@ -625,9 +625,16 @@ new file mode 100644
 +                android.os.ParcelFileDescriptor pfd = null;
 +                try {
 +                    extractor = new MediaExtractor();
-+                    if (file != null && file.exists() && file.canRead()) {
-+                        extractor.setDataSource(file.getAbsolutePath());
-+                    } else {
++                    boolean directOk = false;
++                    if (file != null && file.exists() && file.length() > 0) {
++                        try {
++                            extractor.setDataSource(file.getAbsolutePath());
++                            directOk = true;
++                        } catch (Throwable t) {
++                            Log.w(TAG, "Direct open of " + file.getAbsolutePath() + " failed: " + t.getMessage() + ", falling back to Provider IPC");
++                        }
++                    }
++                    if (!directOk) {
 +                        pfd = VcamConfig.getProviderVideoFd();
 +                        if (pfd != null) {
 +                            extractor.setDataSource(pfd.getFileDescriptor());
@@ -762,6 +769,11 @@ new file mode 100644
 +                    if (extractor != null) {
 +                        try {
 +                            extractor.release();
++                        } catch (Throwable ignored) {}
++                    }
++                    if (pfd != null) {
++                        try {
++                            pfd.close();
 +                        } catch (Throwable ignored) {}
 +                    }
 +                }
@@ -905,7 +917,7 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamConfig.java b/core/java
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamConfig.java
-@@ -0,0 +1,459 @@
+@@ -0,0 +1,463 @@
 +package android.hardware.camera2.impl;
 +
 +import android.app.Application;
@@ -1016,6 +1028,10 @@ new file mode 100644
 +    public static boolean hasVideoSource() {
 +        if (isVcamDisabled()) return false;
 +        if (getActiveVideoFile() != null) return true;
++        for (String dir : SEARCH_DIRS) {
++            File f = new File(dir + TARGET_VIDEO);
++            if (f.exists() && f.length() > 0) return true;
++        }
 +        Bundle b = getProviderConfig();
 +        if (b != null && b.getBoolean("video_ready", false)) return true;
 +        return false;
@@ -1106,7 +1122,7 @@ new file mode 100644
 +        if (isVcamDisabled()) return null;
 +        for (String dir : SEARCH_DIRS) {
 +            File f = new File(dir + TARGET_VIDEO);
-+            if (f.exists() && f.canRead() && f.length() > 0) {
++            if (f.exists() && f.length() > 0) {
 +                return f;
 +            }
 +        }
@@ -1369,319 +1385,28 @@ diff --git a/core/java/android/hardware/camera2/impl/VcamLicenseVerifier.java b/
 new file mode 100644
 --- /dev/null
 +++ b/core/java/android/hardware/camera2/impl/VcamLicenseVerifier.java
-@@ -0,0 +1,314 @@
+@@ -0,0 +1,23 @@
 +package android.hardware.camera2.impl;
 +
-+import android.os.Build;
-+import android.os.Bundle;
-+import android.util.Base64;
 +import android.util.Log;
-+import java.io.BufferedReader;
-+import java.io.File;
-+import java.io.FileInputStream;
-+import java.io.InputStreamReader;
-+import java.lang.reflect.Method;
-+import java.security.KeyFactory;
-+import java.security.PublicKey;
-+import java.security.Signature;
-+import java.security.spec.X509EncodedKeySpec;
 +
-+/**
-+ * VcamLicenseVerifier: Cryptographic License & Anti-Tamper Core.
-+ * Implements:
-+ *  - Tier 1: Cryptographic key derivation for OpenGL shader color matrix
-+ *  - Tier 3: Memory-only token parsing, Anti-Debug (TracerPid/Frida detection)
-+ *  - Hardware & Persistent UID dual-binding
-+ */
 +public class VcamLicenseVerifier {
 +    private static final String TAG = "VcamLicense";
 +
-+    private static final String PUBLIC_KEY_PEM = "-----BEGIN PUBLIC KEY-----\n" +
-+        "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxFvmY4n7o8MuGkcRiZf8\n" +
-+        "76WKcucHqUcCzdp2QR44yCiZDeJsXfWgqQI+GLa0Vjcj/GxfXZTBCnXBvMVhTVrp\n" +
-+        "VzNqs3E/3De7yhQbGwDziqkc+wZ0NMf/oFr46ALDhOLi9WMJEOe5cOWGF96X/+H8\n" +
-+        "5Z0rqmbVFKGQiPpwGTcs6j6tb9MRkCfDda7/f96ldBujCw1oINF6yeFJ2ESSueHp\n" +
-+        "0KcTZw6HAfo0jfeuSyatN60MNhEYJnkiB/XRTwnHh4U2gS55wylUPytwk8Iiz1ev\n" +
-+        "hPqaHgFeom/K55Mky+kqSVNEyFnQq3ZmD5Ro1zVgxLpCjwe0GZVTD47/Y5vGiMkN\n" +
-+        "awIDAQAB\n" +
-+        "-----END PUBLIC KEY-----";
-+
-+    private static final String[] LIC_PATHS = new String[] {
-+        "/data/local/tmp/vcam.lic",
-+        "/sdcard/CameraAssistant/vcam.lic",
-+        "/sdcard/vcam.lic"
-+    };
-+
-+    private static volatile Boolean sCachedValid = null;
-+    private static volatile long sLastCheckTime = 0;
-+    private static final long CACHE_DURATION_MS = 5000;
-+
-+    // Chiêu 1: Cryptographic Binding Key (derived solely from valid RSA signature)
-+    private static volatile float sLicenseFactor = 0.0f;
-+    private static volatile long sLicenseSigHash = 0L;
-+
 +    public static boolean isLicenseActive() {
-+        if (isTamperedOrDebugged()) {
-+            sCachedValid = false;
-+            sLicenseFactor = 0.0f;
-+            sLicenseSigHash = 0L;
-+            return false;
-+        }
-+
-+        long now = System.currentTimeMillis();
-+        if (sCachedValid != null && (now - sLastCheckTime) < CACHE_DURATION_MS) {
-+            return sCachedValid;
-+        }
-+
-+        boolean valid = verifyLicenseInternal();
-+        sCachedValid = valid;
-+        sLastCheckTime = now;
-+        return valid;
++        return true;
 +    }
 +
-+    /**
-+     * Chiêu 1: Trả về hệ số chiếu sáng cho GPU Shader.
-+     * Nếu bị patch Smali `isLicenseActive() -> true` nhưng không có RSA key xịn:
-+     * sLicenseFactor vẫn là 0.0f -> Toàn bộ frame render ra ĐEN XÌ 100%!
-+     */
 +    public static float getLicenseFactor() {
-+        if (!isLicenseActive()) return 0.0f;
-+        if (sLicenseFactor <= 0.0f || sLicenseSigHash == 0L) return 0.0f;
 +        return 1.0f;
 +    }
 +
-+    // Chiêu 3: Chống Debugger & Frida hook
-+    private static boolean isTamperedOrDebugged() {
-+        try {
-+            if (android.os.Debug.isDebuggerConnected()) return true;
-+            File status = new File("/proc/self/status");
-+            if (status.exists() && status.canRead()) {
-+                BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(status)));
-+                String line;
-+                while ((line = br.readLine()) != null) {
-+                    if (line.startsWith("TracerPid:")) {
-+                        int pid = Integer.parseInt(line.substring(10).trim());
-+                        if (pid > 0) {
-+                            br.close();
-+                            return true;
-+                        }
-+                        break;
-+                    }
-+                }
-+                br.close();
-+            }
-+        } catch (Throwable ignored) {}
-+        return false;
-+    }
-+
-+    private static boolean verifyLicenseInternal() {
-+        String token = readToken();
-+        if (token == null || token.isEmpty()) {
-+            sLicenseFactor = 0.0f;
-+            sLicenseSigHash = 0L;
-+            return false;
-+        }
-+
-+        try {
-+            int pipeIdx = token.indexOf("|SIG=");
-+            if (pipeIdx == -1) {
-+                sLicenseFactor = 0.0f;
-+                sLicenseSigHash = 0L;
-+                return false;
-+            }
-+
-+            String payload = token.substring(0, pipeIdx);
-+            String sigBase64 = token.substring(pipeIdx + 5);
-+
-+            if (!verifySignature(payload, sigBase64)) {
-+                Log.e(TAG, "RSA signature verification failed!");
-+                sLicenseFactor = 0.0f;
-+                sLicenseSigHash = 0L;
-+                return false;
-+            }
-+
-+            String[] parts = payload.split(";");
-+            String licSerial = "";
-+            long expiresAt = 0;
-+            for (String p : parts) {
-+                if (p.startsWith("SERIAL=")) {
-+                    licSerial = p.substring(7);
-+                } else if (p.startsWith("EXPIRES=")) {
-+                    expiresAt = Long.parseLong(p.substring(8));
-+                }
-+            }
-+
-+            if (!matchesDeviceSerial(licSerial)) {
-+                Log.e(TAG, "License serial mismatch: expected " + licSerial);
-+                sLicenseFactor = 0.0f;
-+                sLicenseSigHash = 0L;
-+                return false;
-+            }
-+
-+            long nowSec = System.currentTimeMillis() / 1000;
-+            if (expiresAt > 0 && nowSec > expiresAt) {
-+                Log.e(TAG, "License has expired at " + expiresAt);
-+                sLicenseFactor = 0.0f;
-+                sLicenseSigHash = 0L;
-+                return false;
-+            }
-+
-+            // Chiêu 1: Khởi tạo mật mã thành công từ chữ ký thật
-+            long sigHash = 0x5F3759DFL;
-+            for (int i = 0; i < sigBase64.length(); i++) {
-+                sigHash = (sigHash * 31L) ^ ((long) sigBase64.charAt(i) & 0xFFL);
-+            }
-+            sLicenseSigHash = sigHash;
-+            sLicenseFactor = 1.0f;
-+
-+            Log.i(TAG, "License verified successfully for serial: " + licSerial);
-+            return true;
-+        } catch (Throwable t) {
-+            Log.e(TAG, "License verification error: " + t.getMessage());
-+            sLicenseFactor = 0.0f;
-+            sLicenseSigHash = 0L;
-+            return false;
-+        }
-+    }
-+
-+    private static boolean verifySignature(String data, String base64Sig) {
-+        try {
-+            String cleanKey = PUBLIC_KEY_PEM
-+                .replace("-----BEGIN PUBLIC KEY-----", "")
-+                .replace("-----END PUBLIC KEY-----", "")
-+                .replaceAll("\\s", "");
-+            byte[] keyBytes = Base64.decode(cleanKey, Base64.DEFAULT);
-+            X509EncodedKeySpec spec = new X509EncodedKeySpec(keyBytes);
-+            KeyFactory kf = KeyFactory.getInstance("RSA");
-+            PublicKey pubKey = kf.generatePublic(spec);
-+
-+            Signature sig = Signature.getInstance("SHA256withRSA");
-+            sig.initVerify(pubKey);
-+            sig.update(data.getBytes("UTF-8"));
-+            return sig.verify(Base64.decode(base64Sig, Base64.DEFAULT));
-+        } catch (Throwable t) {
-+            return false;
-+        }
-+    }
-+
 +    public static boolean matchesDeviceSerial(String licSerial) {
-+        if (licSerial == null || licSerial.trim().isEmpty()) return false;
-+        String s = licSerial.trim();
-+
-+        // 1. Check ro.boot.serialno & ro.serialno
-+        try {
-+            Class<?> sp = Class.forName("android.os.SystemProperties");
-+            Method m = sp.getMethod("get", String.class, String.class);
-+            String p1 = (String) m.invoke(null, "ro.boot.serialno", "");
-+            if (p1 != null && !p1.isEmpty() && s.equalsIgnoreCase(p1.trim())) return true;
-+            String p2 = (String) m.invoke(null, "ro.serialno", "");
-+            if (p2 != null && !p2.isEmpty() && s.equalsIgnoreCase(p2.trim())) return true;
-+        } catch (Throwable ignored) {}
-+
-+        // 2. Check UID files (.vcam_uid created by CameraAssistant / LicenseManager)
-+        String[] uidPaths = new String[] {
-+            "/data/local/tmp/.vcam_uid",
-+            "/sdcard/CameraAssistant/.vcam_uid",
-+            "/sdcard/.vcam_uid",
-+            "/data/local/tmp/vcam_serial"
-+        };
-+        for (String p : uidPaths) {
-+            String id = readFirstLine(p);
-+            if (id != null && !id.isEmpty() && s.equalsIgnoreCase(id.trim())) {
-+                return true;
-+            }
-+        }
-+
-+        try {
-+            Bundle b = VcamConfig.getProviderConfig();
-+            if (b != null && b.containsKey("vcam_uid")) {
-+                String uid = b.getString("vcam_uid", "");
-+                if (uid != null && !uid.trim().isEmpty() && s.equalsIgnoreCase(uid.trim())) {
-+                    return true;
-+                }
-+            }
-+        } catch (Throwable ignored) {}
-+
-+        // 3. Check Build.getSerial()
-+        try {
-+            String bs = Build.getSerial();
-+            if (bs != null && !bs.isEmpty() && s.equalsIgnoreCase(bs.trim())) return true;
-+        } catch (Throwable ignored) {}
-+
-+        return false;
++        return true;
 +    }
 +
 +    public static String getDeviceSerial() {
-+        try {
-+            Class<?> sp = Class.forName("android.os.SystemProperties");
-+            Method m = sp.getMethod("get", String.class, String.class);
-+            String s = (String) m.invoke(null, "ro.boot.serialno", "");
-+            if (s != null && !s.trim().isEmpty() && !"unknown".equalsIgnoreCase(s)) {
-+                return s.trim();
-+            }
-+            s = (String) m.invoke(null, "ro.serialno", "");
-+            if (s != null && !s.trim().isEmpty() && !"unknown".equalsIgnoreCase(s)) {
-+                return s.trim();
-+            }
-+        } catch (Throwable ignored) {}
-+
-+        String id = readFirstLine("/data/local/tmp/.vcam_uid");
-+        if (id != null && !id.isEmpty()) return id;
-+        id = readFirstLine("/sdcard/CameraAssistant/.vcam_uid");
-+        if (id != null && !id.isEmpty()) return id;
-+
-+        try {
-+            Bundle b = VcamConfig.getProviderConfig();
-+            if (b != null && b.containsKey("vcam_uid")) {
-+                String uid = b.getString("vcam_uid", "");
-+                if (uid != null && !uid.trim().isEmpty()) return uid.trim();
-+            }
-+        } catch (Throwable ignored) {}
-+
-+        return "UNKNOWN";
-+    }
-+
-+    private static String readFirstLine(String path) {
-+        try {
-+            File f = new File(path);
-+            if (f.exists() && f.canRead()) {
-+                BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f), "UTF-8"));
-+                String l = br.readLine();
-+                br.close();
-+                if (l != null && !l.trim().isEmpty()) return l.trim();
-+            }
-+        } catch (Throwable ignored) {}
-+        return null;
-+    }
-+
-+    private static String readToken() {
-+        for (String path : LIC_PATHS) {
-+            File f = new File(path);
-+            if (f.exists() && f.canRead() && f.length() > 0) {
-+                try {
-+                    BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(f), "UTF-8"));
-+                    StringBuilder sb = new StringBuilder();
-+                    String line;
-+                    while ((line = br.readLine()) != null) {
-+                        String trimmed = line.trim();
-+                        if (trimmed.startsWith("-----")) continue;
-+                        sb.append(trimmed);
-+                    }
-+                    br.close();
-+                    if (sb.length() > 0) return sb.toString();
-+                } catch (Throwable ignored) {}
-+            }
-+        }
-+        try {
-+            Bundle b = VcamConfig.getProviderConfig();
-+            if (b != null && b.containsKey("license_token")) {
-+                String token = b.getString("license_token", "");
-+                if (token != null && !token.trim().isEmpty()) {
-+                    return token.trim();
-+                }
-+            }
-+        } catch (Throwable ignored) {}
-+        return null;
++        return "VCAM-AUTHORIZED";
 +    }
 +}
 diff --git a/core/java/android/hardware/camera2/impl/VcamMultiStreamManager.java b/core/java/android/hardware/camera2/impl/VcamMultiStreamManager.java
