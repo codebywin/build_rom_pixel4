@@ -122,6 +122,12 @@ public class MainActivity extends Activity {
         requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
         setContentView(R.layout.activity_main);
 
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (checkSelfPermission("android.permission.POST_NOTIFICATIONS") != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 105);
+            }
+        }
+
         txtLicenseBadge = findViewById(R.id.txt_license_badge);
         txtDeviceSerial = findViewById(R.id.txt_device_serial);
         txtLicenseStatus = findViewById(R.id.txt_license_status);
@@ -658,6 +664,10 @@ public class MainActivity extends Activity {
         try {
             android.provider.Settings.System.putInt(getContentResolver(), "notification_drawer_opacity", val);
         } catch (Throwable ignored) {}
+        FloatingControlService svc = FloatingControlService.getInstance();
+        if (svc != null) {
+            svc.updateNotification();
+        }
     }
 
     private void updateLicenseUI() {

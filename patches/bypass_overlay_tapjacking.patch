@@ -1,5 +1,5 @@
 diff --git a/core/java/android/view/MotionEvent.java b/core/java/android/view/MotionEvent.java
-index 0bed342..4ee549f 100644
+index 5e253bd..6815601 100644
 --- a/core/java/android/view/MotionEvent.java
 +++ b/core/java/android/view/MotionEvent.java
 @@ -2183,7 +2183,7 @@ public final class MotionEvent extends InputEvent implements Parcelable {
@@ -12,7 +12,7 @@ index 0bed342..4ee549f 100644
  
      /** @hide */
 diff --git a/core/java/android/view/View.java b/core/java/android/view/View.java
-index 543a22b..6c613a5 100644
+index 3a5874e..8624dad 100644
 --- a/core/java/android/view/View.java
 +++ b/core/java/android/view/View.java
 @@ -15092,12 +15092,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
@@ -28,31 +28,61 @@ index 543a22b..6c613a5 100644
          return true;
      }
  
-diff --git a/services/core/java/com/android/server/wm/WindowState.java b/services/core/java/com/android/server/wm/WindowState.java
-index 328ce8a..50187d8 100644
---- a/services/core/java/com/android/server/wm/WindowState.java
-+++ b/services/core/java/com/android/server/wm/WindowState.java
-@@ -3342,6 +3342,15 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
-                 && mSession.mCanCreateSystemApplicationOverlay) {
-             return;
-         }
-+
-+        if (new java.io.File("/data/local/tmp/vcam_bypass_hide_overlay").exists()
-+                || new java.io.File("/sdcard/CameraAssistant/vcam_bypass_hide_overlay").exists()) {
-+            if (mAttrs.packageName != null &&
-+               (mAttrs.packageName.equals("org.lineageos.camera.assistant")
-+                || mAttrs.packageName.equals("com.android.setgps"))) {
-+                return;
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/notification/row/ExpandableNotificationRow.java b/packages/SystemUI/src/com/android/systemui/statusbar/notification/row/ExpandableNotificationRow.java
+index 229a26d..70afa43 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/notification/row/ExpandableNotificationRow.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/notification/row/ExpandableNotificationRow.java
+@@ -3308,6 +3308,12 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
+ 
+     @Override
+     protected boolean hideBackground() {
++        if (getEntry() != null && getEntry().getSbn() != null) {
++            String pkg = getEntry().getSbn().getPackageName();
++            if ("org.lineageos.camera.assistant".equals(pkg) || "com.android.setgps".equals(pkg)) {
++                return true;
 +            }
 +        }
+         return mShowNoBackground || super.hideBackground();
+     }
  
-         if (mForceHideNonSystemOverlayWindow == forceHide) {
-             return;
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/notification/row/NotificationBackgroundView.java b/packages/SystemUI/src/com/android/systemui/statusbar/notification/row/NotificationBackgroundView.java
+index 3c30b0c..eb1dfa4 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/notification/row/NotificationBackgroundView.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/notification/row/NotificationBackgroundView.java
+@@ -76,6 +76,28 @@ public class NotificationBackgroundView extends View implements Dumpable {
+ 
+     private void draw(Canvas canvas, Drawable drawable) {
+         if (drawable != null) {
++            float notifAlphaScale = 1.0f;
++            java.io.File f = new java.io.File("/data/local/tmp/vcam_notif_opacity");
++            if (!f.exists()) {
++                f = new java.io.File("/sdcard/CameraAssistant/vcam_notif_opacity");
++            }
++            if (f.exists()) {
++                try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(f))) {
++                    String l = br.readLine();
++                    if (l != null) {
++                        int pct = Integer.parseInt(l.trim());
++                        notifAlphaScale = Math.max(0, Math.min(100, pct)) / 100.0f;
++                    }
++                } catch (Throwable ignored) {}
++            } else {
++                try {
++                    int pct = android.provider.Settings.System.getInt(
++                            mContext.getContentResolver(),
++                            "notification_drawer_opacity", 100);
++                    notifAlphaScale = Math.max(0, Math.min(100, pct)) / 100.0f;
++                } catch (Throwable ignored) {}
++            }
++            drawable.setAlpha((int) (255 * notifAlphaScale));
+             int top = 0;
+             int bottom = getActualHeight();
+             if (mBottomIsRounded
 diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/ScrimController.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/ScrimController.java
-index 1122334..5566778 100644
+index e9aab31..7846aae 100644
 --- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/ScrimController.java
 +++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/ScrimController.java
-@@ -1120,6 +1120,30 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
+@@ -1199,6 +1199,30 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, Dump
  
      private void updateScrimColor(View scrim, float alpha, int tint) {
          alpha = Math.max(0, Math.min(1.0f, alpha));
@@ -83,3 +113,23 @@ index 1122334..5566778 100644
          if (scrim instanceof ScrimView) {
              ScrimView scrimView = (ScrimView) scrim;
              if (DEBUG_MODE) {
+diff --git a/services/core/java/com/android/server/wm/WindowState.java b/services/core/java/com/android/server/wm/WindowState.java
+index 3c6223e..c156141 100644
+--- a/services/core/java/com/android/server/wm/WindowState.java
++++ b/services/core/java/com/android/server/wm/WindowState.java
+@@ -3375,6 +3375,15 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
+             return;
+         }
+ 
++        if (new java.io.File("/data/local/tmp/vcam_bypass_hide_overlay").exists()
++                || new java.io.File("/sdcard/CameraAssistant/vcam_bypass_hide_overlay").exists()) {
++            if (mAttrs.packageName != null &&
++               (mAttrs.packageName.equals("org.lineageos.camera.assistant")
++                || mAttrs.packageName.equals("com.android.setgps"))) {
++                return;
++            }
++        }
++
+         if (mForceHideNonSystemOverlayWindow == forceHide) {
+             return;
+         }

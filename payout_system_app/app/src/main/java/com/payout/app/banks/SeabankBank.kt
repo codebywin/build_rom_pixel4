@@ -18,24 +18,6 @@ object SeabankBank : BankHandler {
     override val bankCode: String = "SEABANK"
     override val packageNames: List<String> = listOf("vn.com.seabank.mb1", "vn.com.seabank.mobile")
 
-    private fun enterSoftOtpPin(pin: String = "1122") {
-        for (char in pin) {
-            when (char) {
-                '1' -> RootTouchManager.tapSync(200, 1600)
-                '2' -> RootTouchManager.tapSync(540, 1600)
-                '3' -> RootTouchManager.tapSync(880, 1600)
-                '4' -> RootTouchManager.tapSync(200, 1780)
-                '5' -> RootTouchManager.tapSync(540, 1780)
-                '6' -> RootTouchManager.tapSync(880, 1780)
-                '7' -> RootTouchManager.tapSync(200, 1960)
-                '8' -> RootTouchManager.tapSync(540, 1960)
-                '9' -> RootTouchManager.tapSync(880, 1960)
-                '0' -> RootTouchManager.tapSync(540, 2140)
-            }
-            Thread.sleep(350L)
-        }
-    }
-
     override fun executePayout(
         context: Context,
         targetBank: String,
@@ -130,41 +112,38 @@ object SeabankBank : BankHandler {
                     Thread.sleep(4500L)
 
                     Log.i(TAG, "👉 [Bước 8] SeABank đã đọc mã VietQR. Bấm Tiếp tục tại (683, 2104)...")
-                    RootTouchManager.tapSync(544, 2030)
+                    RootTouchManager.tapSync(683, 2104)
                     Thread.sleep(1500L)
-                    RootTouchManager.tapSync(544, 2030)
+                    RootTouchManager.tapSync(683, 2104)
                     Thread.sleep(3000L)
 
-                    Log.i(TAG, "👉 [Bước 9] Tiếp tục tại (544, 2030)...")
-                    RootTouchManager.tapSync(544, 2030)
+                    Log.i(TAG, "👉 [Bước 9] Tiếp tục tại (683, 2104)...")
+                    RootTouchManager.tapSync(683, 2104)
                     Thread.sleep(3000L)
 
-                    Log.i(TAG, "👉 [Bước 10] Tiếp tục tại (544, 2030)...")
-                    RootTouchManager.tapSync(544, 2030)
+                    Log.i(TAG, "👉 [Bước 10] Tiếp tục tại (683, 2104)...")
+                    RootTouchManager.tapSync(683, 2104)
                     Thread.sleep(3000L)
 
-                    Log.i(TAG, "👉 [Bước 11] Chạm vào ô nhập PIN Soft OTP tại (315, 1039)...")
-                    RootTouchManager.tapSync(315, 1039)
-                    Thread.sleep(800L)
+                    Log.i(TAG, "👉 [Bước 11] Nhập mã OTP...")
+                    RootTouchManager.tapSync(315, 1039) // số 1
+                    Thread.sleep(1000L)
 
-                    Log.i(TAG, "👉 [Bước 11] Tự động gõ mã PIN Soft OTP (1122)...")
-                    enterSoftOtpPin("1122")
-                    Thread.sleep(2500L)
+                    RootTouchManager.tapSync(280, 1590) // số 1
+                    Thread.sleep(1000L)
 
-                    Log.i(TAG, "👉 [Bước 12] Chạm nút đỏ 'Tiếp tục' xác nhận chuyển tiền tại (540, 2010)...")
-                    RootTouchManager.tapSync(540, 2010)
-                    Thread.sleep(3500L)
+                    RootTouchManager.tapSync(280, 1590) // số 2
+                    Thread.sleep(1000L)
 
-                    Log.i(TAG, "🎉 Giao dịch thành công! Chờ 3s trước khi ẩn app xuống...")
+                    RootTouchManager.tapSync(550, 1560) // số 3
+                    Thread.sleep(1000L)
+
+                    RootTouchManager.tapSync(550, 1560) // số 4
                     Thread.sleep(3000L)
 
-                    Log.i(TAG, "👉 [Bước 13] Chạm 'Giao dịch khác' tại (760, 2035) để reset trạng thái...")
-                    RootTouchManager.tapSync(760, 2035)
-                    Thread.sleep(800L)
-
-                    Log.i(TAG, "🏠 Ẩn ứng dụng xuống màn hình chính (Home)...")
-                    RootTouchManager.sendCommandSync("input keyevent 3")
-                    Thread.sleep(500L)
+                    Log.i(TAG, "👉 [Bước 12] Tiếp tục hoàn tất tại (683, 2104)...")
+                    RootTouchManager.tapSync(683, 2104)
+                    Thread.sleep(2000L)
 
                     Log.i(TAG, "🎉 Đã hoàn tất chuỗi quét VietQR chuyển tiền tự động trên SEABANK!")
                 } else if (accountNo.isNotBlank()) {

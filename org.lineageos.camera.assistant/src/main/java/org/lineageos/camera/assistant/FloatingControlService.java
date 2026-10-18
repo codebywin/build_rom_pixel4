@@ -390,8 +390,29 @@ public class FloatingControlService extends Service implements View.OnTouchListe
         return PendingIntent.getBroadcast(this, requestCode, intent, flags);
     }
 
+    private float getNotifOpacityAlpha() {
+        int val = VcamConfigProvider.getInt("notif_opacity", 100);
+        File f = new File("/data/local/tmp/vcam_notif_opacity");
+        if (!f.exists()) {
+            f = new File(MainActivity.SDCARD_DIR + "vcam_notif_opacity");
+        }
+        if (f.exists()) {
+            try (BufferedReader br = new BufferedReader(new FileReader(f))) {
+                String line = br.readLine();
+                if (line != null) {
+                    val = Integer.parseInt(line.trim());
+                }
+            } catch (Throwable ignored) {}
+        }
+        val = Math.max(0, Math.min(100, val));
+        return val / 100.0f;
+    }
+
     private Notification buildControlNotification(String channelId) {
         RemoteViews views = new RemoteViews(getPackageName(), R.layout.notification_vcam_control);
+
+        float alpha = getNotifOpacityAlpha();
+        views.setFloat(R.id.notif_bg_card, "setAlpha", alpha);
 
         String playState = mIsPaused ? "⏸ ĐÃ DỪNG" : "▶ ĐANG PHÁT";
         String status;

@@ -1,164 +1,176 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="8dp"
-    android:background="@drawable/bg_notif_panel">
+    android:layout_height="wrap_content">
 
-    <!-- Header Status Row -->
+    <!-- Lớp nền bo góc động, tự động co giãn độ mờ/trong suốt theo slider -->
+    <ImageView
+        android:id="@+id/notif_bg_card"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/bg_notif_panel" />
+
+    <!-- Nội dung bảng điều khiển VCAM -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="6dp">
+        android:orientation="vertical"
+        android:padding="8dp">
 
-        <TextView
-            android:layout_width="wrap_content"
+        <!-- Header Status Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="🎥 VCAM"
-            android:textStyle="bold"
-            android:textColor="#38BDF8"
-            android:textSize="12sp"
-            android:layout_marginEnd="8dp" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="6dp">
 
-        <TextView
-            android:id="@+id/notif_txt_status"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:text="Zoom: 1.00× | 0°"
-            android:textColor="#E2E8F0"
-            android:textSize="11sp"
-            android:gravity="end|center_vertical" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🎥 VCAM"
+                android:textStyle="bold"
+                android:textColor="#38BDF8"
+                android:textSize="12sp"
+                android:layout_marginEnd="8dp" />
+
+            <TextView
+                android:id="@+id/notif_txt_status"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="Zoom: 1.00× | 0°"
+                android:textColor="#E2E8F0"
+                android:textSize="11sp"
+                android:gravity="end|center_vertical" />
+        </LinearLayout>
+
+        <!-- Row 1: Play/Pause, Xoay 90°, Zoom Out, Zoom In -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="34dp"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <TextView
+                android:id="@+id/notif_btn_play_pause"
+                android:layout_width="0dp"
+                android:layout_weight="1.2"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="4dp"
+                android:background="@drawable/bg_notif_btn"
+                android:gravity="center"
+                android:text="⏸ Dừng"
+                android:textColor="#38BDF8"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/notif_btn_rotate"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="4dp"
+                android:background="@drawable/bg_notif_btn_accent"
+                android:gravity="center"
+                android:text="🔄 90°"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/notif_btn_zoom_out"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="4dp"
+                android:background="@drawable/bg_notif_btn"
+                android:gravity="center"
+                android:text="🔍 -"
+                android:textColor="#38BDF8"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/notif_btn_zoom_in"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_notif_btn"
+                android:gravity="center"
+                android:text="🔍 +"
+                android:textColor="#38BDF8"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Row 2: Pan & Center Controls -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="30dp"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginTop="4dp">
+
+            <TextView
+                android:id="@+id/notif_btn_center"
+                android:layout_width="0dp"
+                android:layout_weight="1.2"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="3dp"
+                android:background="@drawable/bg_notif_btn_accent"
+                android:gravity="center"
+                android:text="🎯 Giữa"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/notif_btn_pan_left"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="3dp"
+                android:background="@drawable/bg_notif_btn"
+                android:gravity="center"
+                android:text="◀"
+                android:textColor="#CBD5E1"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/notif_btn_pan_up"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="3dp"
+                android:background="@drawable/bg_notif_btn"
+                android:gravity="center"
+                android:text="▲"
+                android:textColor="#CBD5E1"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/notif_btn_pan_down"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="3dp"
+                android:background="@drawable/bg_notif_btn"
+                android:gravity="center"
+                android:text="▼"
+                android:textColor="#CBD5E1"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/notif_btn_pan_right"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_notif_btn"
+                android:gravity="center"
+                android:text="▶"
+                android:textColor="#CBD5E1"
+                android:textSize="11sp" />
+        </LinearLayout>
     </LinearLayout>
-
-    <!-- Row 1: Play/Pause, Xoay 90°, Zoom Out, Zoom In -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="34dp"
-        android:orientation="horizontal"
-        android:gravity="center">
-
-        <TextView
-            android:id="@+id/notif_btn_play_pause"
-            android:layout_width="0dp"
-            android:layout_weight="1.2"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="4dp"
-            android:background="@drawable/bg_notif_btn"
-            android:gravity="center"
-            android:text="⏸ Dừng"
-            android:textColor="#38BDF8"
-            android:textSize="12sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/notif_btn_rotate"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="4dp"
-            android:background="@drawable/bg_notif_btn_accent"
-            android:gravity="center"
-            android:text="🔄 90°"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/notif_btn_zoom_out"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="4dp"
-            android:background="@drawable/bg_notif_btn"
-            android:gravity="center"
-            android:text="🔍 -"
-            android:textColor="#38BDF8"
-            android:textSize="12sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/notif_btn_zoom_in"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="match_parent"
-            android:background="@drawable/bg_notif_btn"
-            android:gravity="center"
-            android:text="🔍 +"
-            android:textColor="#38BDF8"
-            android:textSize="12sp"
-            android:textStyle="bold" />
-    </LinearLayout>
-
-    <!-- Row 2: Pan & Center Controls -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="30dp"
-        android:orientation="horizontal"
-        android:gravity="center"
-        android:layout_marginTop="4dp">
-
-        <TextView
-            android:id="@+id/notif_btn_center"
-            android:layout_width="0dp"
-            android:layout_weight="1.2"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="3dp"
-            android:background="@drawable/bg_notif_btn_accent"
-            android:gravity="center"
-            android:text="🎯 Giữa"
-            android:textColor="#FFFFFF"
-            android:textSize="11sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/notif_btn_pan_left"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="3dp"
-            android:background="@drawable/bg_notif_btn"
-            android:gravity="center"
-            android:text="◀"
-            android:textColor="#CBD5E1"
-            android:textSize="11sp" />
-
-        <TextView
-            android:id="@+id/notif_btn_pan_up"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="3dp"
-            android:background="@drawable/bg_notif_btn"
-            android:gravity="center"
-            android:text="▲"
-            android:textColor="#CBD5E1"
-            android:textSize="11sp" />
-
-        <TextView
-            android:id="@+id/notif_btn_pan_down"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="3dp"
-            android:background="@drawable/bg_notif_btn"
-            android:gravity="center"
-            android:text="▼"
-            android:textColor="#CBD5E1"
-            android:textSize="11sp" />
-
-        <TextView
-            android:id="@+id/notif_btn_pan_right"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="match_parent"
-            android:background="@drawable/bg_notif_btn"
-            android:gravity="center"
-            android:text="▶"
-            android:textColor="#CBD5E1"
-            android:textSize="11sp" />
-    </LinearLayout>
-</LinearLayout>
+</FrameLayout>
