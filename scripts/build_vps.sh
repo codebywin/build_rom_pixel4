@@ -193,7 +193,16 @@ apply_patch() {
     echo -e "${RED}==================================================================${NC}"
     echo -e "${RED}>> ĐÃ DỪNG TIẾN TRÌNH BUILD! Không cho phép tiếp tục khi có bản vá lỗi!${NC}"
     exit 1
-}
+# Khôi phục mã nguồn sạch trước khi áp dụng các bản vá mới
+echo -e "\n${CYAN}>> Khôi phục mã nguồn sạch trước khi áp dụng các bản vá...${NC}"
+git -C frameworks/base reset --hard HEAD 2>/dev/null || true
+git -C frameworks/base clean -fd 2>/dev/null || true
+git -C system/core reset --hard HEAD 2>/dev/null || true
+git -C system/core clean -fd 2>/dev/null || true
+git -C device/google/coral reset --hard HEAD 2>/dev/null || true
+git -C device/google/coral clean -fd 2>/dev/null || true
+git -C packages/services/Telephony reset --hard HEAD 2>/dev/null || true
+git -C packages/services/Telephony clean -fd 2>/dev/null || true
 
 apply_patch "frameworks/base" "vcam_pixel4.patch"
 apply_patch "frameworks/base" "spoof_locked_bootloader.patch"
