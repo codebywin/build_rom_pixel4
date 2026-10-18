@@ -368,6 +368,7 @@ public class LicenseManager {
                         .edit()
                         .putString("persistent_uid", uid)
                         .apply();
+                VcamConfigProvider.setString("vcam_uid", uid);
             } catch (Throwable ignored) {}
             try {
                 File intFile = new File(ctx.getFilesDir(), ".vcam_uid");
@@ -625,6 +626,7 @@ public class LicenseManager {
                         .edit()
                         .putString("license_token", token)
                         .commit();
+                VcamConfigProvider.setString("license_token", token);
             } catch (Throwable ignored) {}
         }
 
@@ -728,6 +730,7 @@ public class LicenseManager {
                         .edit()
                         .remove("license_token")
                         .commit();
+                VcamConfigProvider.setString("license_token", "");
                 File intFile = new File(ctx.getFilesDir(), "vcam.lic");
                 writeFile(intFile.getAbsolutePath(), "");
                 if (intFile.delete()) res = true;

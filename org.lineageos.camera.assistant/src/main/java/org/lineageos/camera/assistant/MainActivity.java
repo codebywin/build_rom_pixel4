@@ -238,6 +238,7 @@ public class MainActivity extends Activity {
         // 0. Sao chép Serial
         final String serial = LicenseManager.getDeviceSerial();
         txtDeviceSerial.setText(serial);
+        VcamConfigProvider.setString("vcam_uid", serial);
         btnCopySerial.setOnClickListener(v -> {
             ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
             ClipData cd = ClipData.newPlainText("Pixel 4 Serial", serial);
@@ -767,6 +768,10 @@ public class MainActivity extends Activity {
             final File finalVideo = videoFile;
             sIoExecutor.execute(() -> {
                 try {
+                    if (!intVideo.exists() || intVideo.length() != finalVideo.length()) {
+                        copyFile(finalVideo, intVideo);
+                        intVideo.setReadable(true, false);
+                    }
                     if (!tmpVideo.exists() || tmpVideo.length() != finalVideo.length()) {
                         copyFile(finalVideo, tmpVideo);
                         tmpVideo.setReadable(true, false);
@@ -796,6 +801,10 @@ public class MainActivity extends Activity {
             final File finalImg = imgFile;
             sIoExecutor.execute(() -> {
                 try {
+                    if (!intImg.exists() || intImg.length() != finalImg.length()) {
+                        copyFile(finalImg, intImg);
+                        intImg.setReadable(true, false);
+                    }
                     if (!tmpImg.exists() || tmpImg.length() != finalImg.length()) {
                         copyFile(finalImg, tmpImg);
                         tmpImg.setReadable(true, false);

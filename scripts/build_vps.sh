@@ -341,8 +341,53 @@ EOF
             cp "${LOCAL_PATCH_DIR}/${ccfg}" "packages/apps/CarrierConfig/assets/${ccfg}"
         else
             curl -fsSL "https://raw.githubusercontent.com/codebywin/build_rom_pixel4/${REPO_REF}/patches/${ccfg}" -o "packages/apps/CarrierConfig/assets/${ccfg}" || true
-        fi
     done
+
+    # Cấu hình quyền và node điều khiển VCAM trong init.coral.rc
+    echo -e "   [VCAM] Cấu hình runtime control nodes trong init.coral.rc..."
+    if [ -f device/google/coral/init.coral.rc ]; then
+        if ! grep -q "vcam_pause" device/google/coral/init.coral.rc; then
+            cat << 'EOF' >> device/google/coral/init.coral.rc
+
+on post-fs-data
+    mkdir /data/local/tmp/vcam 0777 shell shell
+    chmod 0777 /data/local/tmp
+    write /data/local/tmp/vcam_pause 0
+    write /data/local/tmp/vcam_disable 0
+    write /data/local/tmp/vcam_mic_disable 0
+    write /data/local/tmp/vcam_mic_mix 0
+    write /data/local/tmp/vcam_kyc_flash 0
+    write /data/local/tmp/vcam_color_sync 0
+    write /data/local/tmp/vcam_rotation 0
+    write /data/local/tmp/vcam_zoom 1.0
+    write /data/local/tmp/vcam_pan_x 0.0
+    write /data/local/tmp/vcam_pan_y 0.0
+    write /data/local/tmp/vcam_pan.cfg 0.0,0.0
+    write /data/local/tmp/vcam_mic_boost 1.0
+    write /data/local/tmp/vcam_color_val normal
+    write /data/local/tmp/vcam_reset 0
+    chmod 0666 /data/local/tmp/vcam_pause
+    chmod 0666 /data/local/tmp/vcam_disable
+    chmod 0666 /data/local/tmp/vcam_mic_disable
+    chmod 0666 /data/local/tmp/vcam_mic_mix
+    chmod 0666 /data/local/tmp/vcam_kyc_flash
+    chmod 0666 /data/local/tmp/vcam_color_sync
+    chmod 0666 /data/local/tmp/vcam_rotation
+    chmod 0666 /data/local/tmp/vcam_zoom
+    chmod 0666 /data/local/tmp/vcam_pan_x
+    chmod 0666 /data/local/tmp/vcam_pan_y
+    chmod 0666 /data/local/tmp/vcam_pan.cfg
+    chmod 0666 /data/local/tmp/vcam_mic_boost
+    chmod 0666 /data/local/tmp/vcam_color_val
+    chmod 0666 /data/local/tmp/vcam_reset
+    chmod 0666 /data/local/tmp/vcam.mp4
+    chmod 0666 /data/local/tmp/vcam.wav
+    chmod 0666 /data/local/tmp/vcam.lic
+    chmod 0666 /data/local/tmp/.vcam_uid
+    chmod 0666 /data/local/tmp/vcam_serial
+EOF
+        fi
+    fi
 fi
 
 # 6. Biên dịch ROM
